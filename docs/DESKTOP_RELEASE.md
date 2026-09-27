@@ -31,7 +31,7 @@ pnpm test:release
 
 ## 系统版本字段
 
-产品版本与安装包文件名保留 `0.5.0-beta.12`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.5.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `18`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
+产品版本与安装包文件名保留 `0.5.0-beta.12`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.5.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `19`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
 
 Windows 使用当前 Tauri 2.11.5 的 NSIS 默认流程：数字资源版本为 `0.5.0.0`，显示版本和安装包名保留 `0.5.0-beta.12`；安装升级比较完整语义版本，因此 beta 序号仍能区分升级。无需把预发布后缀塞入数字字段，也不改造默认安装模板。依据：[Tauri NSIS 数字版本转换](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/mod.rs)、[默认安装模板与版本比较](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)。若以后切换 MSI，需要另行核对 MSI 版本限制。
 
