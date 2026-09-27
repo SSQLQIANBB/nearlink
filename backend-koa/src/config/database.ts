@@ -1,6 +1,7 @@
 import { Sequelize } from 'sequelize';
 import mysql from 'mysql2/promise';
 import { env } from './env';
+import { assertDatabaseSchema } from '../database/schemaMigrations';
 
 const { database } = env;
 
@@ -69,6 +70,12 @@ export async function initDatabase() {
     // 生产环境默认只创建缺失的表，不自动修改已有表结构
     await sequelize.sync({
       alter: database.syncAlter,
+    });
+
+    // A reachable database is not enough: old tables may still lack new auth fields.
+    await assertDatabaseSchema(async (sql, values) => {
+      const [rows] = await sequelize.query(sql, { replacements: values });
+      return rows;
     });
 
     console.log(

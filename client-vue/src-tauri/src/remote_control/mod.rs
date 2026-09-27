@@ -1,8 +1,10 @@
-//! Native authorization, supervision and input adapters. Production engine
-//! activation remains disabled; real media is exercised only by the explicit
-//! development harness. No webview boolean can create a LocalConsent.
+//! Native authorization, supervision and product transport adapters. Release
+//! admission remains disabled until product validation. No webview boolean
+//! can create a LocalConsent or prove transport readiness.
 
 mod authorization;
+mod consent_dialog;
+mod consent_memory;
 mod device_store;
 mod engine_bundle;
 mod engine_bundle_format;
@@ -22,12 +24,14 @@ pub fn run_host_harness() -> Result<(), &'static str> {
 }
 mod ice;
 mod identity;
+mod native_host;
+mod native_presence;
 mod platform;
 #[cfg(all(feature = "remote-control-harness", not(debug_assertions)))]
 compile_error!("remote-control-harness is a debug-only development binary; never enable it in a packaged release");
 
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
@@ -61,10 +65,17 @@ struct Permissions {
 pub struct RemoteControlState {
     host: Mutex<Option<host_runtime::HostSupervisor>>,
     identity: Arc<Mutex<identity::IdentityState>>,
+    bridge: Mutex<Option<native_host::NativeHostBridge>>,
+    engine_ready: OnceLock<bool>,
+    consent_memory_epoch: Arc<Mutex<u64>>,
 }
 
 impl RemoteControlState {
     pub fn stop(&self) -> Result<(), &'static str> {
+        self.bridge
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+            .take();
         self.identity
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -81,7 +92,7 @@ impl RemoteControlState {
     }
     /// The trusted native transport adapter is the sole caller; no invoke can
     /// supply a driver, consent, trust anchor, readiness, or OS executor.
-    #[allow(dead_code, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn connect_native_host(
         &self,
         connection: &authorization::SignedEnvelope,
@@ -134,26 +145,119 @@ impl RemoteControlState {
 }
 
 #[tauri::command]
-pub fn remote_control_capabilities(
+pub async fn remote_control_presence(
     window: tauri::WebviewWindow,
-) -> Result<RemoteControlCapabilities, &'static str> {
+    app: tauri::AppHandle,
+    proof: authorization::SignedEnvelope,
+) -> Result<authorization::SignedEnvelope, &'static str> {
     require_main_window(window.label())?;
-    Ok(capabilities())
+    tauri::async_runtime::spawn_blocking(move || {
+        if std::env::consts::OS != "macos" {
+            return Err("PLATFORM_UNSUPPORTED");
+        }
+        let engine = engine_bundle::TrustedEngineBundle::from_app(&app)
+            .map_err(|_| "REMOTE_ENGINE_NOT_READY")?;
+        let digest = engine.digest().map_err(|_| "REMOTE_ENGINE_NOT_READY")?;
+        let (capture, input) = platform::permissions();
+        native_presence::prove(
+            &device_store::OsSeedStore,
+            &identity::trusted_keys()?,
+            &proof,
+            digest,
+            capture == platform::PermissionState::Granted,
+            input == platform::PermissionState::Granted,
+            identity::wall_ms()?,
+        )
+    })
+    .await
+    .map_err(|_| "REMOTE_NATIVE_WORKER_FAILED")?
 }
 
-fn capabilities() -> RemoteControlCapabilities {
+#[tauri::command]
+pub async fn remote_control_start_host(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    ice_proof: authorization::SignedEnvelope,
+    events: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<(), &'static str> {
+    require_main_window(window.label())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if std::env::consts::OS != "macos" {
+            return Err("PLATFORM_UNSUPPORTED");
+        }
+        let state = app.state::<RemoteControlState>();
+        let mut slot = state
+            .bridge
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+        if slot.as_ref().is_some_and(|bridge| bridge.alive()) {
+            return Err("REMOTE_LOCAL_SESSION_BUSY");
+        }
+        slot.take();
+        let mut prepared = host_transport::PreparedHost::bundled(&app, state.identity.clone())?;
+        prepared.configure_ice(
+            &identity::trusted_keys()?,
+            &ice_proof,
+            identity::wall_ms()?,
+            Instant::now(),
+        )?;
+        *slot = Some(native_host::launch(app.clone(), prepared, events)?);
+        Ok(())
+    })
+    .await
+    .map_err(|_| "REMOTE_NATIVE_WORKER_FAILED")?
+}
+
+#[tauri::command]
+pub fn remote_control_host_command(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, RemoteControlState>,
+    session_id: String,
+    command: native_host::HostCommand,
+) -> Result<(), &'static str> {
+    require_main_window(window.label())?;
+    let slot = state
+        .bridge
+        .lock()
+        .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+    let bridge = slot
+        .as_ref()
+        .filter(|bridge| bridge.session_id == session_id)
+        .ok_or("REMOTE_HOST_STOPPED")?;
+    bridge.send(command)
+}
+
+#[tauri::command]
+pub async fn remote_control_capabilities(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<RemoteControlCapabilities, &'static str> {
+    require_main_window(window.label())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<RemoteControlState>();
+        let ready = *state.engine_ready.get_or_init(|| {
+            std::env::consts::OS == "macos"
+                && platform::probe().candidate_platform
+                && host_process::ProcessMediaDriver::probe_bundled(&app).is_ok()
+        });
+        capabilities(ready)
+    }).await.map_err(|_| "REMOTE_NATIVE_WORKER_FAILED")
+}
+
+fn capabilities(engine_ready: bool) -> RemoteControlCapabilities {
     let probe = platform::probe();
+    let engine_ready = engine_ready && probe.candidate_platform && probe.platform == "macos";
     RemoteControlCapabilities {
         runtime: "tauri",
         platform: probe.platform,
         os_version: probe.os_version,
         arch: probe.arch,
         protocol_version: guard::PROTOCOL_VERSION,
-        // Neither TCC permission nor an OS version makes an absent engine ready.
-        // No config/env/browser-provided flag can override these capabilities.
-        engine_ready: false,
-        can_capture: false,
-        can_inject_input: false,
+        // Only the authenticated bundled-engine handshake supplies readiness.
+        // TCC is separately reported and rechecked for every running session.
+        engine_ready,
+        can_capture: engine_ready,
+        can_inject_input: engine_ready,
         device_registration_ready: probe.candidate_platform,
         device_identity_reset_ready: probe.candidate_platform,
         consent_prompt_ready: probe.candidate_platform
@@ -165,7 +269,9 @@ fn capabilities() -> RemoteControlCapabilities {
             screen_capture: probe.screen_capture.as_str(),
             input_control: probe.input_control.as_str(),
         },
-        reason: if probe.candidate_platform {
+        reason: if engine_ready {
+            "READY"
+        } else if probe.candidate_platform {
             "ENGINE_NOT_READY"
         } else {
             "PLATFORM_UNSUPPORTED"
@@ -222,6 +328,8 @@ pub async fn remote_control_confirm_request(
 ) -> Result<identity::ConsentResponse, &'static str> {
     require_main_window(window.label())?;
     let keys = identity::trusted_keys()?;
+    let memory_epoch = state.consent_memory_epoch.clone();
+    let memory_path = consent_memory_path(&app)?;
     let state = state.identity.clone();
     let operation = state
         .lock()
@@ -242,63 +350,40 @@ pub async fn remote_control_confirm_request(
             .prepare(operation, verified, Instant::now())?;
         let wants_control = verified.wants_control();
         let grant_control = verified.is_grant_control();
-        // Cancellation must never be mapped to approval: plugin-dialog maps a
-        // window close/Escape to the custom cancel label on every platform.
-        // The initial/default button is reject; only an explicit second-button
-        // choice opens scope selection for a control request.
-        let selected = app
-            .dialog()
-            .message(verified.message())
-            .title("ToDesk · 本机远程协助确认")
-            .buttons(MessageDialogButtons::YesNoCancelCustom(
-                "拒绝".into(),
-                if wants_control {
-                    "继续选择权限".into()
-                } else {
-                    "允许查看".into()
-                },
-                "取消".into(),
-            ))
-            .blocking_show_with_result();
-        let selected = if wants_control
-            && matches!(&selected, MessageDialogResult::Custom(text) if text == "继续选择权限")
-        {
-            verified.check_live(Instant::now())?;
-            worker_state
-                .lock()
-                .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
-                .check(operation)?;
-            app.dialog()
-                .message(verified.message())
-                .title("ToDesk · 选择本机授权范围")
-                .buttons(MessageDialogButtons::YesNoCancelCustom(
-                    "仅允许查看".into(),
-                    "允许控制".into(),
-                    "取消".into(),
-                ))
-                .blocking_show_with_result()
+        let (epoch, remembered) = {
+            let epoch = memory_epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+            (*epoch, verified.remembered_choice(&consent_memory::Preferences::load(&memory_path)))
+        };
+        let choice = if let Some(decision) = remembered {
+            consent_dialog::Choice { decision, remember: false }
         } else {
-            selected
+            window.show().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
+            window.unminimize().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
+            window.set_focus().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
+            consent_dialog::show(&window, verified.message(), wants_control)?
         };
-        let decision = match selected {
-            MessageDialogResult::Custom(ref text) if text == "允许控制" && wants_control => {
-                identity::Decision::Control
+        let decision = if grant_control && choice.decision != identity::Decision::Control {
+            identity::Decision::Reject
+        } else { choice.decision };
+        // Clear and approval commit serialize here. A reset during the prompt
+        // or after a remembered lookup cancels this approval, never recreates it.
+        let memory_guard = memory_epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+        if *memory_guard != epoch { return Err("REMOTE_OPERATION_CANCELLED"); }
+        let mut native_identity = worker_state.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+        let mut preferences = consent_memory::Preferences::load(&memory_path);
+        // Expired/cancelled/replayed operations must pass native approval before
+        // any signed remembered choice is written to disk.
+        let (response, save) = native_identity.approve_with_memory(
+            operation, verified, choice, &mut preferences, identity::wall_ms()?, Instant::now(),
+        )?;
+        if save {
+            if let Err(error) = preferences.save(&memory_path) {
+                native_identity.stop();
+                return Err(error);
             }
-            MessageDialogResult::Custom(ref text) if text == "允许查看" || text == "仅允许查看" => {
-                identity::Decision::View
-            }
-            _ => identity::Decision::Reject,
-        };
-        let response = worker_state
-            .lock()
-            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
-            .approve(
-                operation,
-                verified,
-                decision,
-                identity::wall_ms()?,
-                Instant::now(),
-            )?;
+        }
+        drop(native_identity);
+        drop(memory_guard);
         if grant_control && decision == identity::Decision::Control {
             let native = app.state::<RemoteControlState>();
             let host = native.host.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
@@ -320,6 +405,23 @@ pub async fn remote_control_confirm_request(
         .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
         .finish(operation)?;
     result?
+}
+
+fn consent_memory_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, &'static str> {
+    app.path().app_data_dir().map(|p| p.join("remote-consent-choices-v1.json"))
+        .map_err(|_| "REMOTE_CONSENT_MEMORY_UNAVAILABLE")
+}
+
+/// Revocation only: no invoke path accepts a decision, scope, or remembered grant.
+#[tauri::command]
+pub async fn remote_control_clear_remembered_approvals(
+    window: tauri::WebviewWindow, app: tauri::AppHandle, state: tauri::State<'_, RemoteControlState>,
+) -> Result<(), &'static str> {
+    require_main_window(window.label())?;
+    let mut epoch = state.consent_memory_epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+    consent_memory::Preferences::clear(&consent_memory_path(&app)?)?;
+    *epoch = epoch.wrapping_add(1);
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -401,7 +503,7 @@ mod tests {
 
     #[test]
     fn capabilities_never_advertise_an_absent_engine() {
-        let result = capabilities();
+        let result = capabilities(false);
         assert_eq!(result.protocol_version, 1);
         assert!(!result.engine_ready);
         assert!(!result.can_capture);
@@ -425,4 +527,21 @@ mod tests {
         state.stop().unwrap();
         state.stop().unwrap();
     }
+}
+
+/// Open only fixed OS permission pages after an explicit UI click. This never grants permission.
+#[tauri::command]
+pub async fn remote_control_open_permission_settings(
+    window: tauri::WebviewWindow,
+    permission: String,
+) -> Result<(), &'static str> {
+    require_main_window(window.label())?;
+    if std::env::consts::OS != "macos" { return Err("PLATFORM_UNSUPPORTED"); }
+    let url = match permission.as_str() {
+        "screenCapture" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "inputControl" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        _ => return Err("INVALID_PERMISSION"),
+    };
+    let status = std::process::Command::new("/usr/bin/open").arg(url).status().map_err(|_| "SETTINGS_UNAVAILABLE")?;
+    if status.success() { Ok(()) } else { Err("SETTINGS_UNAVAILABLE") }
 }

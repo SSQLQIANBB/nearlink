@@ -67,6 +67,11 @@ function decode(envelope: unknown, key: KeyObject, expectedKeyId: string): unkno
     || !verify(null, remoteSignatureMessage(keyId, payload), key, signatureBytes)) return fail();
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return fail(); }
 }
+/** Internal native-evidence verifier. Callers must validate a purpose-specific schema and binding. */
+export function decodeRemoteDeviceEvidence(envelope: unknown, device: { id: string; publicKey: string; keyVersion: number; revokedAt: Date | null }): unknown {
+  if (device.revokedAt) return fail();
+  return decode(envelope, createPublicKey(device.publicKey), `device:${device.id}:${device.keyVersion}`);
+}
 function signed(keyId: string, claims: object, privateKey: KeyObject): SignedRemoteEnvelope {
   const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
   return { format: 'rc-signed-v1', keyId, payload,
@@ -103,6 +108,15 @@ export function verifyHostConsent(envelope: unknown, session: RemoteSession,
 export class RemoteCredentialSigner {
   private readonly key: KeyObject;
   readonly publicKey: Readonly<RemotePublicSigningKey>;
+  issuePresenceChallenge(host: import('./remoteControlProtocol').RemoteEndpoint, device: ApprovalHostDevice, challenge: string, now = Date.now()) {
+    endpoint.parse(host); nonce.parse(challenge);
+    if (device.revokedAt || device.id !== host.endpointId || device.ownerUserId !== host.userId
+      || now < this.publicKey.notBefore || now + REMOTE_LIMITS.challengeMs > this.publicKey.notAfter) return fail();
+    return signed(this.publicKey.keyId, { protocolVersion: 1, issuer: 'todesk-remote-control',
+      audience: 'todesk-native-presence', purpose: 'presence-challenge', host, challenge,
+      hostKeyVersion: device.keyVersion, hostKeyFingerprint: device.fingerprint,
+      issuedAt: now, expiresAt: now + REMOTE_LIMITS.challengeMs }, this.key);
+  }
   /** Called only after the ICE service revalidates live session and durable authority. */
   issueIceConfiguration(session: RemoteSession, configuration: RemoteIceConfiguration, now = Date.now()) {
     integer.parse(now);

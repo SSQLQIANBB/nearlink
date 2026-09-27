@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-control-clear-remembered-approvals"
+description = "Enables the remote_control_clear_remembered_approvals command without any pre-configured scope."
+commands.allow = ["remote_control_clear_remembered_approvals"]
+
+[[permission]]
+identifier = "deny-remote-control-clear-remembered-approvals"
+description = "Denies the remote_control_clear_remembered_approvals command without any pre-configured scope."
+commands.deny = ["remote_control_clear_remembered_approvals"]

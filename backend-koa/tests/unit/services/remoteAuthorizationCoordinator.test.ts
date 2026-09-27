@@ -119,6 +119,20 @@ describe('remote authority coordinator (real Ed25519, trusted adapter handles)',
     expect(verifyRemoteCredential(lease, f.signer.publicKey, f.now())).toMatchObject({ purpose: 'lease', scope: 'control', leaseSeq: 1 });
     expect((await f.coordinator.end(f.session.id, f.controllerConnection))!.state).toBe('ended');
   });
+  it('allows an old locally confirmed challenge only to receive the signed pause downgrade, never to restore control', async () => {
+    const f = await fixture(); await f.active();
+    const original = await f.evidence();
+    await f.coordinator.pause(f.session.id, f.controllerConnection);
+    const lease = await f.coordinator.lease(f.session.id, f.hostConnection, await f.challenge(1, {
+      authorizationRevision: original.authorizationRevision, controlEpoch: original.controlEpoch,
+    }));
+    expect(verifyRemoteCredential(lease, f.signer.publicKey, f.now())).toMatchObject({ scope: 'view', authorizationRevision: 2, controlEpoch: 2 });
+    const approval = await f.approval('control');
+    await f.coordinator.consent(f.session.id, f.hostConnection, approval.consent); f.setConsent(approval.claims);
+    await expect(f.coordinator.lease(f.session.id, f.hostConnection, await f.challenge(2, {
+      authorizationRevision: original.authorizationRevision, controlEpoch: original.controlEpoch,
+    }))).rejects.toThrow('NATIVE_CHALLENGE_MISMATCH');
+  });
   it('uses one pending approval per revision and rejects booleans, altered screen, wrong prompt, and duplicate consent', async () => {
     const f = await fixture(); const a = await f.approval();
     expect(await f.coordinator.prepareApproval(f.session.id, f.hostConnection)).toEqual(a.envelope);

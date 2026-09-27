@@ -1,9 +1,10 @@
 {
   "name": "backend-koa",
-  "version": "0.4.0-beta.2",
+  "version": "0.5.0-beta.7",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "db:migrate": "node -r ts-node/register src/database/migrate.ts",
     "test": "vitest run",
     "test:remote:integration": "vitest run --config vitest.remote-integration.config.ts",
     "test:watch": "vitest",

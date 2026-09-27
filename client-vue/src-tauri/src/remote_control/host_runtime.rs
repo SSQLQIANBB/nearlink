@@ -128,6 +128,43 @@ pub(super) struct HostRuntime {
     stop_reason: Option<StopReason>,
 }
 impl HostRuntime {
+    /// Evidence originates after verified DTLS + controller proof/hello, never from invoke arguments.
+    pub fn native_fact(
+        &mut self,
+        transport: &ObservedTransport,
+        challenge: Option<LeaseChallenge>,
+        now_ms: u64,
+        now: Instant,
+    ) -> HostResult<SignedEnvelope> {
+        self.ensure_live(now)?;
+        if !self.ready || transport.negotiation_id != self.negotiation_id {
+            return Err("REMOTE_NATIVE_READY_REQUIRED");
+        }
+        let mut body = json!({ "protocolVersion":1, "purpose":if challenge.is_some() { "native-lease-challenge" } else { "native-ready" },
+            "sessionId":self.local.session_id, "host":self.local.host, "negotiationId":transport.negotiation_id,
+            "hostFingerprint":transport.host_fingerprint, "controllerFingerprint":transport.controller_fingerprint,
+            "consentNonce":self.local.consent_nonce, "screenId":self.local.screen_id,
+            "authorizationRevision":self.local.authorization_revision, "controlEpoch":self.local.control_epoch,
+            "issuedAt":now_ms, "expiresAt":now_ms.checked_add(10_000).ok_or("REMOTE_CLOCK_INVALID")? });
+        if let Some(challenge) = challenge {
+            body["challenge"] = json!(challenge.challenge);
+            body["leaseSeq"] = json!(challenge.lease_seq);
+        }
+        let state = self
+            .identity
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+        let (current, _) = state.approved_for_runtime(now)?;
+        body["authorizationRevision"] = json!(current.authorization_revision);
+        body["controlEpoch"] = json!(current.control_epoch);
+        super::identity::sign_runtime_fact(
+            &state,
+            self.generation,
+            &self.local.session_id,
+            body,
+            now,
+        )
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn connect(
         identity: Arc<Mutex<IdentityState>>,

@@ -12,9 +12,14 @@
     "fs:allow-write-file",
     "core:window:allow-start-dragging",
     "allow-remote-control-capabilities",
+    "allow-remote-control-open-permission-settings",
     "allow-remote-control-stop",
     "allow-remote-control-register-device",
     "allow-remote-control-confirm-request",
-    "allow-remote-control-reset-identity"
+    "allow-remote-control-clear-remembered-approvals",
+    "allow-remote-control-reset-identity",
+    "allow-remote-control-presence",
+    "allow-remote-control-start-host",
+    "allow-remote-control-host-command"
   ]
 }

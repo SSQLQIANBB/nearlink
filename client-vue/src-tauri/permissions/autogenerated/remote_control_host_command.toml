@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-control-host-command"
+description = "Enables the remote_control_host_command command without any pre-configured scope."
+commands.allow = ["remote_control_host_command"]
+
+[[permission]]
+identifier = "deny-remote-control-host-command"
+description = "Denies the remote_control_host_command command without any pre-configured scope."
+commands.deny = ["remote_control_host_command"]

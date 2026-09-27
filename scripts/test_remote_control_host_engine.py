@@ -429,6 +429,61 @@ class EngineContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             lease.install(payload, 1, 1)
 
+    def test_prepare_channel_receives_immediate_hello_before_work_queue_runs(self):
+        instance = object.__new__(engine.Engine)
+        instance.channels = {}
+        instance.WebRTC = SimpleNamespace(WebRTCDataChannelState=SimpleNamespace(OPEN="open"))
+        posted, sent, failures, callbacks = [], [], [], {}
+        instance.post = lambda *args: posted.append(args)
+        instance.send = lambda *args: sent.append(args)
+        instance.fail = failures.append
+        properties = {"label": None, "ordered": True, "max-retransmits": -1,
+                      "max-packet-lifetime": -1, "negotiated": False, "protocol": "",
+                      "ready-state": "connecting"}
+        channel = SimpleNamespace(get_property=properties.get,
+                                  connect=lambda signal, callback: callbacks.update({signal: callback}))
+        instance.prepare_channel(None, channel, False)
+        # DCEP fills metadata only after prepare, before on-open.
+        self.assertEqual(failures, [])
+        self.assertEqual(instance.channels, {})
+        properties.update({"label": "rc-state-v1", "ready-state": "open"})
+        # GStreamer emits these immediately, before the GLib drain callback.
+        callbacks["on-open"](channel)
+        hello = '{"type":"hello","proofSignature":"test-only"}'
+        callbacks["on-message-string"](channel, hello)
+        self.assertEqual(sent, [])
+        for callback, *args in posted:
+            callback(*args)
+        self.assertEqual(failures, [])
+        self.assertEqual(sent, [("channel-open", {"label": "rc-state-v1"}),
+                               ("channel-data", {"label": "rc-state-v1", "data":
+                                base64.urlsafe_b64encode(hello.encode()).decode().rstrip("=")})])
+        callbacks["on-open"](channel)
+        instance.prepare_channel(None, channel, True)
+        unknown = SimpleNamespace(get_property=properties.get)
+        instance.prepared_message(unknown, hello)
+        self.assertEqual(failures, ["INVALID_DATA_CHANNEL"] * 3)
+
+    def test_open_rejects_invalid_dcep_metadata_before_forwarding(self):
+        valid = {"label": "rc-state-v1", "ordered": True, "max-retransmits": -1,
+                 "max-packet-lifetime": -1, "negotiated": False, "protocol": "",
+                 "ready-state": "open"}
+        for field, value in [("label", "unknown"), ("ordered", False), ("max-retransmits", 0),
+                             ("max-packet-lifetime", 100), ("negotiated", True),
+                             ("protocol", "other"), ("ready-state", "connecting")]:
+            with self.subTest(field=field):
+                instance = object.__new__(engine.Engine)
+                instance.channels = {}
+                instance.WebRTC = SimpleNamespace(WebRTCDataChannelState=SimpleNamespace(OPEN="open"))
+                failures, posted = [], []
+                instance.fail = failures.append
+                instance.post = lambda *args: posted.append(args)
+                properties = dict(valid, **{field: value})
+                instance.channel(SimpleNamespace(get_property=properties.get))
+                self.assertEqual(failures, ["INVALID_DATA_CHANNEL"])
+                self.assertEqual(instance.channels, {})
+                self.assertEqual(posted, [])
+
     def test_oversized_raw_data_is_rejected_before_entering_the_work_queue(self):
         instance = object.__new__(engine.Engine)
         failures, posted = [], []

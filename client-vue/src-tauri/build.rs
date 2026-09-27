@@ -41,7 +41,7 @@ fn main() {
             for file in &verified.manifest.files {
                 println!("cargo:rerun-if-changed={}", path.join(&file.path).display());
             }
-            println!("cargo:warning=Selected remote engine {} ({} verified files); capabilities remain disabled", verified.digest, verified.manifest.files.len());
+            println!("cargo:warning=Selected remote engine {} ({} verified files); runtime handshake and release policy required", verified.digest, verified.manifest.files.len());
             bytes
         }
     };
@@ -51,10 +51,15 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "remote_control_capabilities",
+            "remote_control_open_permission_settings",
             "remote_control_stop",
             "remote_control_register_device",
             "remote_control_confirm_request",
+            "remote_control_clear_remembered_approvals",
             "remote_control_reset_identity",
+            "remote_control_presence",
+            "remote_control_start_host",
+            "remote_control_host_command",
         ]),
     ))
     .expect("failed to build desktop command permissions");

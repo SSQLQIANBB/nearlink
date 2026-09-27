@@ -35,8 +35,11 @@ export function sdpSha256Fingerprint(sdp: string) {
   return values[0]!;
 }
 export function allowedRemoteVideoCodecs(codecs: RTCRtpCodec[]) {
-  return codecs.filter(codec => codec.mimeType.toLowerCase() === 'video/vp8'
-    || (codec.mimeType.toLowerCase() === 'video/h264' && /(?:^|;)packetization-mode=1(?:;|$)/.test(codec.sdpFmtpLine || '') && /(?:^|;)profile-level-id=42[0-9a-f]{4}(?:;|$)/i.test(codec.sdpFmtpLine || '')));
+  // The released native encoder emits H.264 constrained-baseline only. Offering
+  // VP8 first can negotiate a format the host cannot feed into its RTP pipeline.
+  return codecs.filter(codec => codec.mimeType.toLowerCase() === 'video/h264'
+    && /(?:^|;)\s*packetization-mode=1(?:;|$)/.test(codec.sdpFmtpLine || '')
+    && /(?:^|;)\s*profile-level-id=42e01f(?:;|$)/i.test(codec.sdpFmtpLine || ''));
 }
 
 /** Real WebRTC controller transport. No ordinary ACK/state/open event can authorize media or input. */
@@ -270,10 +273,21 @@ export class RemoteControlPeer {
   private binding(): RemotePeerBinding {
     return { ...this.options.binding, controllerFingerprint: sdpSha256Fingerprint(this.peer.localDescription?.sdp || ''), hostFingerprint: sdpSha256Fingerprint(this.peer.remoteDescription?.sdp || '') };
   }
-  private verify(proof: RemoteSignedEnvelope, purpose: 'connection' | 'lease') {
+  private async verify(proof: RemoteSignedEnvelope, purpose: 'connection' | 'lease') {
     const binding = this.binding();
     if (purpose === 'lease' && this.expectedApproval) binding.consentNonce = this.expectedApproval.consentNonce;
-    return (this.options.verifyProof || verifyRemoteProof)(proof, this.options.keys, binding, purpose, { wall: Date.now(), monotonic: this.now() });
+    const verify = () => (this.options.verifyProof || verifyRemoteProof)(proof, this.options.keys, binding, purpose,
+      { wall: Date.now(), monotonic: this.now() });
+    try { return await verify(); }
+    catch (error) {
+      // A fresh proof can arrive before its signed issue time on a slightly
+      // slower local clock. Wait once, then run the same strict verification
+      // against fresh clocks. Never add leeway to expiry or extend the lease.
+      if (!(error instanceof Error) || error.message !== 'REMOTE_PROOF_EXPIRED' || this.stopped) throw error;
+      await new Promise(resolve => setTimeout(resolve, 250));
+      if (this.stopped) throw new Error('REMOTE_SESSION_ENDED');
+      return verify();
+    }
   }
   private signalBinding() { return { negotiationId: this.options.binding.negotiationId, connectionGeneration: this.options.binding.controller.generation }; }
   private async sendHello() {
@@ -368,7 +382,9 @@ export class RemoteControlPeer {
     if (this.stopped) return;
     const now = this.now();
     if (!this.lease && now >= this.connectDeadline) { this.end('REMOTE_CONNECT_TIMEOUT'); return; }
-    if (this.connectionProof && now - this.lastHeartbeat >= 3000) { this.end('REMOTE_HEARTBEAT_TIMEOUT'); return; }
+    // ICE/DTLS/hello negotiation uses the bounded connection deadline. Heartbeat
+    // liveness begins only after the authenticated peer has acknowledged hello.
+    if (this.helloReceived && now - this.lastHeartbeat >= 3000) { this.end('REMOTE_HEARTBEAT_TIMEOUT'); return; }
     // Certificate hashing is asynchronous. Wait for the host's hello receipt so
     // a periodic heartbeat can never overtake the authenticated handshake.
     if (this.helloReceived && now - this.lastHeartbeatSent >= 1000) { this.lastHeartbeatSent = now; this.sendState('heartbeat', { renderedFrames: this.frameCount }); }

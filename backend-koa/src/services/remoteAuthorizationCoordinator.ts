@@ -20,7 +20,7 @@ export interface RemoteNativeChallenge extends Omit<RemoteReadyEvidence, 'endpoi
  * Handles must belong to the adapter's private registry. Resolve connections from authenticated
  * presence, negotiation from authenticated SDP, ready from verified hello + observed DTLS, and
  * challenges from the native supervisor. Implementations must atomically consume one-use handles.
- * No production adapter exists until the native engine and release gates pass validation.
+ * The production adapter verifies native signatures; release admission remains independently gated.
  */
 export interface RemoteCoordinatorAuthority {
   resolveConnection(handle: object): Promise<RemoteEndpoint>;
@@ -197,9 +197,16 @@ export class RemoteAuthorizationCoordinator {
     });
   }
   private matchesEvidence(evidence: RemoteReadyEvidence | RemoteNativeChallenge, session: RemoteSession, context: Context) {
+    // A one-way pause cannot require the host to know the new revision before it receives
+    // the signed view lease. The old locally confirmed binding may request only that downgrade.
+    const revisionMatches = evidence.authorizationRevision === session.authorizationRevision && evidence.controlEpoch === session.controlEpoch;
+    const downgrade = 'leaseSeq' in evidence && session.scope === 'view' && context.consent
+      && evidence.authorizationRevision === context.consent.claims.authorizationRevision
+      && evidence.controlEpoch === context.consent.claims.controlEpoch
+      && evidence.authorizationRevision < session.authorizationRevision && evidence.controlEpoch < session.controlEpoch;
     return !!context.binding && !!context.consent && evidence.sessionId === session.id && sameBinding(evidence, context.binding)
       && evidence.consentNonce === context.consent.claims.consentNonce && evidence.screenId === context.consent.claims.screenId
-      && evidence.authorizationRevision === session.authorizationRevision && evidence.controlEpoch === session.controlEpoch;
+      && (revisionMatches || !!downgrade);
   }
   async ready(id: string, connection: object, receipt: object) {
     return this.run(id, async () => {

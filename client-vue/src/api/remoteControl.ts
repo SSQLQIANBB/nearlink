@@ -48,6 +48,11 @@ export const getRemoteDevices = (signal?: AbortSignal) => request<{ devices: Rem
 export const getRemoteDeviceChallenge = (signal?: AbortSignal) => request<{ challenge: RemoteDeviceChallenge }>('/api/remote-control/device-challenges', { method: 'POST', body: {}, signal });
 export const registerRemoteDevice = (proof: RemoteDeviceRegistration, signal?: AbortSignal) => request<{ device: RemoteDevice }>('/api/remote-control/devices', { method: 'POST', body: proof, signal });
 export const revokeRemoteDevice = (deviceId: string, signal?: AbortSignal) => request<{ ok: true }>(`/api/remote-control/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE', signal });
+export interface AssistanceGrant { id: string; hostDeviceId: string; controllerUserId: number; expiresAt: string | null }
+export const getAssistanceGrants = () => http.get<{ grants: AssistanceGrant[] }>('/api/remote-control/assistance-grants');
+export type AssistanceDuration = '15m' | '1h' | 'permanent';
+export const createAssistanceGrant = (hostDeviceId: string, controllerUserId: number, duration: AssistanceDuration = '15m') => request<{ grant: AssistanceGrant }>('/api/remote-control/assistance-grants', { method: 'POST', body: { hostDeviceId, controllerUserId, duration } });
+export const revokeAssistanceGrant = (id: string) => request<{ ok: true }>(`/api/remote-control/assistance-grants/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const getRemoteControlRelease = () => http.get<RemoteControlRelease>('/api/remote-control/capabilities');
 export const getRemoteTargets = (userId: number) => http.get<{ targets: RemoteTarget[] }>(`/api/remote-control/targets?userId=${encodeURIComponent(userId)}`);

@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createHash, webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { RemoteControlPeer, type RemotePeerOptions } from '@/services/remoteControlPeer';
+import { RemoteControlPeer, allowedRemoteVideoCodecs, type RemotePeerOptions } from '@/services/remoteControlPeer';
 import type { RemoteControlLayout } from '@/services/remoteControlGeometry';
 
 const certificate = new Uint8Array([1, 2, 3]).buffer;
@@ -24,6 +24,7 @@ class Stream {
   getTracks() { return this.tracks; }
 }
 let peer: RemoteControlPeer;
+let proofVerifier: Mock<NonNullable<RemotePeerOptions['verifyProof']>>;
 let state: Channel;
 let input: Channel;
 let video: HTMLVideoElement;
@@ -50,7 +51,7 @@ async function setup(sendLayout = true, completeHandshake = true) {
   let leaseSeq = 0;
   vi.stubGlobal('crypto', webcrypto);
   vi.stubGlobal('MediaStream', Stream);
-  vi.stubGlobal('RTCRtpReceiver', { getCapabilities: () => ({ codecs: [{ mimeType: 'video/VP8', clockRate: 90000 }] }) });
+  vi.stubGlobal('RTCRtpReceiver', { getCapabilities: () => ({ codecs: [{ mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'packetization-mode=1;profile-level-id=42e01f' }] }) });
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
   state = new Channel(); input = new Channel();
   const rtc = {
@@ -66,7 +67,8 @@ async function setup(sendLayout = true, completeHandshake = true) {
     envelope, deadline: 15000,
     claims: { ...binding, hostFingerprint: fingerprint, controllerFingerprint: fingerprint, protocolVersion: 1, issuer: 'todesk-remote-control', audience: 'todesk-remote-peer', purpose, scope: 'control', authorizationRevision: 1, controlEpoch: 1, issuedAt: 0, expiresAt: 15000, ...(purpose === 'lease' ? { leaseSeq: ++leaseSeq, challenge: 'challenge' } : {}) },
   });
-  peer = new RemoteControlPeer({ binding, iceServers: [], iceTransportPolicy: 'all', keys: [], onSignal: vi.fn(), onReady: vi.fn(), onStream: vi.fn(), onPauseInput: onPause, onEnd, onInputArmed: onArmed, now: () => now, createPeer: () => rtc as unknown as RTCPeerConnection, verifyProof });
+  proofVerifier = vi.fn(verifyProof);
+  peer = new RemoteControlPeer({ binding, iceServers: [], iceTransportPolicy: 'all', keys: [], onSignal: vi.fn(), onReady: vi.fn(), onStream: vi.fn(), onPauseInput: onPause, onEnd, onInputArmed: onArmed, now: () => now, createPeer: () => rtc as unknown as RTCPeerConnection, verifyProof: proofVerifier });
   video = document.createElement('video'); video.tabIndex = 0; document.body.append(video); video.focus();
   vi.spyOn(video, 'videoWidth', 'get').mockImplementation(() => decodedSize.width);
   vi.spyOn(video, 'videoHeight', 'get').mockImplementation(() => decodedSize.height);
@@ -87,6 +89,42 @@ beforeEach(() => setup());
 afterEach(() => { peer.end('TEST_CLEANUP'); video.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('主控启用输入前报告真实渲染进度', () => {
+  it('offers only the released native H264 format even when VP8 is preferred by the browser', () => {
+    const supported = { mimeType: 'video/H264', clockRate: 90000, sdpFmtpLine: 'level-asymmetry-allowed=1; packetization-mode=1; profile-level-id=42e01f' };
+    const incompatible = [
+      { mimeType: 'video/VP8', clockRate: 90000 },
+      { ...supported, sdpFmtpLine: 'packetization-mode=0;profile-level-id=42e01f' },
+      { ...supported, sdpFmtpLine: 'packetization-mode=1;profile-level-id=640c1f' },
+      { ...supported, sdpFmtpLine: 'packetization-mode=1;profile-level-id=42e034' },
+    ];
+    expect(allowedRemoteVideoCodecs([...incompatible, supported])).toEqual([supported]);
+    expect(allowedRemoteVideoCodecs(incompatible)).toEqual([]);
+  });
+  it('时间校验失败只等待一次，并用新时钟重新严格验签', async () => {
+    proofVerifier.mockClear(); proofVerifier.mockRejectedValueOnce(new Error('REMOTE_PROOF_EXPIRED'));
+    const before = Date.now();
+    const pending = peer.installMediaLease(envelope);
+    await vi.advanceTimersByTimeAsync(249);
+    expect(proofVerifier).toHaveBeenCalledTimes(1);
+    now = 250; await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toBe(true);
+    expect(proofVerifier).toHaveBeenCalledTimes(2);
+    expect(proofVerifier.mock.calls[1]![4]).toEqual({ wall: before + 250, monotonic: 250 });
+  });
+  it('等待不会让真正过期的凭据通过', async () => {
+    proofVerifier.mockClear(); proofVerifier.mockRejectedValue(new Error('REMOTE_PROOF_EXPIRED'));
+    const rejected = expect(peer.installMediaLease(envelope)).rejects.toThrow('REMOTE_PROOF_EXPIRED');
+    await vi.advanceTimersByTimeAsync(250); await rejected;
+    expect(proofVerifier).toHaveBeenCalledTimes(2);
+  });
+  it('等待期间结束会话不会再次验签或恢复连接', async () => {
+    proofVerifier.mockClear(); proofVerifier.mockRejectedValueOnce(new Error('REMOTE_PROOF_EXPIRED'));
+    const rejected = expect(peer.installMediaLease(envelope)).rejects.toThrow('REMOTE_SESSION_ENDED');
+    await vi.advanceTimersByTimeAsync(1); peer.end('REMOTE_LOCAL_END');
+    await vi.advanceTimersByTimeAsync(249); await rejected;
+    expect(proofVerifier).toHaveBeenCalledTimes(1);
+  });
+
   it('握手确认前不发送周期心跳，确认后才开始发送', async () => {
     peer.end('RECREATE'); video.remove(); await setup(false, false);
     expect(messages().map(message => message.type)).toEqual(['hello']);
@@ -97,11 +135,17 @@ describe('主控启用输入前报告真实渲染进度', () => {
     now = 1600; await vi.advanceTimersByTimeAsync(100);
     expect(messages().map(message => message.type)).toEqual(['hello', 'heartbeat']);
   });
-  it('未收到握手确认仍按原有三秒活性期限结束', async () => {
+  it('握手前使用连接截止时间，不把正常的 TURN 协商误判为心跳丢失', async () => {
     peer.end('RECREATE'); video.remove(); await setup(false, false);
     now = 3000; await vi.advanceTimersByTimeAsync(3000);
-    expect(onEnd).toHaveBeenCalledWith('REMOTE_HEARTBEAT_TIMEOUT');
+    expect(onEnd).not.toHaveBeenCalled();
     expect(messages().some(message => message.type === 'heartbeat')).toBe(false);
+    now = 30000; await vi.advanceTimersByTimeAsync(100);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_CONNECT_TIMEOUT');
+  });
+  it('握手完成后仍严格执行三秒心跳期限', async () => {
+    now = 3000; await vi.advanceTimersByTimeAsync(3000);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_HEARTBEAT_TIMEOUT');
   });
   it('首帧之后在同一通道先报告渲染计数再请求启用，仍须宿主窗口才可输入', async () => {
     render();

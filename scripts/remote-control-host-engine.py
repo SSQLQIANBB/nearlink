@@ -396,7 +396,9 @@ class Engine:
         self.ice_expires_at = None
         self.ice_agent = self.nice_agent = self.nice_library = None
         self.peer.connect("on-ice-candidate", lambda _p, index, candidate: self.post(self.local_ice, index, candidate))
-        self.peer.connect("on-data-channel", lambda _p, channel: self.post(self.channel, channel))
+        # Register on the emitting thread before any open/message notification.
+        # Deferring on-data-channel to GLib can lose the controller's first hello.
+        self.peer.connect("prepare-data-channel", self.prepare_channel)
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self.bus_message)
@@ -582,21 +584,35 @@ class Engine:
             return
         self.send("ice", {"sdpMLineIndex": index, "candidate": candidate})
 
+    def prepare_channel(self, _peer, channel, is_local):
+        if is_local:
+            self.fail("INVALID_DATA_CHANNEL")
+            return
+        # Remote metadata is populated by DCEP after prepare-data-channel.
+        # Install listeners now; validate the populated properties at on-open.
+        channel.connect("on-open", lambda _c: self.channel(channel))
+        channel.connect("on-close", lambda _c: self.fail("DATA_CHANNEL_CLOSED"))
+        channel.connect("on-error", lambda *_: self.fail("DATA_CHANNEL_ERROR"))
+        channel.connect("on-message-string", lambda _c, raw: self.prepared_message(channel, raw))
+        channel.connect("on-message-data", lambda _c, raw: self.prepared_message(channel, raw))
+
     def channel(self, channel):
         label = channel.get_property("label")
         if (label not in LABELS or label in self.channels or not channel.get_property("ordered")
                 or channel.get_property("max-retransmits") != -1 or channel.get_property("max-packet-lifetime") != -1
-                or channel.get_property("negotiated") or channel.get_property("protocol") not in {"", None}):
+                or channel.get_property("negotiated") or channel.get_property("protocol") not in {"", None}
+                or channel.get_property("ready-state") != self.WebRTC.WebRTCDataChannelState.OPEN):
             self.fail("INVALID_DATA_CHANNEL")
             return
         self.channels[label] = channel
-        channel.connect("on-open", lambda _c: self.post(self.send, "channel-open", {"label": label}))
-        channel.connect("on-close", lambda _c: self.fail("DATA_CHANNEL_CLOSED"))
-        channel.connect("on-error", lambda *_: self.fail("DATA_CHANNEL_ERROR"))
-        channel.connect("on-message-string", lambda _c, raw: self.queue_channel(label, raw))
-        channel.connect("on-message-data", lambda _c, raw: self.queue_channel(label, raw))
-        if channel.get_property("ready-state") == self.WebRTC.WebRTCDataChannelState.OPEN:
-            self.send("channel-open", {"label": label})
+        self.post(self.send, "channel-open", {"label": label})
+
+    def prepared_message(self, channel, raw):
+        label = channel.get_property("label")
+        if self.channels.get(label) is not channel:
+            self.fail("INVALID_DATA_CHANNEL")
+            return
+        self.queue_channel(label, raw)
 
     def queue_channel(self, label, raw):
         try:

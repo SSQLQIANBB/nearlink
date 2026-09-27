@@ -14,7 +14,7 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
   let discoveryGeneration = 0;
   let inFlight: Promise<void> | null = null;
   const showControllerEntry = computed(() => capabilities.value?.showControllerEntry === true);
-  const canControl = computed(() => capabilities.value?.canControl === true);
+  const canControl = computed(() => !loading.value && capabilities.value?.canControl === true);
 
   function reset() {
     generation++;
@@ -32,8 +32,9 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
     if (inFlight) return inFlight;
     const current = generation;
     loading.value = true;
-    // Close existing gates until the new authenticated release snapshot is known.
-    capabilities.value = null;
+    // Keep the setup panel mounted across focus refreshes so its device/contact
+    // selection survives. New controller requests stay blocked while loading;
+    // host.start independently obtains a fresh authenticated release snapshot.
     const task = (async () => {
       let release = null;
       try { release = await getRemoteControlRelease(); } catch { /* Fail closed on network/auth/config errors. */ }

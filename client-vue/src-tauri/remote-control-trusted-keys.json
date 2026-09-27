@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "keyId": "production-20260927-c578abb9",
+    "publicKey": "JNyTbB8Cqz14p-pMNOjBnhAP5zkmZfAUEkNqCVpnqsM",
+    "notBefore": 1790499103376,
+    "notAfter": 1822035403376
+  }
+]

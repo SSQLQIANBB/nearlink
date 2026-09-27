@@ -16,10 +16,24 @@ function fixture() {
   const store = { get: vi.fn(async () => structuredClone(session) as RemoteSession | null) };
   const authority = { assertAuthorized: vi.fn(async (_session: RemoteSession) => {}) };
   const settings = turnSettingsFromEnvironment({ REMOTE_TURN_SHARED_SECRET: 'test-only-secret'.repeat(4) });
+  if (settings.authMode === 'static') throw new Error('Expected REST fixture');
   const service = new RemoteIceService(store, authority, () => settings, () => signer, () => now);
   return { session, store, authority, settings, signer, pair, service, advance: (ms: number) => { now += ms; } };
 }
 describe('会话TURN短期凭据', () => {
+  it('仅显式静态认证模式复用旧视频TURN；仍校验会话并签名配置', async () => {
+    const f = fixture();
+    const settings = turnSettingsFromEnvironment({ REMOTE_TURN_AUTH_MODE: 'static', REMOTE_TURN_USERNAME: 'video-user', REMOTE_TURN_PASSWORD: 'test-only-password' });
+    const service = new RemoteIceService(f.store, f.authority, () => settings, () => f.signer, () => f.session.createdAt);
+    const result = await service.issue(f.session.id, f.session.host);
+    expect(result.iceServers[1]).toMatchObject({ username: 'video-user', credential: 'test-only-password' });
+    expect(verify(null, remoteSignatureMessage(result.proof.keyId, result.proof.payload), f.pair.publicKey, Buffer.from(result.proof.signature, 'base64url'))).toBe(true);
+    f.authority.assertAuthorized.mockRejectedValue(new RemoteControlError('AUTH_REVOKED', 401));
+    await expect(service.issue(f.session.id, f.session.host)).rejects.toMatchObject({ code: 'AUTH_REVOKED' });
+    expect(() => turnSettingsFromEnvironment({ REMOTE_TURN_USERNAME: 'video-user', REMOTE_TURN_PASSWORD: 'test-only-password' })).toThrow('REMOTE_ICE_UNCONFIGURED');
+    expect(() => turnSettingsFromEnvironment({ REMOTE_TURN_AUTH_MODE: 'static', REMOTE_TURN_USERNAME: 'video-user' })).toThrow('REMOTE_ICE_UNCONFIGURED');
+    expect(() => turnSettingsFromEnvironment({ REMOTE_TURN_AUTH_MODE: 'auto' })).toThrow('REMOTE_ICE_CONFIGURATION_INVALID');
+  });
   it('复用视频TURN地址，使用coturn REST HMAC，签名同时绑定会话与两端身份', async () => {
     const f = fixture(), r = await f.service.issue(f.session.id, f.session.host);
     const turn = r.iceServers[1]!;

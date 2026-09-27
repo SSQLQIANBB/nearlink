@@ -60,6 +60,7 @@ export interface RemoteOutboxEntry { id: string; raw: string }
 export interface RemoteRevocationJob extends SessionRevocation { afterId?: string }
 export class RedisRemoteSessionStore {
   constructor(private readonly redis: Pick<Redis, 'eval' | 'get' | 'zrangebyscore'>) {}
+  async occupied(endpointId: string) { return Boolean(await this.redis.get(endpointKey(endpointId))); }
   async get(id: string): Promise<RemoteSession | null> {
     const raw = await this.redis.get(sessionKey(id));
     return raw ? JSON.parse(raw) : null;

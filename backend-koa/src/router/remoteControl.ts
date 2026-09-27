@@ -1,3 +1,4 @@
+import { assistanceDuration, assistanceExpiry, activeAssistanceWhere } from '../services/assistanceGrantPolicy';
 import Router from 'koa-router';
 import { Op } from 'sequelize';
 import { randomUUID } from 'crypto';
@@ -13,6 +14,8 @@ import { remoteCredentialSignerFromEnvironment } from '../services/remoteCredent
 import { RemoteIceService, turnSettingsFromEnvironment } from '../services/remoteIce';
 import { RedisRemoteSessionStore } from '../services/redisRemoteSessionStore';
 import { RemoteSessionHistory } from '../services/remoteSessionHistory';
+import { getRemoteControlContext } from '../services/remoteControlContext';
+import User from '../models/User';
 
 const router = new Router({ prefix: '/api/remote-control' });
 const challenges = new RemoteDeviceChallengeStore(redis);
@@ -38,7 +41,7 @@ router.use(async (ctx, next) => {
   }
 });
 
-router.get('/capabilities', ctx => { ctx.body = getRemoteControlCapabilities(); });
+router.get('/capabilities', ctx => { ctx.set('Cache-Control', 'no-store'); ctx.body = getRemoteControlCapabilities(ctx.state.remoteAuth.userId); });
 router.get('/signing-keys', ctx => {
   const signer = remoteCredentialSignerFromEnvironment();
   ctx.set('Cache-Control', 'no-store');
@@ -82,11 +85,45 @@ router.delete('/devices/:id', async ctx => {
 });
 
 router.get('/targets', async ctx => {
-  z.object({ userId: z.coerce.number().int().positive() }).strict().parse(ctx.query);
-  // Native transport/consent is not validated yet. Never infer a host from the chat presence list.
-  ctx.body = { targets: [] };
+  const { userId } = z.object({ userId: z.coerce.number().int().positive().safe() }).strict().parse(ctx.query);
+  const { authority, store } = getRemoteControlContext();
+  if (!authority || !getRemoteControlCapabilities(ctx.state.remoteAuth.userId).desktopHostEnabled) { ctx.body = { targets: [] }; return; }
+  const grants = await AssistanceGrant.findAll({ where: { controllerUserId: ctx.state.remoteAuth.userId,
+    ...activeAssistanceWhere() }, limit: 100 });
+  const devices = await RemoteDevice.findAll({ where: { id: { [Op.in]: grants.map(g => g.hostDeviceId) }, ownerUserId: userId, revokedAt: null }, limit: 100 });
+  const targets = await Promise.all(devices.map(async device => {
+    const host = authority.host(device.id);
+    if (!host) return null;
+    // A renewed socket heartbeat alone cannot keep a revoked login/device visible.
+    try { await authority.assertCurrent(host.endpoint); } catch { return null; }
+    return { deviceId: device.id, alias: device.alias, platform: device.platform, online: true,
+      busy: await store.occupied(device.id), canHostView: !!host.presence?.canCapture, canHostControl: !!host.presence?.canControl };
+  }));
+  ctx.body = { targets: targets.filter(Boolean) };
 });
-router.post('/assistance-grants', () => { throw new RemoteControlError('NATIVE_VALIDATION_PENDING', 503); });
+router.post('/assistance-grants', async ctx => {
+  const input = z.object({ hostDeviceId: uuid, controllerUserId: z.number().int().positive().safe(), duration: assistanceDuration.default('15m') }).strict().parse(ctx.request.body);
+  if (!getRemoteControlCapabilities(ctx.state.remoteAuth.userId).desktopHostEnabled) throw new RemoteControlError('NATIVE_VALIDATION_PENDING', 503);
+  const { userId, sid } = ctx.state.remoteAuth;
+  const result = await AssistanceGrant.sequelize!.transaction(async transaction => {
+    const device = await RemoteDevice.findOne({ where: { id: input.hostDeviceId, ownerUserId: userId, revokedAt: null }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!device || !await User.findByPk(input.controllerUserId, { attributes: ['id'], transaction })) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
+    const existing = await AssistanceGrant.findAll({ where: { hostDeviceId: device.id, ...activeAssistanceWhere() }, transaction, limit: 20 });
+    const prior = existing.find(g => g.controllerUserId === input.controllerUserId && g.createdBySid === sid);
+    if (prior) { await prior.update({ expiresAt: assistanceExpiry(input.duration) }, { transaction }); return prior; }
+    if (existing.length >= 20) throw new RemoteControlError('GRANT_LIMIT', 429);
+    return AssistanceGrant.create({ id: randomUUID(), hostDeviceId: device.id, createdBySid: sid,
+      controllerUserId: input.controllerUserId, expiresAt: assistanceExpiry(input.duration) }, { transaction });
+  });
+  // This only permits requesting a native prompt, never screen capture or input.
+  ctx.body = { grant: { id: result.id, hostDeviceId: result.hostDeviceId, controllerUserId: result.controllerUserId, expiresAt: result.expiresAt } };
+});
+router.get('/assistance-grants', async ctx => {
+  const devices = await RemoteDevice.findAll({ where: { ownerUserId: ctx.state.remoteAuth.userId, revokedAt: null }, attributes: ['id'], limit: 100 });
+  const grants = await AssistanceGrant.findAll({ where: { hostDeviceId: { [Op.in]: devices.map(d => d.id) },
+    ...activeAssistanceWhere() }, limit: 100, order: [['expiresAt', 'DESC']] });
+  ctx.body = { grants: grants.map(g => ({ id: g.id, hostDeviceId: g.hostDeviceId, controllerUserId: g.controllerUserId, expiresAt: g.expiresAt })) };
+});
 router.delete('/assistance-grants/:id', async ctx => {
   const id = uuid.parse(ctx.params.id);
   const grant = await AssistanceGrant.findByPk(id);

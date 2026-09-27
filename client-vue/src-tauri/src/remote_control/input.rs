@@ -591,12 +591,14 @@ mod macos {
     // Graphics event sources are not tied to a UI thread and never shared here.
     unsafe impl Send for MacOsInputExecutor {}
     impl MacOsInputExecutor {
-        /// Capture a primary-display snapshot and check AX; never create/post an input event.
+        /// Read geometry without AX access so view-only sessions can start.
+        /// Input preflight and every post still require AX permission.
         pub fn new_primary_screen(layout_version: u64) -> Result<Self, InputError> {
             if layout_version == 0 {
                 return Err(InputError::LayoutChanged);
             }
-            let initial = layout()?;
+            let initial = media_layout::primary_display_snapshot()
+                .map_err(|_| InputError::LayoutChanged)?;
             Ok(Self {
                 initial,
                 layout_version,

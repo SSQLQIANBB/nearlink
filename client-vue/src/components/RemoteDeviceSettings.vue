@@ -1,8 +1,9 @@
 <template>
   <section class="remote-device-settings" aria-label="远程设备管理">
     <h2>我的远程设备</h2>
-    <p>管理绑定到当前账号的设备身份。此版本暂未开放远程控制，可继续使用屏幕共享。</p>
+    <p>管理绑定到当前账号的设备身份。远程协助是否可用取决于客户端和系统权限。</p>
     <p class="note">设备登记不会开启屏幕观看或键鼠控制，也不代表设备在线。发起远程协助无需先登记本机。</p>
+    <RemoteHostSettings v-if="remote.capabilities?.showHostEntry" :devices="devices.devices" />
     <n-spin :show="devices.probing">
       <form v-if="devices.support?.desktop && devices.support.registration" class="registration" @submit.prevent="register">
         <label for="remote-device-alias">当前设备名称</label>
@@ -39,6 +40,9 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { NButton, NInput, NPopconfirm, NSpin } from 'naive-ui';
 import { useRemoteDevicesStore } from '@/stores/remoteDevices';
+import { useRemoteControlStore } from '@/stores/remoteControl';
+import RemoteHostSettings from './RemoteHostSettings.vue';
+const remote = useRemoteControlStore();
 const devices = useRemoteDevicesStore();
 const alias = ref('');
 async function register() { await devices.register(alias.value); }

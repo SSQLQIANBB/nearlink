@@ -38,6 +38,32 @@ async function connected() {
   return store;
 }
 describe('远控主控会话接线', () => {
+  it('仅观看不会在焦点变化后显示恢复键鼠操作提示', async () => {
+    const store = await connected();
+    const peer = mocks.peers[0];
+    peer.options.onAuthorization('view');
+    peer.options.onPauseInput('REMOTE_VIEW_ONLY');
+    expect(store.statusMessage).toBe('仅观看，尚未授予键鼠控制权限');
+    peer.options.onAuthorization('control');
+    peer.options.onPauseInput('REMOTE_HOST_PAUSED');
+    expect(store.statusMessage).toContain('操作已暂停');
+  });
+  it('连接失败保留错误代码并释放资源，不展示任意异常正文', async () => {
+    const store = useRemoteControlSessionStore();
+    mocks.ice.mockRejectedValueOnce(new Error('REMOTE_ICE_CONFIGURATION'));
+    await store.start(mocks.capabilities.targets[0]!, 'view');
+    mocks.adapters[0].event({ type: 'connecting', value: bootstrap });
+    await flushPromises();
+    expect(store.phase).toBe('ended');
+    expect(store.failureCode).toBe('REMOTE_ICE_CONFIGURATION');
+    expect(mediaOccupancy.current.value).toBeNull();
+    mocks.ice.mockRejectedValueOnce(new Error('credential=private-value'));
+    await store.start(mocks.capabilities.targets[0]!, 'view');
+    expect(store.failureCode).toBe('');
+    mocks.adapters[1].event({ type: 'connecting', value: bootstrap });
+    await flushPromises();
+    expect(store.failureCode).toBe('REMOTE_PROTOCOL_FAILED');
+  });
   it('界面坐标仅交给peer已验证的布局映射', async () => {
     const store = await connected();
     expect(store.mapPointer(120, 240)).toEqual({ x: 0.25, y: 0.75 });

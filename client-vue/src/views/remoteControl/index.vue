@@ -3,7 +3,7 @@
     <header>
       <n-button quaternary @click="router.push({ name: 'Remote' })">返回聊天</n-button>
       <h1>远程控制</h1>
-      <p>远程查看与操作需要指定设备开启临时协助，并在本机逐次确认。</p>
+      <p>远程查看与操作需要指定设备开启协助许可，并在本机逐次确认。</p>
     </header>
     <n-spin :show="remote.loading">
       <section class="status-card" aria-live="polite">
@@ -21,12 +21,13 @@
     <section v-if="remote.canControl" class="status-card">
       <h2>可请求协助的设备</h2>
       <p v-if="remote.error" role="alert">{{ remote.error }}</p>
-      <p v-else-if="!remote.targets.length">暂无已获临时协助许可的设备。对方需要在桌面客户端为你的账号开启远程协助。</p>
+      <p v-else-if="!remote.targets.length">暂无已获协助许可的设备。对方需要在桌面客户端为你的账号开启远程协助。</p>
       <ul v-else>
         <li v-for="target in remote.targets" :key="target.deviceId">
           <strong>{{ target.alias }}</strong> · {{ target.platform }} · {{ !target.online ? '离线' : target.busy ? '使用中' : '在线' }}
           <n-button size="small" :disabled="!target.online || target.busy || !target.canHostView || mediaBusy" @click="request(target, 'view')">请求观看</n-button>
-          <n-button v-if="target.canHostControl" size="small" :disabled="!target.online || target.busy || mediaBusy" @click="request(target, 'control')">请求控制</n-button>
+          <n-button size="small" :disabled="!target.online || target.busy || !target.canHostControl || mediaBusy" @click="request(target, 'control')">请求控制</n-button>
+          <span v-if="!target.canHostControl" class="note">对方需开启辅助功能权限并重新检测，才能控制键盘鼠标。</span>
         </li>
       </ul>
       <p class="note">对方确认后才能观看；控制键盘鼠标需要单独许可。</p>

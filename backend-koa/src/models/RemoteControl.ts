@@ -27,7 +27,7 @@ export class AssistanceGrant extends Model<InferAttributes<AssistanceGrant>, Inf
   declare hostDeviceId: string;
   declare createdBySid: string;
   declare controllerUserId: number;
-  declare expiresAt: Date;
+  declare expiresAt: Date | null;
   declare revokedAt: CreationOptional<Date | null>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -35,7 +35,7 @@ export class AssistanceGrant extends Model<InferAttributes<AssistanceGrant>, Inf
 AssistanceGrant.init({
   id: { type: DataTypes.UUID, primaryKey: true }, hostDeviceId: { type: DataTypes.UUID, allowNull: false },
   createdBySid: { type: DataTypes.UUID, allowNull: false }, controllerUserId: { type: DataTypes.INTEGER, allowNull: false },
-  expiresAt: { type: DataTypes.DATE, allowNull: false }, revokedAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
+  expiresAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null }, revokedAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
   createdAt: DataTypes.DATE, updatedAt: DataTypes.DATE,
 }, { sequelize, tableName: 'remote_assistance_grants', timestamps: true,
   indexes: [{ fields: ['controllerUserId', 'expiresAt'] }, { fields: ['hostDeviceId', 'revokedAt'] }, { fields: ['createdBySid'] }] });

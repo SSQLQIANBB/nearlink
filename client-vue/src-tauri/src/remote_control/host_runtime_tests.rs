@@ -216,6 +216,22 @@ fn hello(f: &mut Fixture) {
         .unwrap();
 }
 #[test]
+fn view_media_does_not_require_input_permission_but_control_does() {
+    let mut view = fixture("view");
+    view.host.probe = Box::new(|| Availability { capture: true, input: false });
+    start(&mut view, "view", 7000);
+    assert!(view.host.media_started());
+    assert!(view.host.tick(view.now + Duration::from_millis(100)).is_ok());
+    assert_eq!(view.log.lock().unwrap().actions, 0);
+
+    let mut control = fixture("control");
+    control.host.probe = Box::new(|| Availability { capture: true, input: false });
+    assert!(control.host.tick(control.now).is_err());
+    assert!(control.host.ended());
+    assert_eq!(control.log.lock().unwrap().starts, 0);
+    assert_eq!(control.log.lock().unwrap().actions, 0);
+}
+#[test]
 fn queued_controller_heartbeat_retains_native_receipt_time() {
     let mut f = fixture("view");
     hello(&mut f);
@@ -425,8 +441,11 @@ fn desktop_stop_drains_the_real_supervisor_and_local_consent() {
     start(&mut f, "control", 7000);
     key_down(&mut f);
     let state = super::super::RemoteControlState {
+        engine_ready: std::sync::OnceLock::new(),
+        consent_memory_epoch: Default::default(),
         identity: f.host.identity.clone(),
         host: Mutex::new(Some(HostSupervisor::spawn(f.host))),
+        bridge: Mutex::new(None),
     };
     state.stop().unwrap();
     assert_eq!(f.log.lock().unwrap().released, vec!["KeyA"]);

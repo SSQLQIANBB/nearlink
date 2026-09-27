@@ -137,6 +137,35 @@ impl Drop for ReapedChild {
 #[derive(Clone)]
 pub(super) struct ProcessMediaDriver(Arc<ProcessState>);
 impl ProcessMediaDriver {
+    /// Readiness probe: authenticated engine handshake, never configure networking,
+    /// grant a media lease, capture the screen or create a local consent.
+    pub fn probe_bundled(app: &tauri::AppHandle) -> HostResult<()> {
+        let mut bytes = [0u8; 16];
+        getrandom::getrandom(&mut bytes).map_err(|_| "REMOTE_RANDOM_UNAVAILABLE")?;
+        bytes[6] = (bytes[6] & 15) | 0x40;
+        bytes[8] = (bytes[8] & 63) | 0x80;
+        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        let session = format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]);
+        let (driver, events) = Self::spawn_bundled(app, &session)?;
+        let result = (|| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if Instant::now() >= deadline { return Err("REMOTE_ENGINE_PROBE_TIMEOUT"); }
+                driver.send("heartbeat", json!({}))?;
+                match events.recv_timeout(Duration::from_millis(400)) {
+                    Ok(event) if event.kind == "ready"
+                        && event.payload["pid"].as_u64() == Some(driver.pid()? as u64)
+                        && event.payload["mediaStarted"] == false
+                        && event.payload["loopbackOnly"] == true => return Ok(()),
+                    Ok(_) => return Err("REMOTE_ENGINE_PROBE_REJECTED"),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return Err("REMOTE_ENGINE_PROBE_REJECTED"),
+                    Err(mpsc::RecvTimeoutError::Timeout) => (),
+                }
+            }
+        })();
+        let stopped = driver.terminate_bounded();
+        result.and(stopped)
+    }
     #[cfg(all(test, unix))]
     pub(super) fn idle_test_process(session_id: &str) -> HostResult<(Self, Receiver<IpcMessage>)> {
         let mut command = Command::new("/bin/sleep");

@@ -1,21 +1,23 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Koa from 'koa';
+import { koaBody } from 'koa-body';
 import { createServer, type Server } from 'http';
 import { Op } from 'sequelize';
 import { generateKeyPairSync, randomUUID } from 'crypto';
 
-const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), authority: vi.fn() }));
+const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), authority: vi.fn(), grants: vi.fn(), createGrant: vi.fn(), user: vi.fn() }));
 vi.mock('../../../src/config/redis', () => ({ default: { get: mocks.redisGet } }));
 vi.mock('../../../src/services/loginSessionService', () => ({ validateAuthenticatedSession: mocks.validate }));
 vi.mock('../../../src/models/RemoteControl', () => ({
   RemoteDevice: { findAll: mocks.devices, findOne: mocks.revoke },
-  RemoteSessionRecord: { findAll: mocks.sessions }, AssistanceGrant: {},
+  RemoteSessionRecord: { findAll: mocks.sessions }, AssistanceGrant: { findAll: mocks.grants, create: mocks.createGrant, sequelize: { transaction: async (action: any) => action({ LOCK: { UPDATE: true } }) } },
 }));
 vi.mock('../../../src/services/remoteSessionHistory', () => ({ RemoteSessionHistory: class { assertAuthorized = mocks.authority; } }));
+vi.mock('../../../src/models/User', () => ({ default: { findByPk: mocks.user } }));
 import remoteRouter from '../../../src/router/remoteControl';
 let server: Server, origin: string;
 beforeAll(async () => {
-  const app = new Koa(); app.use(remoteRouter.routes()).use(remoteRouter.allowedMethods());
+  const app = new Koa(); app.use(koaBody()); app.use(remoteRouter.routes()).use(remoteRouter.allowedMethods());
   server = createServer(app.callback());
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -23,7 +25,7 @@ beforeAll(async () => {
 afterAll(async () => { await new Promise<void>(resolve => server.close(() => resolve())); });
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.redisGet.mockResolvedValue(null);
+  mocks.redisGet.mockResolvedValue(null); mocks.grants.mockResolvedValue([]); mocks.user.mockResolvedValue({ id: 8 }); mocks.createGrant.mockImplementation(async value => value);
   mocks.authority.mockResolvedValue(undefined);
   mocks.validate.mockResolvedValue({ userId: 7, sid: 'session-7' });
   mocks.devices.mockResolvedValue([]); mocks.sessions.mockResolvedValue([]); mocks.revoke.mockResolvedValue(null);
@@ -32,6 +34,28 @@ afterEach(() => vi.unstubAllEnvs());
 const read = (path: string, token = 'valid') => fetch(`${origin}/api/remote-control${path}`, { headers: { Authorization: `Bearer ${token}` } });
 
 describe('远控REST真实HTTP权限边界', () => {
+  it('协助许可支持临时/长期，续期保持ID并拒绝任意时长', async () => {
+    vi.stubEnv('REMOTE_CONTROL_PREVIEW_USER_IDS', '7');
+    const id = randomUUID(); mocks.revoke.mockResolvedValue({ id });
+    const grant = (duration?: string) => fetch(`${origin}/api/remote-control/assistance-grants`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostDeviceId: id, controllerUserId: 8, ...(duration ? { duration } : {}) }),
+    });
+    const before = Date.now();
+    const temporary = await (await grant()).json();
+    expect(new Date(temporary.grant.expiresAt).getTime() - before).toBeGreaterThanOrEqual(900000);
+    const hour = await (await grant('1h')).json();
+    expect(new Date(hour.grant.expiresAt).getTime() - before).toBeGreaterThanOrEqual(3600000);
+    expect((await (await grant('permanent')).json()).grant.expiresAt).toBeNull();
+    const prior = { id: randomUUID(), hostDeviceId: id, controllerUserId: 8, createdBySid: 'session-7', expiresAt: null as Date | null,
+      update: vi.fn(async function(this: any, values: any) { Object.assign(this, values); }) };
+    mocks.grants.mockResolvedValue([prior]);
+    expect((await (await grant('1h')).json()).grant.id).toBe(prior.id);
+    expect(prior.expiresAt).toBeInstanceOf(Date);
+    expect((await grant('forever-invalid')).status).toBe(400);
+    mocks.revoke.mockResolvedValue(null);
+    expect((await grant('permanent')).status).toBe(404);
+  });
   it('签名公钥接口要求登录，只返回显式配置的公钥与有效期', async () => {
     expect((await fetch(`${origin}/api/remote-control/signing-keys`)).status).toBe(401);
     const pair = generateKeyPairSync('ed25519');

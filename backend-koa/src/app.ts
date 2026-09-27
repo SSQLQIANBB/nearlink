@@ -79,6 +79,14 @@ async function startServer() {
 
     // 3. 注册路由
     console.log(chalk.yellow('🛣️  正在注册路由...'));
+    app.use(async (ctx, next) => {
+      if (ctx.method === 'GET' && ctx.path === '/api/health/ready') {
+        // listen() is reached only after the required schema has been checked.
+        ctx.body = { code: 200, status: 'ready' };
+        return;
+      }
+      await next();
+    });
     setupRouter(app)
     console.log(chalk.green('✓ 路由注册完成\n'));
 

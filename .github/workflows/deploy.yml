@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
@@ -132,7 +132,7 @@ jobs:
           fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
           port: 22
           command_timeout: 30m
-          source: docker-compose.prod.yml,Caddyfile,todesk-backend.tar.gz,todesk-web.tar.gz,todesk-caddy.tar.gz,todesk-cert-sync.tar.gz
+          source: docker-compose.prod.yml,Caddyfile,deploy/migrate-database.sh,todesk-backend.tar.gz,todesk-web.tar.gz,todesk-caddy.tar.gz,todesk-cert-sync.tar.gz
           target: /opt/todesk
 
       - name: Deploy on server
@@ -174,6 +174,7 @@ jobs:
             : "${QINIU_ACCESS_KEY:?QINIU_ACCESS_KEY is required in /opt/todesk/.env.production}"
             : "${QINIU_SECRET_KEY:?QINIU_SECRET_KEY is required in /opt/todesk/.env.production}"
             SHARED_SERVICES_NETWORK="${SHARED_SERVICES_NETWORK:-shared-services}"
+            export SHARED_SERVICES_NETWORK
             docker network inspect "$SHARED_SERVICES_NETWORK" >/dev/null
             test -n "$(
               docker ps -q --filter network="$SHARED_SERVICES_NETWORK" \
@@ -195,6 +196,7 @@ jobs:
             gzip -dc todesk-cert-sync.tar.gz | docker load
             rm -f todesk-backend.tar.gz todesk-web.tar.gz todesk-caddy.tar.gz \
               todesk-cert-sync.tar.gz
+            bash deploy/migrate-database.sh
             docker compose --env-file .env.production -f docker-compose.prod.yml \
               up -d --pull never --remove-orphans
             docker image prune -f
@@ -213,7 +215,7 @@ jobs:
             )" = "healthy"
             for i in $(seq 1 12); do
               if curl --resolve "${DOMAIN}:443:127.0.0.1" \
-                -fsS "https://${DOMAIN}/" >/dev/null; then
+                -fsS "https://${DOMAIN}/api/health/ready" >/dev/null; then
                 exit 0
               fi
               sleep 5

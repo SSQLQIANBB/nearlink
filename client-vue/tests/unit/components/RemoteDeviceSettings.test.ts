@@ -1,5 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@/stores/remoteControl', () => ({ useRemoteControlStore: () => ({ capabilities: null }) }));
 import { reactive } from 'vue';
 const mocks = vi.hoisted(() => ({ store: null as any }));
 vi.mock('@/stores/remoteDevices', () => ({ useRemoteDevicesStore: () => mocks.store }));

@@ -7,7 +7,7 @@
       <n-button size="small" type="error" @click="session.end()">结束协助</n-button>
     </header>
     <div class="remote-video-area">
-      <video ref="video" autoplay playsinline muted tabindex="0" aria-label="远程画面，点击继续操作后可使用键盘鼠标"
+      <video ref="video" autoplay playsinline muted tabindex="0" :aria-label="session.scope === 'control' ? '远程画面，点击继续操作后可使用键盘鼠标' : '远程画面，仅观看'"
         @pointerdown="pointer($event, true)" @pointerup="pointer($event, false)" @pointermove="move"
         @lostpointercapture="captureLost" @pointercancel="pause" @wheel.prevent="wheel" @contextmenu.prevent
         @keydown="key($event, true)" @keyup="key($event, false)" @blur="pause" />
@@ -19,13 +19,17 @@
       <n-button v-if="session.needsApproval && session.device?.canHostControl" size="small" @click="requestControl">请求控制许可</n-button>
       <n-button v-if="session.inputArmed" size="small" @click="pause">暂停操作</n-button>
       <span v-if="session.stats" class="stats">{{ Math.round(session.stats.framesPerSecond) }} fps · {{ Math.round(session.stats.bitrate / 1000) }} kbps<span v-if="session.stats.roundTripMs !== null"> · RTT {{ Math.round(session.stats.roundTripMs) }} ms</span></span>
-      <span class="hint">Esc 暂停操作；系统保留的快捷键仍由本机处理。</span>
+      <span v-if="session.scope === 'control'" class="hint">Esc 暂停操作；系统保留的快捷键仍由本机处理。</span>
       <form v-if="session.scope === 'control'" class="remote-text" @submit.prevent="sendText">
         <input v-model="text" maxlength="2048" aria-label="向远端输入文字" placeholder="输入中文或其他文字" @focus="pause" />
         <n-button size="small" attr-type="submit" :disabled="!text || sendingText || session.phase !== 'active'">发送文字</n-button>
       </form>
     </footer>
   </section>
+  <aside v-else-if="session.failureCode" role="alert" class="remote-ended">
+    <span>远程协助未能继续，已停止连接。错误代码：{{ session.failureCode }}</span>
+    <n-button size="small" @click="session.failureCode = ''">关闭</n-button>
+  </aside>
 </template>
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -83,6 +87,7 @@ onMounted(() => { window.addEventListener('blur', pause); document.addEventListe
 onBeforeUnmount(() => { window.removeEventListener('blur', pause); document.removeEventListener('visibilitychange', visibility); session.attachVideo(null); session.end(); });
 </script>
 <style scoped>
+.remote-ended { position: fixed; right: 20px; bottom: 20px; z-index: 2000; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 40px); padding: 16px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 10px; }
 .remote-session { position: fixed; z-index: 2000; inset: 6vh 5vw; display: flex; flex-direction: column; background: #111827; color: #e2e8f0; border: 1px solid #475569; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 80px #0008; }
 .remote-session.compact { inset: auto 20px 20px auto; width: min(520px, calc(100vw - 40px)); height: 340px; }
 header, footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: #1e293b; }

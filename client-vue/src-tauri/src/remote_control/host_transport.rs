@@ -365,6 +365,9 @@ impl HostTransport {
     pub fn clear_channels(&mut self) {
         self.pending.clear();
     }
+    pub fn observed_transport(&self) -> Option<ObservedTransport> {
+        self.dtls.clone()
+    }
 }
 fn channel_index(label: &str) -> HostResult<usize> {
     match label {

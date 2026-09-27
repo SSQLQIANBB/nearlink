@@ -22,10 +22,15 @@ fn main() {
         .manage(remote_control::RemoteControlState::default())
         .invoke_handler(tauri::generate_handler![
             remote_control::remote_control_capabilities,
+            remote_control::remote_control_open_permission_settings,
             remote_control::remote_control_stop,
             remote_control::remote_control_register_device,
             remote_control::remote_control_confirm_request,
+            remote_control::remote_control_clear_remembered_approvals,
             remote_control::remote_control_reset_identity,
+            remote_control::remote_control_presence,
+            remote_control::remote_control_start_host,
+            remote_control::remote_control_host_command,
         ])
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)

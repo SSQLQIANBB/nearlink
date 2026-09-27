@@ -212,6 +212,7 @@ pub(super) struct IdentityState {
     used: HashMap<String, Instant>,
     consent: Option<LocalConsent>,
     runtime_claimed: bool,
+    consent_key_version: u64,
 }
 #[derive(Clone, Copy)]
 pub(super) struct Operation {
@@ -442,6 +443,20 @@ impl IdentityState {
             .insert(claims.approval_id.clone(), request.deadline);
         Ok(request)
     }
+    pub fn approve_with_memory(
+        &mut self, operation: Operation, request: VerifiedApproval,
+        choice: super::consent_dialog::Choice, preferences: &mut super::consent_memory::Preferences,
+        now_ms: u64, now: Instant,
+    ) -> Result<(ConsentResponse, bool), &'static str> {
+        let decision = if request.is_grant_control() && choice.decision != Decision::Control {
+            Decision::Reject
+        } else { choice.decision };
+        let mut next = preferences.clone();
+        let remember = request.remember_choice(&mut next, decision, choice.remember);
+        let response = self.approve(operation, request, decision, now_ms, now)?;
+        if remember { *preferences = next; }
+        Ok((response, remember))
+    }
     pub fn approve(
         &mut self,
         operation: Operation,
@@ -493,6 +508,7 @@ impl IdentityState {
                 self.consent = None;
             }
         } else {
+            self.consent_key_version = c.host_key_version;
             self.consent = Some(LocalConsent {
                 session_id: c.session_id.clone(),
                 host: c.host.clone(),
@@ -512,7 +528,69 @@ impl IdentityState {
         Ok(ConsentResponse { consent })
     }
 }
+/// Native-only evidence signing. The OS key and version come from this process's verified consent.
+pub(super) fn sign_runtime_fact(
+    state: &IdentityState,
+    generation: u64,
+    session_id: &str,
+    body: serde_json::Value,
+    now: Instant,
+) -> Result<SignedEnvelope, &'static str> {
+    if !state.runtime_is_current(generation, session_id, now)
+        || !state.runtime_claimed
+        || state.consent_key_version == 0
+    {
+        return Err("REMOTE_LOCAL_CONSENT_REQUIRED");
+    }
+    let host = &state
+        .consent
+        .as_ref()
+        .ok_or("REMOTE_LOCAL_CONSENT_REQUIRED")?
+        .host;
+    sign_native_fact(
+        &super::device_store::OsSeedStore,
+        host,
+        state.consent_key_version,
+        body,
+    )
+}
+pub(super) fn sign_native_fact(
+    store: &impl SeedStore,
+    host: &Endpoint,
+    version: u64,
+    body: serde_json::Value,
+) -> Result<SignedEnvelope, &'static str> {
+    let key = signing_key(store, host.user_id, false)?;
+    let key_id = format!("device:{}:{}", host.endpoint_id, version);
+    let payload =
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&body).map_err(|_| "INVALID_NATIVE_EVIDENCE")?);
+    let signature = URL_SAFE_NO_PAD.encode(
+        key.sign(format!("{DOMAIN}\n{key_id}\n{payload}").as_bytes())
+            .to_bytes(),
+    );
+    Ok(SignedEnvelope {
+        format: "rc-signed-v1".into(),
+        key_id,
+        payload,
+        signature,
+    })
+}
 impl VerifiedApproval {
+    fn remembered_binding(&self) -> super::consent_memory::Binding {
+        let c = &self.claims;
+        super::consent_memory::Binding {
+            host_user: c.host.user_id, host_device: c.host.endpoint_id.clone(),
+            host_auth_version: c.host.auth_version.clone(), host_key_version: c.host_key_version,
+            host_key_fingerprint: c.host_key_fingerprint.clone(), controller_user: c.controller.user_id,
+            controller_auth_version: c.controller.auth_version.clone(), screen: c.screen_id.clone(),
+        }
+    }
+    pub fn remembered_choice(&self, preferences: &super::consent_memory::Preferences) -> Option<Decision> {
+        preferences.decision(&self.remembered_binding(), self.claims.requested_scope, &self.key.verifying_key())
+    }
+    pub fn remember_choice(&self, preferences: &mut super::consent_memory::Preferences, decision: Decision, checked: bool) -> bool {
+        preferences.remember(self.remembered_binding(), decision, checked, &self.key)
+    }
     pub fn is_grant_control(&self) -> bool {
         self.claims.action == "grant-control"
     }
@@ -584,7 +662,7 @@ impl VerifiedApproval {
 
     pub fn message(&self) -> String {
         let c = &self.claims;
-        format!("请求方账号：{}\n请求方设备：{}\n本机账号：{}\n会话：{}\n共享范围：主显示器\n请求权限：{}\n\n仅在认识并信任对方时批准。此确认在 45 秒内过期；批准不会自动启动屏幕共享或系统输入。",
+        format!("请求方账号：{}\n请求方设备：{}\n本机账号：{}\n会话：{}\n共享范围：主显示器\n请求权限：{}\n\n仅在认识并信任对方时批准。此确认在 45 秒内过期。勾选“不再提示”并允许后，此账号在相同或更小权限范围内的后续请求将自动批准；可在本机协助设置中恢复每次确认。",
             c.controller.user_id, c.controller.endpoint_id, c.host.user_id, c.session_id,
             if c.requested_scope == Scope::Control { "查看屏幕和键鼠控制" } else { "仅查看屏幕" })
     }
@@ -825,6 +903,41 @@ mod tests {
         let mut tampered = token;
         tampered.signature = URL_SAFE_NO_PAD.encode([0; 64]);
         assert!(VerifiedApproval::verify(&store, &keys, &tampered, ms, now).is_err());
+    }
+    #[test]
+    fn remembered_choices_commit_only_after_valid_live_approval() {
+        use super::super::{consent_dialog::Choice, consent_memory::Preferences};
+        for expired in [false, true] {
+            let (_, store, keys, token, ms, now) = fixture();
+            let mut state = IdentityState::default();
+            let op = state.begin().unwrap();
+            let request = prepare(&mut state, op, &store, &keys, &token, ms, now).unwrap();
+            let binding = request.remembered_binding();
+            let key = request.key.verifying_key();
+            let mut prefs = Preferences::default();
+            let end = if expired { now + Duration::from_secs(46) } else { state.stop(); now };
+            assert!(state.approve_with_memory(op, request, Choice { decision: Decision::Control, remember: true }, &mut prefs, ms, end).is_err());
+            assert_eq!(prefs.decision(&binding, Scope::Control, &key), None);
+        }
+        let (_, store, keys, token, ms, now) = fixture();
+        let mut state = IdentityState::default();
+        let op = state.begin().unwrap();
+        let request = prepare(&mut state, op, &store, &keys, &token, ms, now).unwrap();
+        let mut prefs = Preferences::default();
+        let (_, saved) = state.approve_with_memory(op, request, Choice { decision: Decision::View, remember: true }, &mut prefs, ms, now).unwrap();
+        assert!(saved);
+        state.finish(op).unwrap(); state.stop();
+        // A new session still verifies a fresh server proof and creates fresh local consent.
+        let next_token = changed(&token, |c| {
+            c["approvalId"] = "99999999-9999-4999-8999-999999999999".into();
+            c["sessionId"] = "88888888-8888-4888-8888-888888888888".into();
+            c["requestedScope"] = "view".into();
+        });
+        let op = state.begin().unwrap();
+        let request = prepare(&mut state, op, &store, &keys, &next_token, ms, now).unwrap();
+        assert_eq!(request.remembered_choice(&prefs), Some(Decision::View));
+        state.approve_with_memory(op, request, Choice { decision: Decision::View, remember: false }, &mut prefs, ms, now).unwrap();
+        assert_eq!(state.consent.as_ref().unwrap().session_id, "88888888-8888-4888-8888-888888888888");
     }
     #[test]
     fn stop_while_keychain_or_dialog_is_waiting_invalidates_late_results() {

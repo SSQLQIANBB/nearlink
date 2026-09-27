@@ -13,6 +13,22 @@ beforeEach(() => {
 });
 
 describe('远控会话前端门禁', () => {
+  it('焦点刷新保留设置面板，同时暂停新请求，失败后关闭入口', async () => {
+    mocks.probe.mockResolvedValueOnce({ canControl: true, showControllerEntry: true, showHostEntry: true });
+    const store = useRemoteControlStore();
+    await store.refreshCapabilities();
+    let reject!: (reason: Error) => void;
+    mocks.release.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const pending = store.refreshCapabilities();
+    expect(store.capabilities?.showHostEntry).toBe(true);
+    expect(store.canControl).toBe(false);
+    await store.loadTargets(1);
+    expect(mocks.targets).not.toHaveBeenCalled();
+    reject(new Error('offline'));
+    await pending;
+    expect(store.canControl).toBe(false);
+    expect(store.capabilities?.showHostEntry).not.toBe(true);
+  });
   it('配置未开放时不查询其他用户设备或连接记录', async () => {
     const store = useRemoteControlStore();
     await store.refreshCapabilities();

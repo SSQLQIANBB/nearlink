@@ -12,6 +12,13 @@ export interface RemoteSessionStore {
 }
 
 export class RemoteControlService {
+  private readonly observers = new Set<(session: RemoteSession) => void>();
+  subscribe(observer: (session: RemoteSession) => void) { this.observers.add(observer); return () => { this.observers.delete(observer); }; }
+  /** Runtime may commit a deadline CAS directly; notify only after that commit succeeds. */
+  publishCommitted(session: RemoteSession) {
+    for (const observer of this.observers) { try { observer(session); } catch { /* Delivery cannot roll back a committed transition. */ } }
+    return session;
+  }
   private admissionStopped = false;
   private recovering = false;
   pauseAdmissionForRecovery() { this.recovering = true; }
@@ -58,6 +65,7 @@ export class RemoteControlService {
       if (this.admissionStopped) throw new RemoteControlError('REMOTE_SHUTTING_DOWN', 503);
     }
     catch (error) { await this.end(created.session.id, 'AUTH_REVOKED'); throw error; }
+    this.publishCommitted(created.session);
     return created;
   }
   async act(id: string, actor: RemoteEndpoint, expectedRevision: number, action: RemoteAction) {
@@ -73,7 +81,7 @@ export class RemoteControlService {
     if (session.revision !== expectedRevision) throw new RemoteControlError('REVISION_CONFLICT');
     const next = transitionRemoteSession(session, actor, action, this.now());
     if (next === session) return session;
-    try { return await this.store.save(session, next, this.now()); }
+    try { return this.publishCommitted(await this.store.save(session, next, this.now())); }
     catch (error) {
       // Redis checks its commit-time clock as well: an in-flight accept/ready
       // cannot extend a deadline that elapsed while waiting for the store.
@@ -88,7 +96,7 @@ export class RemoteControlService {
     for (let attempt = 0; attempt < 4; attempt++) {
       const current = await this.store.get(id);
       if (!current || current.state === 'ended') return current;
-      try { return await this.store.save(current, endRemoteSession(current, reason, this.now()), this.now()); }
+      try { return this.publishCommitted(await this.store.save(current, endRemoteSession(current, reason, this.now()), this.now())); }
       catch (error) { if (!(error instanceof RemoteControlError) || error.code !== 'REVISION_CONFLICT') throw error; }
     }
     throw new RemoteControlError('REVISION_CONFLICT');

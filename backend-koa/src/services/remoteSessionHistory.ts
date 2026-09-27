@@ -1,3 +1,4 @@
+import { assistanceExpired } from './assistanceGrantPolicy';
 import { Op, QueryTypes, Transaction } from 'sequelize';
 import { RemoteSessionRecord, RemoteSessionEvent, RemoteDevice, AssistanceGrant } from '../models/RemoteControl';
 import User from '../models/User';
@@ -34,7 +35,7 @@ export class RemoteSessionHistory implements RemoteHistoryWriter {
     ]);
     if (!device || device.revokedAt || device.ownerUserId !== session.host.userId || !grant || grant.revokedAt
       || grant.hostDeviceId !== device.id || grant.createdBySid !== session.grantCreatedBySid
-      || grant.controllerUserId !== session.controller.userId || (admission && grant.expiresAt.getTime() <= Date.now())) {
+      || grant.controllerUserId !== session.controller.userId || (admission && assistanceExpired(grant.expiresAt))) {
       throw new RemoteControlError('TARGET_UNAVAILABLE', 403);
     }
   }

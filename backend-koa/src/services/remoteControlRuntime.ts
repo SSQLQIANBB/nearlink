@@ -91,7 +91,7 @@ export class RemoteControlRuntime {
       if (current.deadline > cutoff && current.hardDeadline > cutoff) continue;
       // End with CAS against exactly the expired revision, not a reloaded/extended revision.
       try {
-        await this.store.save(current, endRemoteSession(current, 'EXPIRED', cutoff), cutoff);
+        this.service.publishCommitted(await this.store.save(current, endRemoteSession(current, 'EXPIRED', cutoff), cutoff));
       } catch (error) {
         if (!(error instanceof RemoteControlError) || !['REVISION_CONFLICT', 'SESSION_ENDED', 'SESSION_NOT_FOUND'].includes(error.code)) throw error;
       }

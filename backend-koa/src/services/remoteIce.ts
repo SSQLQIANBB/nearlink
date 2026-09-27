@@ -24,12 +24,19 @@ export const iceConfigurationSchema = z.object({ iceServers: z.array(iceServerSc
 }).strict().refine(value => value.iceServers.some(server => server.urls.some(url => url.startsWith('turn'))));
 export type RemoteIceConfiguration = z.infer<typeof iceConfigurationSchema>;
 export type IceAuth = Pick<RemoteEndpoint, 'userId' | 'sid' | 'authVersion'>;
-export type TurnSettings = { urls: string[]; stunUrl?: string; secret: string; policy: 'all' | 'relay' };
+export type TurnSettings = { urls: string[]; stunUrl?: string; policy: 'all' | 'relay' } & (
+  { authMode?: 'rest'; secret: string } | { authMode: 'static'; username: string; credential: string }
+);
 
-/** Separate from video-call settings; same TURN service, no frontend/static-password fallback. */
+/** Static compatibility is explicit deployment configuration, never an automatic fallback. */
 export function turnSettingsFromEnvironment(env: NodeJS.ProcessEnv = process.env): TurnSettings {
+  const authMode = env.REMOTE_TURN_AUTH_MODE || 'rest';
+  if (!['rest', 'static'].includes(authMode)) throw new RemoteControlError('REMOTE_ICE_CONFIGURATION_INVALID', 503);
   const secret = env.REMOTE_TURN_SHARED_SECRET;
-  if (!secret || secret.length < 32 || secret.length > 1024 || secret.startsWith('change-me') || /[\r\n\0]/.test(secret))
+  if (authMode === 'rest' && (!secret || secret.length < 32 || secret.length > 1024 || secret.startsWith('change-me') || /[\r\n\0]/.test(secret)))
+    throw new RemoteControlError('REMOTE_ICE_UNCONFIGURED', 503);
+  const username = env.REMOTE_TURN_USERNAME, credential = env.REMOTE_TURN_PASSWORD;
+  if (authMode === 'static' && (!username || !credential || !/^[\x21-\x7e]{1,256}$/.test(username) || !/^[\x21-\x7e]{1,256}$/.test(credential)))
     throw new RemoteControlError('REMOTE_ICE_UNCONFIGURED', 503);
   const urls = (env.REMOTE_TURN_URLS || 'turn:turn.sycsq.top:3478?transport=udp,turn:turn.sycsq.top:3478?transport=tcp').split(',').map(url => url.trim());
   const stunUrl = env.REMOTE_STUN_URL === '' ? undefined : (env.REMOTE_STUN_URL || 'stun:turn.sycsq.top:3478');
@@ -38,7 +45,9 @@ export function turnSettingsFromEnvironment(env: NodeJS.ProcessEnv = process.env
     || urls.some(url => !turnUrl.safeParse(url).success || !url.startsWith('turn'))
     || (stunUrl && (!turnUrl.safeParse(stunUrl).success || !stunUrl.startsWith('stun:'))))
     throw new RemoteControlError('REMOTE_ICE_CONFIGURATION_INVALID', 503);
-  return { urls, stunUrl, secret, policy: policy as 'all' | 'relay' };
+  const common = { urls, stunUrl, policy: policy as 'all' | 'relay' };
+  return authMode === 'static' ? { ...common, authMode, username: username!, credential: credential! }
+    : { ...common, secret: secret! };
 }
 
 export class RemoteIceService {
@@ -71,11 +80,17 @@ export class RemoteIceService {
       throw new RemoteControlError('REVISION_CONFLICT', 409);
     const settings = this.settings(), signer = this.signer();
     if (!signer) throw new RemoteControlError('REMOTE_SIGNING_UNAVAILABLE', 503);
-    // Fixed absolute expiry: retries never extend a session's relay credentials.
+    // Fixed signed configuration expiry; static TURN passwords themselves do not expire.
+    // Neither TURN mode supplies consent or replaces the native 15-second lease.
     const expiresAt = Math.floor((current!.hardDeadline + TURN_GRACE_MS) / 1000) * 1000;
-    const opaque = createHmac('sha256', settings.secret).update(`todesk-turn/v1\n${id}\n${endpoint.endpointId}\n${endpoint.connectionId}\n${endpoint.generation}`).digest('hex').slice(0, 32);
-    const username = `${expiresAt / 1000}:rc:${opaque}`;
-    const credential = createHmac('sha1', settings.secret).update(username).digest('base64');
+    let username: string, credential: string;
+    if (settings.authMode === 'static') {
+      ({ username, credential } = settings);
+    } else {
+      const opaque = createHmac('sha256', settings.secret).update(`todesk-turn/v1\n${id}\n${endpoint.endpointId}\n${endpoint.connectionId}\n${endpoint.generation}`).digest('hex').slice(0, 32);
+      username = `${expiresAt / 1000}:rc:${opaque}`;
+      credential = createHmac('sha1', settings.secret).update(username).digest('base64');
+    }
     const config = iceConfigurationSchema.parse({ iceServers: [
       ...(settings.stunUrl && settings.policy === 'all' ? [{ urls: [settings.stunUrl] }] : []),
       { urls: settings.urls, username, credential },

@@ -54,6 +54,9 @@ impl TrustedEngineBundle {
         // accepted. The hashed native launcher establishes its isolated runtime.
         Ok(command)
     }
+    pub fn digest(&self) -> format::Result<String> {
+        Ok(self.verify()?.digest)
+    }
 }
 
 #[cfg(test)]

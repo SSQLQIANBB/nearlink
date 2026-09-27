@@ -23,6 +23,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   const needsApproval = ref(false);
   const textQueue = new RemoteTextCommitQueue();
   const statusMessage = ref('');
+  const failureCode = ref('');
   const visible = computed(() => !['idle', 'ended'].includes(phase.value));
   let adapter: RemoteControllerAdapter | null = null;
   let peer: RemoteControlPeer | null = null;
@@ -47,6 +48,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     sessionId.value = null; stream.value = null; stats.value = null;
     inputArmed.value = false; needsApproval.value = false; textQueue.cancel(); scope.value = 'view';
     phase.value = 'requesting'; statusMessage.value = '正在请求对方确认';
+    failureCode.value = '';
     events = Promise.resolve(); queuedEvents = queuedBytes = 0;
     deadline = setTimeout(() => end('REMOTE_REQUEST_TIMEOUT'), 45000);
     try {
@@ -78,7 +80,10 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
       if (current !== generation) return;
       queuedEvents--; queuedBytes -= bytes;
       await handleEvent(event, current);
-    }).catch(() => { if (current === generation) end('REMOTE_PROTOCOL_FAILED'); });
+    }).catch((error: unknown) => {
+      if (current === generation) end(error instanceof Error && /^REMOTE_[A-Z_]{1,64}$/.test(error.message)
+        ? error.message : 'REMOTE_PROTOCOL_FAILED');
+    });
   }
 
   async function handleEvent(event: Exclude<RemoteControllerEvent, { type: 'ended' }>, current: number) {
@@ -99,8 +104,8 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
         onStream: value => { if (current === generation) stream.value = value; },
         onAuthorization: value => { if (current === generation) { scope.value = value; needsApproval.value = value === 'view';
           if (phase.value !== 'active') { if (deadline) clearTimeout(deadline); deadline = setTimeout(() => end('REMOTE_SESSION_EXPIRED'), event.value.hardDeadline - Date.now()); }
-          phase.value = 'active'; statusMessage.value = value === 'control' ? '已获控制许可，点击继续操作后开始' : '正在观看对方屏幕'; } },
-        onPauseInput: reason => { if (current === generation) { textQueue.cancel(); inputArmed.value = false; if (reason === 'REMOTE_HOST_PAUSED') needsApproval.value = true; statusMessage.value = '操作已暂停，确认画面正常后可继续'; } },
+          phase.value = 'active'; statusMessage.value = value === 'control' ? '已获控制许可，点击继续操作后开始' : '仅观看，尚未授予键鼠控制权限'; } },
+        onPauseInput: reason => { if (current === generation) { textQueue.cancel(); inputArmed.value = false; if (reason === 'REMOTE_HOST_PAUSED') needsApproval.value = true; statusMessage.value = scope.value === 'control' ? '操作已暂停，确认画面正常后可继续' : '仅观看，尚未授予键鼠控制权限'; } },
         onInputArmed: value => { if (current === generation) { inputArmed.value = value; if (value) statusMessage.value = '正在操作对方电脑'; } },
         onInputWindow: () => { if (current === generation) textQueue.windowAvailable(event => !!peer?.sendInput(event)); },
         onEnd: reason => { if (current === generation) end(reason); },
@@ -163,9 +168,10 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     claim?.release(); claim = null;
     stream.value = null; stats.value = null; inputArmed.value = false; needsApproval.value = false; textQueue.cancel(); scope.value = 'view';
     phase.value = 'ended'; statusMessage.value = '远程协助已结束';
+    failureCode.value = reason !== 'REMOTE_LOCAL_END' && /^REMOTE_[A-Z_]{1,64}$/.test(reason) ? reason : '';
     if (notify) void currentAdapter?.end(reason).catch(() => currentAdapter.dispose());
     else currentAdapter?.dispose();
   }
   registerRemoteControlCleanup(reason => end(reason));
-  return { phase, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, visible, start, attachVideo, mapPointer, sendInput, continueInput, commitText, requestControl, pauseInput, end };
+  return { phase, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, failureCode, visible, start, attachVideo, mapPointer, sendInput, continueInput, commitText, requestControl, pauseInput, end };
 });
