@@ -377,7 +377,6 @@ class Engine:
         self.bytes = 0
         self.reason = "STOPPED"
         self.last_heartbeat = clock_ns()
-        self.started_at = self.last_heartbeat
         # VT hardware/software emit equivalent constrained-baseline SPS values
         # 42c01f/42e01f. Gst caps compare strings, so retain both locally while
         # SDP selects the offered 42e01f. Do not rewrite SPS constraint bits.
@@ -687,8 +686,6 @@ class Engine:
             self.fail("ICE_CONFIGURATION_EXPIRED")
         elif self.screen is not None and not self.media.alive(now):
             self.fail("MEDIA_LEASE_EXPIRED")
-        elif now - self.started_at >= 60_000_000_000:
-            self.fail("DEVELOPMENT_ENGINE_TIME_LIMIT")
         else:
             try:
                 self.observe_dtls()

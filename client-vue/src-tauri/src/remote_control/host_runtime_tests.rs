@@ -962,3 +962,31 @@ fn layout_change_during_input_preflight_never_reaches_executor_or_ack() {
     assert_eq!(log.released, vec!["KeyA"]);
     assert!(!log.channels.iter().any(|v| v["type"] == "input-ack"));
 }
+
+#[test]
+fn expired_input_window_releases_keys_without_ending_authorized_screen_stream() {
+    let mut f = fixture("control");
+    start(&mut f, "control", 15000);
+    let context = f.host.arm_input(f.now).unwrap();
+    let window = f.host.input_window(f.now).unwrap();
+    let mut message = json!({"version":1,"sessionId":context.session_id,"controlEpoch":context.control_epoch,
+        "inputEpoch":context.input_epoch,"layoutVersion":context.layout_version,"seq":1,
+        "inputWindowId":window.input_window_id,"type":"key","payload":{"code":"KeyA","down":true}});
+    f.host.input_message(&serde_json::to_vec(&message).unwrap(), f.now).unwrap();
+    message["seq"] = 2.into();
+    message["payload"]["code"] = "KeyB".into();
+    let before = f.log.lock().unwrap().channels.iter().filter(|m| m["type"] == "input-ack").count();
+    let at = f.now + Duration::from_millis(501);
+    f.host.input_message(&serde_json::to_vec(&message).unwrap(), at).unwrap();
+    assert!(!f.host.ended());
+    assert!(f.host.media_started());
+    assert!(f.host.paused);
+    assert_eq!(f.host.arm_input(at).err(), Some("REMOTE_CONTROL_NOT_ALLOWED"));
+    // In-flight old input remains discarded while paused, without acknowledging it.
+    f.host.input_message(&serde_json::to_vec(&message).unwrap(), at).unwrap();
+    let log = f.log.lock().unwrap();
+    assert_eq!(log.actions, 1);
+    assert_eq!(log.released, vec!["KeyA"]);
+    assert_eq!(log.channels.iter().filter(|m| m["type"] == "input-ack").count(), before);
+    assert!(log.channels.iter().any(|m| m["type"] == "pause"));
+}

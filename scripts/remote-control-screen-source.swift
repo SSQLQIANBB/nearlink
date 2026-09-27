@@ -354,7 +354,6 @@ final class ScreenEncoder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         // Rust pauses input after 3s and ends at 10s. Leave a small margin for
         // its watchdog, with an independent 12s source stop fallback.
         if stopReason == nil && now - captureActivity >= 12_000_000_000 { stopReason = "CAPTURE_TIMEOUT" }
-        if stopReason == nil && now - started >= 45_000_000_000 { stopReason = "PROBE_TIME_LIMIT" }
         return stopReason
     }
 

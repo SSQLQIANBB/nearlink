@@ -22,6 +22,43 @@ spec.loader.exec_module(engine)
 
 
 class EngineContractTests(unittest.TestCase):
+    def test_live_engine_survives_sixty_seconds_with_continuously_renewed_leases(self):
+        instance = object.__new__(engine.Engine)
+        instance.closed = threading.Event()
+        instance.started_at = 0  # Reproduce the former absolute developer timer.
+        instance.ice_expires_at = 3_600_000_000_000
+        instance.media = engine.MediaDeadline()
+        instance.screen = SimpleNamespace(poll=lambda: None, stdin=SimpleNamespace(fileno=lambda: 9))
+        instance.WebRTC = SimpleNamespace(WebRTCPeerConnectionState=SimpleNamespace(FAILED=1, DISCONNECTED=2, CLOSED=3))
+        instance.peer = SimpleNamespace(get_property=lambda _: 0)
+        instance.observe_dtls = lambda: None
+        failures = []
+        def fail(reason):
+            failures.append(reason)
+            instance.closed.set()
+        instance.fail = fail
+        for second in range(0, 1801):
+            now = second * 1_000_000_000
+            instance.last_heartbeat = now
+            if second % 5 == 0:
+                instance.media.install({"mediaLeaseSeq": second // 5 + 1, "ttlMs": 15000,
+                    "monotonicDeadlineNs": str(now + 15_000_000_000)}, now, now)
+            with patch.object(engine, "clock_ns", return_value=now), patch.object(engine.os, "write"):
+                self.assertTrue(instance.tick(), (second, failures))
+        self.assertEqual(failures, [])
+        # Removing the development timer must not disable existing safety stops.
+        for reason in ["SUPERVISOR_TIMEOUT", "ICE_CONFIGURATION_EXPIRED", "MEDIA_LEASE_EXPIRED"]:
+            instance.closed.clear()
+            instance.last_heartbeat = now
+            instance.ice_expires_at = now + 100_000_000_000
+            instance.media.deadline = now + 15_000_000_000
+            if reason == "SUPERVISOR_TIMEOUT": instance.last_heartbeat = now - 3_000_000_000
+            elif reason == "ICE_CONFIGURATION_EXPIRED": instance.ice_expires_at = now
+            else: instance.media.deadline = now
+            with patch.object(engine, "clock_ns", return_value=now), patch.object(engine.os, "write"):
+                self.assertFalse(instance.tick())
+            self.assertEqual(failures[-1], reason)
+
     @staticmethod
     def layout_message():
         return {"type": "screen-source-layout", "screenId": "primary", "layoutVersion": 1, "geometry": {

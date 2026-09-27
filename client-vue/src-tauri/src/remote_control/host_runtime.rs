@@ -287,10 +287,12 @@ impl HostRuntime {
         } else if now >= self.authority.deadline() {
             Some(StopReason::LeaseExpired)
         } else if !self.media.healthy() {
+            eprintln!("remote_host_unavailable: ENGINE_UNHEALTHY");
             Some(StopReason::SystemUnavailable)
         } else if !available.capture
             || (self.authority.current_scope() == Scope::Control && !available.input)
         {
+            eprintln!("remote_host_unavailable: capture={} input={}", available.capture, available.input);
             Some(StopReason::SystemUnavailable)
         } else if [self.last_controller, self.last_supervisor]
             .iter()
@@ -314,7 +316,10 @@ impl HostRuntime {
                 {
                     None
                 }
-                _ => Some(StopReason::SystemUnavailable),
+                result => {
+                    eprintln!("remote_host_unavailable: INPUT_PREFLIGHT {:?}", result);
+                    Some(StopReason::SystemUnavailable)
+                }
             }
         });
         if let Some(reason) = reason {
@@ -629,6 +634,13 @@ impl HostRuntime {
                     self.pause(StopReason::MediaStalled)?;
                     return Err("REMOTE_MEDIA_NOT_LIVE");
                 }
+                if failure.reason == StopReason::InputExpired {
+                    // Expired input is never executed or acknowledged. Release
+                    // held inputs and require a fresh explicit control flow,
+                    // while preserving the still-authorized screen stream.
+                    self.pause(StopReason::InputExpired)?;
+                    return Err("REMOTE_CONTROL_NOT_ALLOWED");
+                }
                 let _ = self.stop(failure.reason);
                 Err("REMOTE_INPUT_REJECTED")
             }
@@ -719,6 +731,18 @@ impl HostRuntime {
         if self.ready {
             let _ = self.send_state("end", json!({}));
         }
+        // Emit the first terminal cause on every path, including errors returned
+        // directly to the adapter before its watchdog observation runs. Never
+        // include session identities, input contents, or credential payloads.
+        let stopped_at = Instant::now();
+        eprintln!(
+            "remote_host_stop: reason={:?} controller_age_ms={} supervisor_age_ms={} lease_remaining_ms={} consent_remaining_ms={}",
+            reason,
+            stopped_at.saturating_duration_since(self.last_controller).as_millis(),
+            stopped_at.saturating_duration_since(self.last_supervisor).as_millis(),
+            self.authority.deadline().saturating_duration_since(stopped_at).as_millis(),
+            self.local.deadline.saturating_duration_since(stopped_at).as_millis(),
+        );
         self.ended = true;
         self.stop_reason = Some(reason);
         self.authority.stop();

@@ -273,6 +273,15 @@ impl ProcessMediaDriver {
                 let Some(message) = message else {
                     break;
                 };
+                // Record bounded machine diagnostics before watchdog health checks
+                // can preempt the adapter's queued error/EOF observation.
+                if matches!(message.kind.as_str(), "error" | "stopped") {
+                    if let Some(code) = message.payload.get("reason").or_else(|| message.payload.get("code")).and_then(Value::as_str) {
+                        if !code.is_empty() && code.len() <= 64 && code.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') {
+                            eprintln!("remote_engine_terminal: {}", code);
+                        }
+                    }
+                }
                 if message.kind == "media-layout"
                     && state
                         .layout
@@ -300,10 +309,12 @@ impl ProcessMediaDriver {
                             .observe(message.payload.clone(), clock, at)
                     });
                     if observed.is_err() {
+                        eprintln!("remote_engine_pipe: MEDIA_PROGRESS_REJECTED");
                         break;
                     }
                 }
                 if event_tx.try_send(message).is_err() {
+                    eprintln!("remote_engine_pipe: EVENT_QUEUE_UNAVAILABLE");
                     break;
                 }
             }
