@@ -3,7 +3,8 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 
 export default defineConfig({
-  plugins: [vue()],
+  // Public assets are browser URLs, not Windows filesystem module imports.
+  plugins: [vue({ template: { transformAssetUrls: { includeAbsolute: false } } })],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
