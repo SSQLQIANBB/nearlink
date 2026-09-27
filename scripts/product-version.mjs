@@ -30,7 +30,8 @@ function plistValue(text, key, value) {
 /** Prepare every edit before writing so malformed/missing files cannot leave a partial sync. */
 export function planVersionSync(root, requestedVersion) {
   const changes = new Map();
-  const read = path => readFileSync(resolve(root, path), 'utf8');
+  // Git on Windows may check out CRLF; line endings are not version changes.
+  const read = path => readFileSync(resolve(root, path), 'utf8').replace(/\r\n/g, '\n');
   const json = path => JSON.parse(read(path));
   const rootPackage = json('package.json');
   const current = parseProductVersion(rootPackage.version);

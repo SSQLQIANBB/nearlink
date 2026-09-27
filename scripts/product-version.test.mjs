@@ -21,6 +21,17 @@ function fixture(t) {
 }
 function json(root, path) { return JSON.parse(readFileSync(join(root, path), 'utf8')); }
 
+test('Windows CRLF 检出不被误判为版本漂移，且仍能同步新版本', t => {
+  const root = fixture(t);
+  for (const file of files) {
+    const path = join(root, file);
+    writeFileSync(path, readFileSync(path, 'utf8').replace(/\r?\n/g, '\r\n'));
+  }
+  assert.equal(checkProductVersion(root).version, '0.2.0-beta.1');
+  syncProductVersion(root, '0.2.0-beta.2');
+  assert.deepEqual(checkProductVersion(root), { version: '0.2.0-beta.2', buildNumber: 2 });
+});
+
 test('产品只接受可打包的规范内测版本', () => {
   assert.equal(parseProductVersion('0.2.0-beta.12').base, '0.2.0');
   for (const version of ['0.2.0', '0.2.0-rc.1', '0.2.0-beta.0', '0.2.0-beta.01', '01.2.0-beta.1', '0.2.0-beta.1\n', '0.2.0-beta.1+1', '65536.0.0-beta.1']) {
