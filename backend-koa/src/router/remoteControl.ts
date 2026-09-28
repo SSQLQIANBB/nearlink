@@ -75,6 +75,18 @@ router.post('/devices', async ctx => {
   ctx.body = { device: safeDevice(device) };
 });
 
+router.patch('/devices/:id', async ctx => {
+  const id = uuid.parse(ctx.params.id);
+  const { alias } = z.object({ alias: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/) }).strict().parse(ctx.request.body);
+  const where = { id, ownerUserId: ctx.state.remoteAuth.userId, revokedAt: null };
+  // Scope the write itself: a concurrent revocation must not permit a later rename.
+  await RemoteDevice.update({ alias }, { where });
+  const device = await RemoteDevice.findOne({ where });
+  if (!device) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
+  ctx.set('Cache-Control', 'no-store');
+  ctx.body = { device: safeDevice(device) };
+});
+
 router.delete('/devices/:id', async ctx => {
   const id = uuid.parse(ctx.params.id);
   const device = await RemoteDevice.findOne({ where: { id, ownerUserId: ctx.state.remoteAuth.userId } });

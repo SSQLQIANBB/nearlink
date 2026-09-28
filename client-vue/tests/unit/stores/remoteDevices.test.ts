@@ -3,10 +3,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({
   auth: { token: '', currentUser: { id: 1 }, authGeneration: 1, loggingOut: false },
-  list: vi.fn(), challenge: vi.fn(), register: vi.fn(), revoke: vi.fn(), probe: vi.fn(), proof: vi.fn(), rebuild: vi.fn(),
+  list: vi.fn(), challenge: vi.fn(), register: vi.fn(), rename: vi.fn(), revoke: vi.fn(), probe: vi.fn(), proof: vi.fn(), rebuild: vi.fn(),
 }));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }));
-vi.mock('@/api/remoteControl', () => ({ getRemoteDevices: mocks.list, getRemoteDeviceChallenge: mocks.challenge, registerRemoteDevice: mocks.register, revokeRemoteDevice: mocks.revoke }));
+vi.mock('@/api/remoteControl', () => ({ getRemoteDevices: mocks.list, getRemoteDeviceChallenge: mocks.challenge, registerRemoteDevice: mocks.register, revokeRemoteDevice: mocks.revoke, renameRemoteDevice: mocks.rename }));
 vi.mock('@/services/remoteDeviceNative', async original => ({ ...await original<typeof import('@/services/remoteDeviceNative')>(), probeRemoteDeviceSupport: mocks.probe, createRemoteDeviceProof: mocks.proof, resetRemoteDeviceIdentity: mocks.rebuild }));
 import { useRemoteDevicesStore } from '@/stores/remoteDevices';
 import { clearRemoteControlLocally } from '@/services/remoteControlSafety';
@@ -98,5 +98,35 @@ describe('本人远程设备管理', () => {
     mocks.auth.loggingOut = true; mocks.auth.authGeneration++; clearRemoteControlLocally('LOGOUT');
     expect(mocks.rebuild.mock.calls[0]![1].aborted).toBe(true);
     wait.resolve(true); expect(await pending).toBe(false); expect(store.notice).toBe(''); expect(store.support).toBeNull();
+  });
+});
+
+describe('设备重命名', () => {
+  it('Web可改名，旧列表不能覆盖新名称', async () => {
+    mocks.probe.mockResolvedValue({ desktop: false, registration: false });
+    const store = await setup(); store.devices = [device];
+    const wait = deferred(); mocks.list.mockReturnValueOnce(wait.promise);
+    const old = store.refresh(); mocks.rename.mockResolvedValue({ device: { ...device, alias: '新名称' } });
+    expect(await store.rename(device.deviceId, ' 新名称 ')).toBe(true);
+    wait.resolve({ devices: [device] }); await old;
+    expect(store.devices[0]!.alias).toBe('新名称');
+    expect(mocks.rename).toHaveBeenCalledWith(device.deviceId, '新名称', expect.any(AbortSignal));
+    expect(mocks.proof).not.toHaveBeenCalled();
+  });
+  it('取消、退出账号后迟到结果不会恢复旧设备', async () => {
+    const store = await setup(); store.devices = [device];
+    const wait = deferred(); mocks.rename.mockReturnValueOnce(wait.promise);
+    const pending = store.rename(device.deviceId, '新名称'); store.cancel();
+    expect(store.notice).toContain('可能已保存');
+    clearRemoteControlLocally('LOGOUT'); wait.resolve({ device });
+    expect(await pending).toBe(false); expect(store.devices).toEqual([]);
+  });
+  it('无效名称或撤销设备不会提交，失败可重试', async () => {
+    const store = await setup(); store.devices = [device];
+    for (const name of [' ', 'a'.repeat(81), 'a\u0000b']) expect(await store.rename(device.deviceId, name)).toBe(false);
+    store.devices = [{ ...device, revokedAt: '2026-09-28' }];
+    expect(await store.rename(device.deviceId, '名称')).toBe(false); expect(mocks.rename).not.toHaveBeenCalled();
+    store.devices = [device]; mocks.rename.mockRejectedValueOnce(new Error('offline'));
+    expect(await store.rename(device.deviceId, '名称')).toBe(false); expect(store.busy).toBe(false); expect(store.error).toContain('刷新');
   });
 });

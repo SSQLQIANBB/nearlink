@@ -5,19 +5,20 @@ import { createServer, type Server } from 'http';
 import { Op } from 'sequelize';
 import { generateKeyPairSync, randomUUID } from 'crypto';
 
-const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), authority: vi.fn(), grants: vi.fn(), createGrant: vi.fn(), user: vi.fn() }));
+const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), rename: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), authority: vi.fn(), grants: vi.fn(), createGrant: vi.fn(), user: vi.fn() }));
 vi.mock('../../../src/config/redis', () => ({ default: { get: mocks.redisGet } }));
 vi.mock('../../../src/services/loginSessionService', () => ({ validateAuthenticatedSession: mocks.validate }));
 vi.mock('../../../src/models/RemoteControl', () => ({
-  RemoteDevice: { findAll: mocks.devices, findOne: mocks.revoke },
+  RemoteDevice: { findAll: mocks.devices, findOne: mocks.revoke, update: mocks.rename },
   RemoteSessionRecord: { findAll: mocks.sessions }, AssistanceGrant: { findAll: mocks.grants, create: mocks.createGrant, sequelize: { transaction: async (action: any) => action({ LOCK: { UPDATE: true } }) } },
 }));
 vi.mock('../../../src/services/remoteSessionHistory', () => ({ RemoteSessionHistory: class { assertAuthorized = mocks.authority; } }));
 vi.mock('../../../src/models/User', () => ({ default: { findByPk: mocks.user } }));
 import remoteRouter from '../../../src/router/remoteControl';
+import cors from '../../../src/middleware/cors';
 let server: Server, origin: string;
 beforeAll(async () => {
-  const app = new Koa(); app.use(koaBody()); app.use(remoteRouter.routes()).use(remoteRouter.allowedMethods());
+  const app = new Koa(); app.use(cors); app.use(koaBody()); app.use(remoteRouter.routes()).use(remoteRouter.allowedMethods());
   server = createServer(app.callback());
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -124,5 +125,37 @@ describe('远控REST真实HTTP权限边界', () => {
     expect(response.status).toBe(404);
     expect((await response.json()).code).toBe('TARGET_UNAVAILABLE');
     expect(mocks.revoke.mock.calls[0][0].where.ownerUserId).toBe(7);
+  });
+});
+
+describe('设备名称修改', () => {
+  it('跨域预检允许带认证的 PATCH', async () => {
+    const response = await fetch(`${origin}/api/remote-control/devices/${randomUUID()}`, {
+      method: 'OPTIONS', headers: { Origin: 'http://localhost:1420', 'Access-Control-Request-Method': 'PATCH', 'Access-Control-Request-Headers': 'authorization,content-type' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PATCH');
+    expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
+  });
+  const patch = (id: string, body: unknown) => fetch(`${origin}/api/remote-control/devices/${id}`, {
+    method: 'PATCH', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  it('仅更新当前账号的有效设备并返回安全字段，同名更新也成功', async () => {
+    const id = randomUUID();
+    mocks.rename.mockResolvedValue([0]);
+    mocks.revoke.mockResolvedValue({ id, alias: '办公 Mac', platform: 'macos', revokedAt: null, publicKey: 'not-public', ownerUserId: 7 });
+    const response = await patch(id, { alias: ' 办公 Mac ' });
+    expect(response.status).toBe(200);
+    expect(mocks.rename).toHaveBeenCalledWith({ alias: '办公 Mac' }, { where: { id, ownerUserId: 7, revokedAt: null } });
+    const result = await response.json();
+    expect(result.device.alias).toBe('办公 Mac'); expect(result.device).not.toHaveProperty('publicKey');
+  });
+  it('其他账号、已撤销或不存在的设备统一不可用', async () => {
+    mocks.rename.mockResolvedValue([0]); mocks.revoke.mockResolvedValue(null);
+    expect((await patch(randomUUID(), { alias: '名称' })).status).toBe(404);
+    expect(mocks.revoke).toHaveBeenCalledWith({ where: { id: expect.any(String), ownerUserId: 7, revokedAt: null } });
+  });
+  it.each([{ alias: ' ' }, { alias: 'a'.repeat(81) }, { alias: 'a\u0000b' }, { alias: 3 }, { alias: '名称', ownerUserId: 8 }])('拒绝无效名称和额外字段 %j', async body => {
+    expect((await patch(randomUUID(), body)).status).toBe(400); expect(mocks.rename).not.toHaveBeenCalled();
   });
 });

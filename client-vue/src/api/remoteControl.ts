@@ -60,3 +60,5 @@ export const getRemoteSessions = () => http.get<{ sessions: RemoteSessionRecord[
 
 export const getRemoteSigningKeys = () => http.get<{ keys: import('@/services/remoteControlProof').RemoteSigningKey[] }>('/api/remote-control/signing-keys');
 export const getRemoteSessionIce = (sessionId: string) => http.get<import('@/services/remoteControlIce').RemoteIceConfiguration>(`/api/remote-control/sessions/${encodeURIComponent(sessionId)}/ice`);
+
+export const renameRemoteDevice = (deviceId: string, alias: string, signal?: AbortSignal) => request<{ device: RemoteDevice }>(`/api/remote-control/devices/${encodeURIComponent(deviceId)}`, { method: 'PATCH', body: { alias }, signal });

@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
-import { getRemoteDeviceChallenge, getRemoteDevices, registerRemoteDevice, revokeRemoteDevice, type RemoteDevice } from '@/api/remoteControl';
+import { getRemoteDeviceChallenge, getRemoteDevices, registerRemoteDevice, revokeRemoteDevice, renameRemoteDevice, type RemoteDevice } from '@/api/remoteControl';
 import { createRemoteDeviceProof, probeRemoteDeviceSupport, resetRemoteDeviceIdentity, validDeviceChallenge, type RemoteDeviceSupport } from '@/services/remoteDeviceNative';
 import { registerRemoteControlCleanup } from '@/services/remoteControlSafety';
 import { useAuthStore } from './auth';
@@ -11,7 +11,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
   const support = shallowRef<RemoteDeviceSupport | null>(null);
   const loading = ref(false);
   const probing = ref(false);
-  const phase = ref<'idle' | 'challenge' | 'native' | 'submitting' | 'revoking' | 'resetting'>('idle');
+  const phase = ref<'idle' | 'challenge' | 'native' | 'submitting' | 'revoking' | 'resetting' | 'renaming'>('idle');
   const identityUnavailable = ref(false);
   const error = ref('');
   const notice = ref('');
@@ -38,6 +38,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     actionAbort?.abort(); actionAbort = null;
     notice.value = phase.value === 'submitting' ? '登记请求可能已提交，请刷新设备列表确认。'
       : phase.value === 'revoking' ? '撤销请求可能已提交，请刷新设备列表确认。'
+      : phase.value === 'renaming' ? '名称可能已保存，请刷新设备列表确认。'
       : phase.value === 'resetting' ? '已停止等待身份重建结果，请重新检测后确认。' : busy.value ? '已取消设备登记。' : notice.value;
     phase.value = 'idle';
   }
@@ -134,6 +135,24 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
       return false;
     } finally { if (current === generation) { phase.value = 'idle'; actionAbort = null; } }
   }
+  async function rename(deviceId: string, alias: string) {
+    if (busy.value || !devices.value.some(device => device.deviceId === deviceId && !device.revokedAt)) return false;
+    alias = alias.trim();
+    if (!alias || alias.length > 80 || /[\u0000-\u001f\u007f]/.test(alias)) { error.value = '请输入 1–80 个字符的设备名称。'; return false; }
+    const { expected, current, abort } = begin();
+    phase.value = 'renaming';
+    try {
+      const { device } = await renameRemoteDevice(deviceId, alias, abort.signal);
+      if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
+      listSequence++; listAbort?.abort(); listAbort = null; loading.value = false;
+      devices.value = devices.value.map(item => item.deviceId === deviceId ? device : item);
+      notice.value = '设备名称已保存。其他客户端刷新设备列表后可见。';
+      return true;
+    } catch {
+      if (sameIdentity(expected, current) && !abort.signal.aborted) error.value = '未能确认名称修改结果，请刷新设备列表确认。';
+      return false;
+    } finally { if (current === generation) { phase.value = 'idle'; actionAbort = null; } }
+  }
   async function rebuildIdentity() {
     if (busy.value || !identityUnavailable.value || !support.value?.desktop || !support.value.identityReset) return false;
     const { expected, current, abort } = begin();
@@ -149,5 +168,5 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
       return false;
     } finally { if (current === generation) { phase.value = 'idle'; actionAbort = null; } }
   }
-  return { devices, support, loading, probing, phase, busy, identityUnavailable, error, notice, initialize, refresh, register, revoke, rebuildIdentity, cancel, reset };
+  return { devices, support, loading, probing, phase, busy, identityUnavailable, error, notice, initialize, refresh, register, revoke, rename, rebuildIdentity, cancel, reset };
 });

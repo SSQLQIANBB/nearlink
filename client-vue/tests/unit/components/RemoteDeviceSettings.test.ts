@@ -2,15 +2,42 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/stores/remoteControl', () => ({ useRemoteControlStore: () => ({ capabilities: null }) }));
 import { reactive } from 'vue';
-const mocks = vi.hoisted(() => ({ store: null as any }));
+const mocks = vi.hoisted(() => ({ store: null as any, auth: { authGeneration: 1 } }));
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }));
 vi.mock('@/stores/remoteDevices', () => ({ useRemoteDevicesStore: () => mocks.store }));
 import RemoteDeviceSettings from '@/components/RemoteDeviceSettings.vue';
 beforeEach(() => {
   mocks.store = reactive({ devices: [], support: { desktop: false, registration: false, identityReset: false }, loading: false, probing: false,
-    phase: 'idle', busy: false, identityUnavailable: false, error: '', notice: '', initialize: vi.fn(), refresh: vi.fn(), register: vi.fn(), revoke: vi.fn(), cancel: vi.fn(), rebuildIdentity: vi.fn() });
+    phase: 'idle', busy: false, identityUnavailable: false, error: '', notice: '', initialize: vi.fn(), refresh: vi.fn(), register: vi.fn(), revoke: vi.fn(), rename: vi.fn().mockResolvedValue(true), cancel: vi.fn(), rebuildIdentity: vi.fn() });
 });
 const render = () => mount(RemoteDeviceSettings);
 describe('远程设备设置界面', () => {
+  it('组合名称、登记状态和系统筛选，区分无设备和无匹配结果', async () => {
+    mocks.store.devices = [
+      { deviceId: '1', alias: 'Office Mac', platform: 'macos', revokedAt: null },
+      { deviceId: '2', alias: 'Office PC', platform: 'windows', revokedAt: '2026-09-28' },
+      { deviceId: '3', alias: 'Home PC', platform: 'windows', revokedAt: null },
+    ];
+    const wrapper = render();
+    await wrapper.get('.device-filters input').setValue(' OFFICE ');
+    expect(wrapper.findAll('li')).toHaveLength(2);
+    await wrapper.get('[aria-label="系统筛选"]').setValue('windows');
+    expect(wrapper.findAll('li')).toHaveLength(1); expect(wrapper.get('li').text()).toContain('Office PC');
+    await wrapper.get('[aria-label="登记状态筛选"]').setValue('active');
+    expect(wrapper.text()).toContain('没有符合条件'); expect(wrapper.text()).not.toContain('尚无已登记设备');
+    await wrapper.findAll('button').find(button => button.text() === '清除筛选')!.trigger('click');
+    expect(wrapper.findAll('li')).toHaveLength(3); wrapper.unmount();
+  });
+  it('已有设备可编辑名称，保存后关闭编辑区，已撤销设备没有入口', async () => {
+    mocks.store.devices = [{ deviceId: 'device-1', alias: '办公 Mac', platform: 'macos', revokedAt: null }];
+    const wrapper = render();
+    await wrapper.findAll('button').find(button => button.text() === '重命名')!.trigger('click');
+    expect(wrapper.get<HTMLInputElement>('.rename-form input').element.value).toBe('办公 Mac');
+    await wrapper.get('.rename-form input').setValue('家用 Mac'); await wrapper.get('form').trigger('submit'); await flushPromises();
+    expect(mocks.store.rename).toHaveBeenCalledWith('device-1', '家用 Mac'); expect(wrapper.find('form').exists()).toBe(false);
+    mocks.store.devices[0].revokedAt = '2026-09-28'; await flushPromises();
+    expect(wrapper.text()).not.toContain('重命名'); wrapper.unmount();
+  });
   it('Web只管理已有设备，不显示本机登记或控制操作', () => {
     const wrapper = render();
     expect(wrapper.text()).toContain('管理已有设备'); expect(wrapper.text()).not.toContain('登记当前设备');

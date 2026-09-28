@@ -119,6 +119,8 @@ describe('远控画面坐标', () => {
     expect(remoteVideoCoordinates(510, 100, rect, 1920, 1080, geometry(1920, 1080))).toBeNull();
     expect(remoteVideoCoordinates(510, 520, rect, 1280, 720, geometry(1280, 720))).toEqual({ x: 0.5, y: 0.5 });
     expect(remoteVideoCoordinates(510, 520, rect, 0, 0, geometry(1280, 720))).toBeNull();
+    // A 150% surface scrolled left/up must still target the same remote pixel.
+    expect(remoteVideoCoordinates(460, 440, { left: -500, top: -100, width: 1920, height: 1080 }, 1280, 720, geometry(1280, 720))).toEqual({ x: 0.5, y: 0.5 });
   });
   it('转换line/page滚轮为有界CSS像素', () => {
     expect(remoteWheelPixels(3, 1, 1000)).toBe(48);

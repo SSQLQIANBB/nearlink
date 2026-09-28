@@ -8,7 +8,7 @@ import { createRequestId } from './requestId';
 const API_BASE_URL = publicEnv.apiBaseUrl;
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
   body?: any;
   signal?: AbortSignal;
