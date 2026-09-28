@@ -1,4 +1,5 @@
 import { type Server } from 'http';
+import { onGroupAccessRevoked, runGroupOperation } from '../services/groupAccessCoordinator';
 import { Server as Socket } from 'socket.io';
 import { onLoginSessionsRevoked, validateAuthenticatedSession, type AuthenticatedSessionPayload } from '../services/loginSessionService';
 import { File, GroupMember, GroupMessage, Message, User as UserModel } from '../models';
@@ -40,12 +41,6 @@ type MeetingUser = {
   bio?: string;
 };
 
-const userMap = new Map<string, MeetingUser>();
-const socketToUserMap = new Map<string, number>();
-const groupRooms = new Map<number, Set<string>>();
-const mediaRooms = new MediaRoomRegistry();
-const groupSessionService = new GroupSessionService(new RedisGroupSessionStore());
-const screenAnnotationService = new ScreenAnnotationService(new RedisScreenAnnotationStore());
 
 function getSessionType(deviceType: number): GroupSessionType {
   if (deviceType === 3) return 'audio';
@@ -89,38 +84,6 @@ async function getMessageContent(
   return message;
 }
 
-function getPublicUsers() {
-  const users = new Map<number, MeetingUser>();
-
-  for (const user of userMap.values()) {
-    if (user.status !== 'offline') {
-      users.set(user.id, user);
-    }
-  }
-
-  return [...users.values()];
-}
-
-function getPublicUser(userId: number): MeetingUser | undefined {
-  return getPublicUsers().find(user => user.id === userId);
-}
-
-function samePublicUser(left?: MeetingUser, right?: MeetingUser) {
-  if (!left || !right) return left === right;
-  return left.socketId === right.socketId
-    && left.status === right.status
-    && left.username === right.username
-    && left.nickname === right.nickname
-    && left.avatar === right.avatar
-    && left.bio === right.bio;
-}
-
-function getUserSockets(userId: number) {
-  return [...socketToUserMap.entries()]
-    .filter(([, mappedUserId]) => mappedUserId === userId)
-    .map(([socketId]) => socketId);
-}
-
 const initialMeeting = (server: Server) => {
   const io = new Socket(server, {
     path: '/meeting',
@@ -128,6 +91,47 @@ const initialMeeting = (server: Server) => {
       origin: '*',
     },
   });
+
+  const userMap = new Map<string, MeetingUser>();
+  const socketToUserMap = new Map<string, number>();
+  const groupRooms = new Map<number, Set<string>>();
+  const mediaRooms = new MediaRoomRegistry();
+  const groupSessionService = new GroupSessionService(new RedisGroupSessionStore());
+  const screenAnnotationService = new ScreenAnnotationService(new RedisScreenAnnotationStore());
+  function getPublicUsers() {
+    const users = new Map<number, MeetingUser>();
+
+    for (const user of userMap.values()) {
+      if (user.status !== 'offline') {
+        users.set(user.id, user);
+      }
+    }
+
+    return [...users.values()];
+  }
+
+  function getPublicUser(userId: number): MeetingUser | undefined {
+    return getPublicUsers().find(user => user.id === userId);
+  }
+
+  function samePublicUser(left?: MeetingUser, right?: MeetingUser) {
+    if (!left || !right) return left === right;
+    return left.socketId === right.socketId
+      && left.status === right.status
+      && left.username === right.username
+      && left.nickname === right.nickname
+      && left.avatar === right.avatar
+      && left.bio === right.bio;
+  }
+
+  function getUserSockets(userId: number) {
+    return [...socketToUserMap.entries()]
+      .filter(([, mappedUserId]) => mappedUserId === userId)
+      .map(([socketId]) => socketId);
+  }
+
+  const joinedBySocket = new Map<string, Map<string, GroupSession>>();
+  const sockets = new Map<string, import('socket.io').Socket>();
 
   const messageWriteMs: number[] = [];
   const privateCallTracker = new PrivateCallTracker();
@@ -150,8 +154,9 @@ const initialMeeting = (server: Server) => {
   metricsTimer.unref();
   server.once?.('close', () => clearInterval(metricsTimer));
 
-  async function emitGroupSessionEvent(groupId: number, event: string, payload: unknown) {
+  async function emitGroupSessionEvent(groupId: number, event: string, payload: unknown, isCurrent?: () => boolean) {
     const members = await GroupMember.findAll({ where: { groupId } });
+    if (isCurrent && !isCurrent()) return;
     const socketIds = members.flatMap(member => getUserSockets(member.userId));
     if (socketIds.length) io.to(socketIds).emit(event, payload);
   }
@@ -224,6 +229,7 @@ const initialMeeting = (server: Server) => {
       groupId: session.groupId,
       type: session.type,
       channelId: session.channelId,
+      startedAt: session.startedAt,
       userIds: mediaRooms.getUserIds(session.channelId),
     });
   }
@@ -233,6 +239,7 @@ const initialMeeting = (server: Server) => {
       groupId: session.groupId,
       type: session.type,
       channelId: session.channelId,
+      startedAt: session.startedAt,
       userIds: [],
     });
   }
@@ -244,10 +251,26 @@ const initialMeeting = (server: Server) => {
       groupId: session.groupId,
       type: session.type,
       channelId: session.channelId,
+      startedAt: session.startedAt,
       socketId,
       userId,
     });
     emitMediaPresence(session);
+  }
+
+  function closeMediaSession(session: GroupSession) {
+    const peers = mediaRooms.getSocketIds(session.channelId).filter(peerId =>
+      joinedBySocket.get(peerId)?.get(session.channelId)?.startedAt === session.startedAt);
+    if (peers.length) io.to(peers).emit('group_call_ended', {
+      groupId: session.groupId, type: session.type, deviceType: getSessionDeviceType(session.type),
+      startedAt: session.startedAt,
+    });
+    for (const peerId of peers) {
+      joinedBySocket.get(peerId)?.delete(session.channelId);
+      mediaRooms.leave(session.channelId, peerId);
+      sockets.get(peerId)?.leave(session.channelId);
+    }
+    if (!mediaRooms.getSocketIds(session.channelId).length) emitEmptyMediaPresence(session);
   }
 
   io.on('connection', (socket) => {
@@ -260,6 +283,81 @@ const initialMeeting = (server: Server) => {
     const joinedMediaSessions = new Map<string, GroupSession>();
     const ownedSessions = new Map<string, GroupSession>();
     const groupCallStartGenerations = new Map<string, number>();
+
+    joinedBySocket.set(socketId, joinedMediaSessions);
+    sockets.set(socketId, socket);
+    const connected = () => !!currentUser && !!currentToken && socket.connected !== false;
+    function onGroup(event: string, handler: (data: any, member: GroupMember, generation?: number, ack?: (result: unknown) => void) => unknown) {
+      socket.on(event, async (data: any, ack?: (result: unknown) => void) => {
+        if (!data || !Number.isSafeInteger(data.groupId) || data.groupId <= 0 || !connected()) {
+          if (typeof ack === 'function') ack({ ok: false, code: 'GROUP_ACCESS_DENIED' });
+          return;
+        }
+        const types: GroupSessionType[] = ['video', 'audio', 'screen'];
+        const requiresDeviceType = ['group_call_start', 'join_group_call', 'leave_group_call', 'group_webrtc_offer', 'group_webrtc_answer', 'group_webrtc_ice'].includes(event);
+        if ((requiresDeviceType || data.deviceType !== undefined) && ![1, 2, 3].includes(data.deviceType)) return;
+        if (data.type !== undefined && !types.includes(data.type)) return;
+        let generation: number | undefined;
+        // Cancellation must invalidate a start even while its Redis write is pending.
+        if (event === 'group_call_start' || event === 'group_call_end') {
+          const affected = event === 'group_call_start' ? [getSessionType(data.deviceType)]
+            : data.type ? [data.type] : data.deviceType ? [getSessionType(data.deviceType)] : types;
+          for (const type of affected) {
+            const key = `${data.groupId}:${type}`;
+            generation = (groupCallStartGenerations.get(key) || 0) + 1;
+            groupCallStartGenerations.set(key, generation);
+          }
+        }
+        try {
+          await runGroupOperation(data.groupId, async () => {
+            if (!connected()) return;
+            const member = await GroupMember.findOne({ where: { groupId: data.groupId, userId: currentUser!.id } });
+            if (!connected()) return;
+            if (!member) {
+              await revokeLocalGroup(data.groupId);
+              socket.emit('group_call_error', { groupId: data.groupId, code: 'GROUP_ACCESS_DENIED', message: '您已无权访问该群组' });
+              if (typeof ack === 'function') ack({ ok: false, code: 'GROUP_ACCESS_DENIED' });
+              return;
+            }
+            await handler(data, member, generation, typeof ack === 'function' ? ack : undefined);
+          });
+        } catch {
+          socket.emit('group_call_error', { groupId: data.groupId, code: 'GROUP_SERVICE_UNAVAILABLE', message: '暂时无法验证群组权限，请稍后重试' });
+          if (typeof ack === 'function') ack({ ok: false, code: 'GROUP_SERVICE_UNAVAILABLE' });
+        }
+      });
+    }
+    async function revokeLocalGroup(groupId: number) {
+      // Drop passive subscriptions before the first await.
+      socket.leave(`group_${groupId}`);
+      groupRooms.get(groupId)?.delete(socketId);
+      if (!groupRooms.get(groupId)?.size) groupRooms.delete(groupId);
+      for (const type of ['video', 'audio', 'screen']) {
+        const key = `${groupId}:${type}`;
+        groupCallStartGenerations.set(key, (groupCallStartGenerations.get(key) || 0) + 1);
+      }
+      const owned = [...ownedSessions.values()].filter(session => session.groupId === groupId);
+      for (const session of [...joinedMediaSessions.values()]) {
+        if (session.groupId !== groupId) continue;
+        socket.leave(session.channelId);
+        joinedMediaSessions.delete(session.channelId);
+        removeFromMediaRoom(socketId, session, currentUser?.id);
+      }
+      socket.emit('group_access_revoked', { groupId });
+      for (const session of owned) {
+        ownedSessions.delete(session.channelId);
+        // Peers must close existing P2P connections even if Redis is unavailable.
+        closeMediaSession(session);
+      }
+      await Promise.all(owned.map(async session => {
+        if (session.type === 'screen') await screenAnnotationService.end(session);
+        await groupSessionService.end(groupId, session.type, session.ownerUserId, session);
+      }));
+    }
+    const unsubscribeGroupRevocation = onGroupAccessRevoked(event => {
+      if (!currentUser || (event.userId !== undefined && currentUser.id !== event.userId)) return;
+      return revokeLocalGroup(event.groupId);
+    });
 
     const unsubscribeRevocation = onLoginSessionsRevoked(event => {
       if (currentAuth?.userId !== event.userId || (event.sid && currentAuth.sid !== event.sid)) return;
@@ -354,8 +452,12 @@ const initialMeeting = (server: Server) => {
     socket.on('disconnect', async () => {
       authenticationAttempt++;
       currentToken = null;
+      for (const [key, value] of groupCallStartGenerations) groupCallStartGenerations.set(key, value + 1);
       clearTimeout(authenticationExpiryTimer);
       unsubscribeRevocation();
+      unsubscribeGroupRevocation();
+      sockets.delete(socketId);
+      joinedBySocket.delete(socketId);
       const previous = currentUser ? getPublicUser(currentUser.id) : undefined;
       userMap.delete(socketId);
       socketToUserMap.delete(socketId);
@@ -377,10 +479,12 @@ const initialMeeting = (server: Server) => {
       }
 
       for (const session of ownedSessions.values()) {
+        try { await runGroupOperation(session.groupId, async () => {
         const ended = currentUser
-          ? await groupSessionService.end(session.groupId, session.type, currentUser.id)
+          ? await groupSessionService.end(session.groupId, session.type, currentUser.id, session)
           : false;
         if (ended) {
+          closeMediaSession(session);
           if (session.type === 'screen') {
             await screenAnnotationService.end(session);
             io.to(session.channelId).emit('screen_annotation_clear', {
@@ -388,15 +492,18 @@ const initialMeeting = (server: Server) => {
               startedAt: session.startedAt,
             });
           }
-          emitEmptyMediaPresence(session);
-          mediaRooms.clear(session.channelId);
           await recordGroupCall(session, currentUser);
           await emitGroupSessionEvent(session.groupId, 'group_call_ended', {
             from: socketId,
             groupId: session.groupId,
             type: session.type,
+            startedAt: session.startedAt,
             deviceType: getSessionDeviceType(session.type),
           });
+        }
+        }); } catch {
+          closeMediaSession(session);
+          console.error('group_disconnect_cleanup_failed', { groupId: session.groupId });
         }
       }
 
@@ -520,11 +627,13 @@ const initialMeeting = (server: Server) => {
       await recordPrivateCall(privateCallTracker.finish(socketId, data.to.socketId));
     });
 
-    socket.on('join_group', async (data: { groupId: number }) => {
+    onGroup('join_group', async (data: { groupId: number }) => {
       if (!currentUser || !data.groupId) return;
       const roomName = `group_${data.groupId}`;
 
-      socket.join(roomName);
+      const sessions = await groupSessionService.getGroupState(data.groupId);
+      if (!connected()) return;
+      await socket.join(roomName);
 
       if (!groupRooms.has(data.groupId)) {
         groupRooms.set(data.groupId, new Set());
@@ -538,7 +647,7 @@ const initialMeeting = (server: Server) => {
       socket.emit('group_members', { groupId: data.groupId, members });
       socket.emit('group_call_state', {
         groupId: data.groupId,
-        sessions: await groupSessionService.getGroupState(data.groupId),
+        sessions,
       });
       socket.to(roomName).emit('group_member_joined', {
         groupId: data.groupId,
@@ -546,7 +655,7 @@ const initialMeeting = (server: Server) => {
       });
     });
 
-    socket.on('leave_group', (data: { groupId: number }) => {
+    onGroup('leave_group', (data: { groupId: number }) => {
       const roomName = `group_${data.groupId}`;
       const room = groupRooms.get(data.groupId);
 
@@ -560,7 +669,7 @@ const initialMeeting = (server: Server) => {
       socket.to(roomName).emit('group_member_left', { socketId, userId: currentUser?.id });
     });
 
-    socket.on('group_message', async (data: { groupId: number; message?: string; messageType?: string; media?: ChatMediaMessage['media']; clientMessageId?: string }, ack?: (result: unknown) => void) => {
+    onGroup('group_message', async (data: { groupId: number; message?: string; messageType?: string; media?: ChatMediaMessage['media']; clientMessageId?: string }, _member, _generation, ack?: (result: unknown) => void) => {
       if (!currentUser || !Number.isInteger(data.groupId)) {
         ack?.({ ok: false, error: '消息无效' }); return;
       }
@@ -596,69 +705,58 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('group_webrtc_offer', (data) => {
-      if (data.to) {
-        socket.to(data.to).emit('group_webrtc_offer', {
-          from: socketId,
-          fromUser: currentUser,
-          offer: data.offer,
-          deviceType: data.deviceType,
-          groupId: data.groupId,
+    for (const [event, field] of [['group_webrtc_offer', 'offer'], ['group_webrtc_answer', 'answer'], ['group_webrtc_ice', 'candidate']] as const) {
+      onGroup(event, async data => {
+        if (![1, 2, 3].includes(data.deviceType) || typeof data.to !== 'string' || data.to === socketId) return;
+        const type = getSessionType(data.deviceType);
+        const session = await groupSessionService.get(data.groupId, type);
+        if (!session || session.groupId !== data.groupId || session.type !== type || data.startedAt !== session.startedAt) return;
+        const target = userMap.get(data.to);
+        if (!target || !sockets.has(data.to)) return;
+        const targetMember = await GroupMember.findOne({ where: { groupId: data.groupId, userId: target.id } });
+        if (!targetMember || !connected()
+          || joinedMediaSessions.get(session.channelId)?.startedAt !== session.startedAt
+          || joinedBySocket.get(data.to)?.get(session.channelId)?.startedAt !== session.startedAt) return;
+        // Socket.IO's `to` also accepts room names: only an authenticated socket
+        // in this exact session can be addressed, never an arbitrary room.
+        socket.to(data.to).emit(event, {
+          from: socketId, fromUser: currentUser, [field]: data[field],
+          deviceType: data.deviceType, groupId: data.groupId, startedAt: session.startedAt,
         });
-      }
-    });
+      });
+    }
 
-    socket.on('group_webrtc_answer', (data) => {
-      if (data.to) {
-        socket.to(data.to).emit('group_webrtc_answer', {
-          from: socketId,
-          fromUser: currentUser,
-          answer: data.answer,
-          deviceType: data.deviceType,
-          groupId: data.groupId,
-        });
-      }
-    });
-
-    socket.on('group_webrtc_ice', (data) => {
-      if (data.to) {
-        socket.to(data.to).emit('group_webrtc_ice', {
-          from: socketId,
-          fromUser: currentUser,
-          candidate: data.candidate,
-          deviceType: data.deviceType,
-          groupId: data.groupId,
-        });
-      }
-    });
-
-    socket.on('group_call_start', async (data: { groupId: number; deviceType: number }) => {
+    onGroup('group_call_start', async (data: { groupId: number; deviceType: number }, _member, startGeneration) => {
       if (!currentUser || !data.groupId) return;
       const type = getSessionType(data.deviceType);
       const startKey = `${data.groupId}:${type}`;
-      const startGeneration = (groupCallStartGenerations.get(startKey) || 0) + 1;
-      groupCallStartGenerations.set(startKey, startGeneration);
+      if (groupCallStartGenerations.get(startKey) !== startGeneration) return;
       const result = await groupSessionService.start(data.groupId, type, currentUser);
-      if (groupCallStartGenerations.get(startKey) !== startGeneration) {
-        if (result.created) await groupSessionService.end(data.groupId, type, currentUser.id);
+      if (!connected() || groupCallStartGenerations.get(startKey) !== startGeneration) {
+        if (result.created) await groupSessionService.end(data.groupId, type, currentUser.id, result.session);
         return;
       }
       if (result.created) {
+        for (const peerId of mediaRooms.getSocketIds(result.session.channelId)) {
+          const stale = joinedBySocket.get(peerId)?.get(result.session.channelId);
+          if (stale && stale.startedAt !== result.session.startedAt) closeMediaSession(stale);
+        }
         ownedSessions.set(result.session.channelId, result.session);
         await emitGroupSessionEvent(data.groupId, 'group_call_started', {
           from: socketId,
           ...result.session,
           deviceType: data.deviceType,
           user: currentUser,
-        });
+        }, () => connected() && groupCallStartGenerations.get(startKey) === startGeneration);
       }
+      if (!connected()) return;
       socket.emit('group_call_state', {
         groupId: data.groupId,
         sessions: await groupSessionService.getGroupState(data.groupId),
       });
     });
 
-    socket.on('group_call_end', async (data: { groupId: number; deviceType?: number; type?: GroupSessionType }) => {
+    onGroup('group_call_end', async (data: { groupId: number; deviceType?: number; type?: GroupSessionType }) => {
       if (!currentUser || !data.groupId) return;
       const types: GroupSessionType[] = data.type
         ? [data.type]
@@ -670,10 +768,12 @@ const initialMeeting = (server: Server) => {
         const startKey = `${data.groupId}:${type}`;
         groupCallStartGenerations.set(startKey, (groupCallStartGenerations.get(startKey) || 0) + 1);
         const session = await groupSessionService.get(data.groupId, type);
-        const ended = await groupSessionService.end(data.groupId, type, currentUser.id);
+        if (!session || session.ownerSocketId !== socketId || ownedSessions.get(session.channelId)?.startedAt !== session.startedAt) continue;
+        const ended = await groupSessionService.end(data.groupId, type, currentUser.id, session);
         if (!ended || !session) continue;
 
         ownedSessions.delete(session.channelId);
+        closeMediaSession(session);
         if (type === 'screen') {
           await screenAnnotationService.end(session);
           io.to(session.channelId).emit('screen_annotation_clear', {
@@ -681,28 +781,29 @@ const initialMeeting = (server: Server) => {
             startedAt: session.startedAt,
           });
         }
-        emitEmptyMediaPresence(session);
-        mediaRooms.clear(session.channelId);
         await recordGroupCall(session, currentUser);
         await emitGroupSessionEvent(data.groupId, 'group_call_ended', {
           from: socketId,
           groupId: data.groupId,
           type,
+          startedAt: session.startedAt,
           deviceType: getSessionDeviceType(type),
         });
       }
     });
 
-    socket.on('join_group_call', async (data: { groupId: number; deviceType: number }) => {
+    onGroup('join_group_call', async (data: { groupId: number; deviceType: number; startedAt: string }) => {
       if (!currentUser || !data.groupId) return;
       const type = getSessionType(data.deviceType);
       const session = await groupSessionService.get(data.groupId, type);
-      if (!session) {
-        socket.emit('group_call_error', { groupId: data.groupId, type, message: '会话不存在或已结束' });
+      if (!session || session.groupId !== data.groupId || session.type !== type || session.startedAt !== data.startedAt) {
+        socket.emit('group_call_error', { groupId: data.groupId, type, code: 'GROUP_SESSION_CHANGED', message: '会话已更新，请重新进入；旧版客户端请升级' });
         return;
       }
 
-      socket.join(session.channelId);
+      const snapshot = type === 'screen' ? await screenAnnotationService.getSnapshot(session) : [];
+      if (!connected()) return;
+      await socket.join(session.channelId);
       const { alreadyJoined } = mediaRooms.join(
         session.channelId,
         socketId,
@@ -718,13 +819,14 @@ const initialMeeting = (server: Server) => {
         groupId: data.groupId,
         type,
         channelId: session.channelId,
+        startedAt: session.startedAt,
         members,
       });
       if (type === 'screen') {
         socket.emit('screen_annotation_snapshot', {
           groupId: session.groupId,
           startedAt: session.startedAt,
-          actions: await screenAnnotationService.getSnapshot(session),
+          actions: snapshot,
         });
       }
       if (!alreadyJoined) {
@@ -732,13 +834,14 @@ const initialMeeting = (server: Server) => {
           groupId: data.groupId,
           type,
           channelId: session.channelId,
+          startedAt: session.startedAt,
           member: currentUser,
         });
       }
       emitMediaPresence(session);
     });
 
-    socket.on('leave_group_call', async (data: { groupId: number; deviceType: number }) => {
+    onGroup('leave_group_call', async (data: { groupId: number; deviceType: number }) => {
       const type = getSessionType(data.deviceType);
       const session = joinedMediaSessions.get(`group:${data.groupId}:${type}`);
       if (!session) return;
@@ -748,7 +851,7 @@ const initialMeeting = (server: Server) => {
       joinedMediaSessions.delete(session.channelId);
     });
 
-    socket.on('screen_annotation_draft', async (data: {
+    onGroup('screen_annotation_draft', async (data: {
       groupId: number;
       startedAt: string;
       action: AnnotationDraft;
@@ -758,6 +861,7 @@ const initialMeeting = (server: Server) => {
         !currentUser
         || !session
         || session.startedAt !== data.startedAt
+        || joinedMediaSessions.get(session.channelId)?.startedAt !== session.startedAt
       ) return;
 
       try {
@@ -774,7 +878,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('screen_annotation_complete', async (data: {
+    onGroup('screen_annotation_complete', async (data: {
       groupId: number;
       startedAt: string;
       action: AnnotationDraft;
@@ -784,6 +888,7 @@ const initialMeeting = (server: Server) => {
         !currentUser
         || !session
         || session.startedAt !== data.startedAt
+        || joinedMediaSessions.get(session.channelId)?.startedAt !== session.startedAt
       ) return;
 
       try {
@@ -805,12 +910,13 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('screen_annotation_undo', async (data: {
+    onGroup('screen_annotation_undo', async (data: {
       groupId: number;
       startedAt: string;
     }) => {
       const session = await groupSessionService.get(data.groupId, 'screen');
-      if (!currentUser || !session || session.startedAt !== data.startedAt) return;
+      if (!currentUser || !session || session.startedAt !== data.startedAt
+        || joinedMediaSessions.get(session.channelId)?.startedAt !== session.startedAt) return;
 
       try {
         const actionId = await screenAnnotationService.undo(session, currentUser.id);
@@ -826,12 +932,13 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('screen_annotation_clear', async (data: {
+    onGroup('screen_annotation_clear', async (data: {
       groupId: number;
       startedAt: string;
     }) => {
       const session = await groupSessionService.get(data.groupId, 'screen');
-      if (!currentUser || !session || session.startedAt !== data.startedAt) return;
+      if (!currentUser || !session || session.startedAt !== data.startedAt
+        || joinedMediaSessions.get(session.channelId)?.startedAt !== session.startedAt) return;
 
       try {
         await screenAnnotationService.clear(session, currentUser.id);
@@ -846,18 +953,24 @@ const initialMeeting = (server: Server) => {
       }
     });
 
-    socket.on('control_member_mic', (data: { groupId: number; targetSocketId: string; canSpeak: boolean }) => {
-      socket.to(data.targetSocketId).emit('mic_permission_changed', {
-        groupId: data.groupId,
-        canSpeak: data.canSpeak,
-      });
+    onGroup('control_member_mic', async (data: { groupId: number; targetSocketId: string; canSpeak: boolean }, member) => {
+      if (member.role !== 'owner' || typeof data.canSpeak !== 'boolean') return;
+      const target = userMap.get(data.targetSocketId);
+      if (!target || ![...joinedMediaSessions.values()].some(session => session.groupId === data.groupId
+        && joinedBySocket.get(data.targetSocketId)?.get(session.channelId)?.startedAt === session.startedAt)) return;
+      const targetMember = await GroupMember.findOne({ where: { groupId: data.groupId, userId: target.id } });
+      if (!targetMember || targetMember.role === 'owner') return;
+      await targetMember.update({ canSpeak: data.canSpeak });
+      io.to(getUserSockets(target.id)).emit('mic_permission_changed', { groupId: data.groupId, canSpeak: data.canSpeak });
     });
 
-    socket.on('toggle_mic', (data: { groupId: number; muted: boolean }) => {
-      socket.to(`group_${data.groupId}`).emit('member_mic_changed', {
-        socketId,
-        muted: data.muted,
-      });
+    onGroup('toggle_mic', (data: { groupId: number; muted: boolean }, member) => {
+      if (typeof data.muted !== 'boolean' || (!data.muted && member.canSpeak === false)) return;
+      for (const session of joinedMediaSessions.values()) {
+        if (session.groupId === data.groupId) socket.to(session.channelId).emit('member_mic_changed', {
+          groupId: data.groupId, socketId, muted: data.muted,
+        });
+      }
     });
   });
   return io;

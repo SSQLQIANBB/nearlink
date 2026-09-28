@@ -53,3 +53,21 @@ describe('在线联系人同步', () => {
     expect(store.userList).toEqual([]);
   });
 });
+
+describe('群组撤销订阅', () => {
+  it('已退群的订阅不在后续认证时自动恢复', async () => {
+    const { groupSessionState } = await import('../../../src/services/groupSessionState');
+    const store = useSocketStore();
+    store.connect('token', { id: 1, username: 'me' });
+    mock.handlers.get('authenticated')!();
+    store.setSubscribedGroups([7, 8]);
+    groupSessionState.applyStarted({ groupId: 7, type: 'video', channelId: 'group:7:video', ownerUserId: 1, ownerSocketId: 's', startedAt: 'now' });
+    mock.handlers.get('group_access_revoked')!({ groupId: 7 });
+    expect(groupSessionState.getSession(7, 'video')).toBeNull();
+    vi.mocked(store.socket!.emit).mockClear();
+    mock.handlers.get('authenticated')!();
+    expect(store.socket!.emit).not.toHaveBeenCalledWith('join_group', { groupId: 7 });
+    expect(store.socket!.emit).toHaveBeenCalledWith('join_group', { groupId: 8 });
+    store.disconnect();
+  });
+});

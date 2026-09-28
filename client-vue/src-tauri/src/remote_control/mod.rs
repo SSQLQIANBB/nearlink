@@ -348,7 +348,6 @@ pub async fn remote_control_confirm_request(
             .lock()
             .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
             .prepare(operation, verified, Instant::now())?;
-        let wants_control = verified.wants_control();
         let grant_control = verified.is_grant_control();
         let (epoch, remembered) = {
             let epoch = memory_epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
@@ -360,7 +359,7 @@ pub async fn remote_control_confirm_request(
             window.show().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
             window.unminimize().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
             window.set_focus().map_err(|_| "REMOTE_CONSENT_WINDOW_UNAVAILABLE")?;
-            consent_dialog::show(&window, verified.message(), wants_control)?
+            consent_dialog::show(&window, verified.consent_prompt())?
         };
         let decision = if grant_control && choice.decision != identity::Decision::Control {
             identity::Decision::Reject

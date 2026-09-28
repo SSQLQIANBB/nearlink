@@ -23,10 +23,11 @@ export type GroupSessionState = {
 export interface GroupSessionStore {
   create(key: string, session: GroupSession): Promise<boolean>;
   get(key: string): Promise<GroupSession | null>;
-  delete(key: string): Promise<boolean>;
+  delete(key: string, expected: GroupSession): Promise<boolean>;
 }
 
 export class GroupSessionService {
+  private lastStartedAt = 0;
   constructor(private readonly store: GroupSessionStore) {}
 
   private getKey(groupId: number, type: GroupSessionType) {
@@ -39,13 +40,14 @@ export class GroupSessionService {
 
   async start(groupId: number, type: GroupSessionType, owner: GroupSessionOwner) {
     const key = this.getKey(groupId, type);
+    this.lastStartedAt = Math.max(Date.now(), this.lastStartedAt + 1);
     const session: GroupSession = {
       groupId,
       type,
       channelId: this.getChannelId(groupId, type),
       ownerUserId: owner.id,
       ownerSocketId: owner.socketId,
-      startedAt: new Date().toISOString(),
+      startedAt: new Date(this.lastStartedAt).toISOString(),
     };
 
     // Redis 的 NX 写入保证多人同时点击时仍只创建一个群组会话。
@@ -53,7 +55,8 @@ export class GroupSessionService {
     if (created) return { created, session };
 
     const existing = await this.store.get(key);
-    return { created: false, session: existing || session };
+    if (!existing) throw new Error('GROUP_SESSION_CHANGED');
+    return { created: false, session: existing };
   }
 
   async get(groupId: number, type: GroupSessionType) {
@@ -69,10 +72,11 @@ export class GroupSessionService {
     return { video, audio, screen };
   }
 
-  async end(groupId: number, type: GroupSessionType, userId: number) {
+  async end(groupId: number, type: GroupSessionType, userId: number, expected?: GroupSession) {
     const key = this.getKey(groupId, type);
     const session = await this.store.get(key);
     if (!session || session.ownerUserId !== userId) return false;
-    return this.store.delete(key);
+    if (expected && (session.startedAt !== expected.startedAt || session.ownerSocketId !== expected.ownerSocketId)) return false;
+    return this.store.delete(key, session);
   }
 }

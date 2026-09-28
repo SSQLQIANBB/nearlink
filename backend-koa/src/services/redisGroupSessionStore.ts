@@ -23,7 +23,11 @@ export class RedisGroupSessionStore implements GroupSessionStore {
     return value ? JSON.parse(value) as GroupSession : null;
   }
 
-  async delete(key: string) {
-    return (await redis.del(key)) > 0;
+  async delete(key: string, expected: GroupSession) {
+    // An old disconnect cannot delete a replacement session after GET.
+    return Number(await redis.eval(
+      `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end; return 0`,
+      1, key, JSON.stringify(expected),
+    )) > 0;
   }
 }

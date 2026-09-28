@@ -329,6 +329,7 @@ const participantUserIds = computed(() => {
   return participantState.userIds(groupId.value, 'screen');
 });
 let joinedCall = false;
+let currentSessionStartedAt: string | null = null;
 let cleanedUp = false;
 let stopAuthenticatedWatch: (() => void) | null = null;
 
@@ -416,6 +417,8 @@ function initSocket() {
 
   // 通话结束
   target.on('group_call_ended', handleCallEnded);
+  target.on('group_access_revoked', handleGroupAccessRevoked);
+  target.on('group_call_error', handleGroupCallError);
 
   // WebRTC 信令
   target.on('group_webrtc_offer', handleOffer);
@@ -516,6 +519,7 @@ async function broadcastStream() {
 
 // 创建对等连接
 function createPeerConnection(member: RemoteMember) {
+  const startedAt = currentSessionStartedAt;
   const pc = new RTCPeerConnection({
     iceServers: [
       {
@@ -555,6 +559,7 @@ function createPeerConnection(member: RemoteMember) {
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.value?.emit('group_webrtc_ice', {
+        startedAt,
         to: member.socketId,
         candidate: event.candidate,
         groupId: groupId.value,
@@ -566,6 +571,7 @@ function createPeerConnection(member: RemoteMember) {
 }
 
 async function createAndSendOffer(member: RemoteMember) {
+  const startedAt = currentSessionStartedAt;
   const peer = peerRegistry.upsert(member);
   const pc = peer.connection as RTCPeerConnection;
   if (pc.signalingState !== 'stable') return;
@@ -573,6 +579,7 @@ async function createAndSendOffer(member: RemoteMember) {
   await pc.setLocalDescription(offer);
 
   socket.value?.emit('group_webrtc_offer', {
+    startedAt,
     to: member.socketId,
     offer,
     deviceType: 2,
@@ -582,6 +589,7 @@ async function createAndSendOffer(member: RemoteMember) {
 
 // 处理 offer
 async function handleOffer(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== 2 || !data.fromUser) return;
   const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
   const pc = peer.connection as RTCPeerConnection;
@@ -590,6 +598,7 @@ async function handleOffer(data: any) {
   await pc.setLocalDescription(answer);
 
   socket.value?.emit('group_webrtc_answer', {
+    startedAt: data.startedAt,
     to: data.from,
     answer,
     deviceType: 2,
@@ -599,6 +608,7 @@ async function handleOffer(data: any) {
 
 // 处理 answer
 async function handleAnswer(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== 2) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) await pc.setRemoteDescription(data.answer);
@@ -606,6 +616,7 @@ async function handleAnswer(data: any) {
 
 // 处理 ICE 候选
 async function handleIceCandidate(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== 2) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) await pc.addIceCandidate(data.candidate);
@@ -643,7 +654,7 @@ async function joinScreenCall(ownerUserId: number) {
       localStream.value = audio;
     } catch { isMicMuted.value = true; message.warning('麦克风不可用，仍可观看屏幕共享'); }
   }
-  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 2 });
+  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 2, startedAt: currentSessionStartedAt });
 }
 
 function handleCallStarted(data: any) {
@@ -658,10 +669,13 @@ function handleCallStarted(data: any) {
 }
 
 function handleCallEnded(data: any) {
+  if (cleanedUp || (data.startedAt && data.startedAt !== currentSessionStartedAt)) return;
   if (data.groupId !== groupId.value || data.deviceType !== 2) return;
   sharer.value = null;
   remoteStream.value = null;
   joinedCall = false;
+  isSharing.value = false;
+  currentSessionStartedAt = null;
   localStream.value?.getTracks().forEach(track => track.stop());
   localStream.value = null;
   showAnnotation.value = false;
@@ -672,6 +686,7 @@ function handleCallEnded(data: any) {
 }
 
 function handleCallMembers(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== 'screen') return;
   data.members.forEach((member: RemoteMember) => {
     if (member.id === currentUser.value?.id) return;
@@ -684,6 +699,7 @@ function handleCallMembers(data: any) {
 }
 
 function handleCallMemberJoined(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== 'screen') return;
   if (data.member.id === currentUser.value?.id) return;
   peerRegistry.upsert(data.member);
@@ -692,19 +708,31 @@ function handleCallMemberJoined(data: any) {
 }
 
 function handleCallMemberLeft(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== 'screen' || !data.userId) return;
   peerRegistry.remove(data.userId, data.socketId);
 }
 
+function handleGroupAccessRevoked(data: { groupId: number }) {
+  if (data.groupId !== groupId.value) return;
+  cleanupScreenCall(false);
+  message.warning('群组访问权限已失效，共享已停止');
+  void router.replace('/groups');
+}
+function handleGroupCallError(data: { groupId: number; message?: string }) {
+  if (data.groupId !== groupId.value || cleanedUp) return;
+  cleanupScreenCall(false);
+  message.error(data.message || '无法加入群组共享');
+  void router.replace('/groups');
+}
 function handleSocketDisconnect() {
-  joinedCall = false;
-  remoteStream.value = null;
-  annotationState.clear();
-  participantState.clear(groupId.value, 'screen');
-  peerRegistry.clear();
+  cleanupScreenCall(false);
+  message.warning('连接已断开，共享已停止');
+  void router.replace('/groups');
 }
 
 function startScreenSession(startedAt: string, channelId: string) {
+  currentSessionStartedAt = startedAt;
   annotationState.startSession(startedAt);
   participantState.setChannel(groupId.value, 'screen', channelId);
 }
@@ -880,6 +908,7 @@ function handleExit() {
 function cleanupScreenCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  currentSessionStartedAt = null;
   const ownedMedia = !!mediaClaim;
   mediaClaim?.release();
   mediaClaim = null;
@@ -910,6 +939,8 @@ function unbindSocketEvents() {
   socket.value?.off('disconnect', handleSocketDisconnect);
   socket.value?.off('group_call_started', handleCallStarted);
   socket.value?.off('group_call_ended', handleCallEnded);
+  socket.value?.off('group_access_revoked', handleGroupAccessRevoked);
+  socket.value?.off('group_call_error', handleGroupCallError);
   socket.value?.off('group_webrtc_offer', handleOffer);
   socket.value?.off('group_webrtc_answer', handleAnswer);
   socket.value?.off('group_webrtc_ice', handleIceCandidate);
@@ -943,9 +974,8 @@ onMounted(async () => {
   }
   await loadGroupDetail();
   if (cleanedUp || !mediaClaim?.isCurrent()) return;
-  if (pendingInitialScreen.value) await startScreenShare();
-  if (cleanedUp || !mediaClaim?.isCurrent()) return;
   initSocket();
+  if (pendingInitialScreen.value) await startScreenShare();
 });
 
 onUnmounted(() => {

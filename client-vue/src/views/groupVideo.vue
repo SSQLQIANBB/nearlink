@@ -236,6 +236,7 @@ const participantUserIds = computed(() => {
 const localStream = ref<MediaStream | null>(null);
 const originalLocalStream = ref<MediaStream | null>(null); // 原始流（用于虚拟背景）
 let joinedCall = false;
+let currentSessionStartedAt: string | null = null;
 let cleanedUp = false;
 let stopAuthenticatedWatch: (() => void) | null = null;
 
@@ -347,6 +348,8 @@ function initSocket() {
   target.on('group_call_member_left', handleCallMemberLeft);
   target.on('group_call_presence', handleCallPresence);
   target.on('group_call_ended', handleCallEnded);
+  target.on('group_access_revoked', handleGroupAccessRevoked);
+  target.on('group_call_error', handleGroupCallError);
   target.on('disconnect', handleSocketDisconnect);
 
   // WebRTC 信令
@@ -363,6 +366,7 @@ function initSocket() {
 
 // 创建对等连接
 function createPeerConnection(member: RemoteMember) {
+  const startedAt = currentSessionStartedAt;
   const pc = new RTCPeerConnection({
     iceServers: [
       {
@@ -394,6 +398,7 @@ function createPeerConnection(member: RemoteMember) {
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.value?.emit('group_webrtc_ice', {
+        startedAt,
         to: member.socketId,
         candidate: event.candidate,
         groupId: groupId.value,
@@ -405,12 +410,14 @@ function createPeerConnection(member: RemoteMember) {
 }
 
 async function createAndSendOffer(member: RemoteMember) {
+  const startedAt = currentSessionStartedAt;
   const peer = peerRegistry.upsert(member);
   const pc = peer.connection as RTCPeerConnection;
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
   socket.value?.emit('group_webrtc_offer', {
+    startedAt,
     to: member.socketId,
     offer,
     deviceType: sessionDeviceType.value,
@@ -420,6 +427,7 @@ async function createAndSendOffer(member: RemoteMember) {
 
 // 处理 offer
 async function handleOffer(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value || !data.fromUser) return;
   // 如果连接不存在，创建新的
   const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
@@ -429,6 +437,7 @@ async function handleOffer(data: any) {
   await pc.setLocalDescription(answer);
 
   socket.value?.emit('group_webrtc_answer', {
+    startedAt: data.startedAt,
     to: data.from,
     answer,
     deviceType: sessionDeviceType.value,
@@ -438,6 +447,7 @@ async function handleOffer(data: any) {
 
 // 处理 answer
 async function handleAnswer(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
@@ -447,6 +457,7 @@ async function handleAnswer(data: any) {
 
 // 处理 ICE 候选
 async function handleIceCandidate(data: any) {
+  if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
   if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   const pc = findPeerBySocket(data.from)?.connection as RTCPeerConnection | undefined;
   if (pc) {
@@ -467,10 +478,12 @@ function handleCallState(data: any) {
     session.channelId,
   );
   joinedCall = true;
-  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value });
+  currentSessionStartedAt = session.startedAt;
+  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value, startedAt: session.startedAt });
 }
 
 function handleCallMembers(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== sessionType.value) return;
   data.members.forEach((member: RemoteMember) => {
     if (member.id !== currentUser.value?.id) {
@@ -481,6 +494,7 @@ function handleCallMembers(data: any) {
 }
 
 async function handleCallMemberJoined(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== sessionType.value) return;
   if (data.member.id === currentUser.value?.id) return;
   mergeMemberSocket(data.member);
@@ -489,6 +503,7 @@ async function handleCallMemberJoined(data: any) {
 }
 
 function handleCallMemberLeft(data: any) {
+  if (cleanedUp || data.startedAt !== currentSessionStartedAt) return;
   if (data.groupId !== groupId.value || data.type !== sessionType.value || !data.userId) return;
   peerRegistry.remove(data.userId, data.socketId);
 }
@@ -499,15 +514,33 @@ function handleCallPresence(data: ParticipantSnapshot) {
 }
 
 function handleCallEnded(data: any) {
+  if (cleanedUp || (data.startedAt && data.startedAt !== currentSessionStartedAt)) return;
   if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value) return;
   joinedCall = false;
+  currentSessionStartedAt = null;
+  peerRegistry.clear();
+  localStream.value?.getTracks().forEach(track => track.stop());
+  originalLocalStream.value?.getTracks().forEach(track => track.stop());
   participantState.clear(groupId.value, sessionType.value);
 }
 
+function handleGroupAccessRevoked(data: { groupId: number }) {
+  if (data.groupId !== groupId.value) return;
+  cleanupCall(false);
+  message.warning('群组访问权限已失效，通话已停止');
+  void router.replace('/groups');
+}
+function handleGroupCallError(data: { groupId: number; message?: string }) {
+  if (data.groupId !== groupId.value || cleanedUp) return;
+  cleanupCall(false);
+  message.error(data.message || '无法加入群组通话');
+  void router.replace('/groups');
+}
+
 function handleSocketDisconnect() {
-  joinedCall = false;
-  participantState.clear(groupId.value, sessionType.value);
-  peerRegistry.clear();
+  cleanupCall(false);
+  message.warning('连接已断开，通话已停止');
+  void router.replace('/groups');
 }
 
 function isMemberParticipating(userId: number) {
@@ -589,6 +622,7 @@ function handleHangup() {
 function cleanupCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  currentSessionStartedAt = null;
   const ownedMedia = !!mediaClaim;
   mediaClaim?.release();
   mediaClaim = null;
@@ -623,6 +657,8 @@ function unbindSocketEvents() {
   socket.value?.off('group_call_member_left', handleCallMemberLeft);
   socket.value?.off('group_call_presence', handleCallPresence);
   socket.value?.off('group_call_ended', handleCallEnded);
+  socket.value?.off('group_access_revoked', handleGroupAccessRevoked);
+  socket.value?.off('group_call_error', handleGroupCallError);
   socket.value?.off('disconnect', handleSocketDisconnect);
   socket.value?.off('group_webrtc_offer', handleOffer);
   socket.value?.off('group_webrtc_answer', handleAnswer);

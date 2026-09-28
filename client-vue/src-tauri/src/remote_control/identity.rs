@@ -660,6 +660,15 @@ impl VerifiedApproval {
         })
     }
 
+    pub fn consent_prompt(&self) -> super::consent_dialog::Prompt {
+        super::consent_dialog::Prompt {
+            controller_account: self.claims.controller.user_id,
+            details: self.message(),
+            control: self.wants_control(),
+            deadline: self.deadline,
+        }
+    }
+
     pub fn message(&self) -> String {
         let c = &self.claims;
         format!("请求方账号：{}\n请求方设备：{}\n本机账号：{}\n会话：{}\n共享范围：主显示器\n请求权限：{}\n\n仅在认识并信任对方时批准。此确认在 45 秒内过期。勾选“不再提示”并允许后，此账号在相同或更小权限范围内的后续请求将自动批准；可在本机协助设置中恢复每次确认。",

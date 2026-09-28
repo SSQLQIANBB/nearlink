@@ -111,8 +111,17 @@ export const useSocketStore = defineStore('socket', () => {
     groupId: number;
     type?: GroupSessionType;
     deviceType?: number;
+    startedAt?: string;
   }) {
+    const current = groupSessionState.getSession(data.groupId, resolveSessionType(data));
+    if (data.startedAt && current && data.startedAt !== current.startedAt) return;
     groupSessionState.applyEnded(data.groupId, resolveSessionType(data));
+  }
+
+  function handleGroupAccessRevoked(data: { groupId: number }) {
+    groupSessionState.clearGroup(data.groupId);
+    joinedGroupIds.delete(data.groupId);
+    subscribedGroupIds.delete(data.groupId);
   }
 
   function bindEvents(target: Socket) {
@@ -125,6 +134,7 @@ export const useSocketStore = defineStore('socket', () => {
     target.on('group_call_state', handleGroupCallState);
     target.on('group_call_started', handleGroupCallStarted);
     target.on('group_call_ended', handleGroupCallEnded);
+    target.on('group_access_revoked', handleGroupAccessRevoked);
   }
 
   function unbindEvents(target: Socket) {
@@ -137,6 +147,7 @@ export const useSocketStore = defineStore('socket', () => {
     target.off('group_call_state', handleGroupCallState);
     target.off('group_call_started', handleGroupCallStarted);
     target.off('group_call_ended', handleGroupCallEnded);
+    target.off('group_access_revoked', handleGroupAccessRevoked);
   }
 
   function connect(token: string, user: User) {

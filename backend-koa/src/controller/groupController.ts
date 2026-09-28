@@ -1,4 +1,5 @@
 import { Context } from 'koa';
+import { runGroupOperation, revokeGroupAccess } from '../services/groupAccessCoordinator';
 import { Group, GroupMember, User, GroupInvitation, GroupMessage } from '../models';
 import sequelize from '../config/database';
 import redisService from '../services/redisService';
@@ -250,11 +251,14 @@ export async function inviteToGroup(ctx: Context) {
 /**
  * 设置成员发言权限
  */
-export async function setMemberPermission(ctx: Context) {
+async function setMemberPermissionLocked(ctx: Context) {
   try {
     const groupId = parseInt(ctx.params.id);
     const userId = ctx.state.user?.userId;
     const { targetUserId, canSpeak } = ctx.request.body as any;
+    if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0 || typeof canSpeak !== 'boolean') {
+      ctx.status = 400; ctx.body = { error: '无效的成员权限' }; return;
+    }
 
     // 检查是否有权限
     const member = await GroupMember.findOne({
@@ -344,7 +348,7 @@ export async function updateGroup(ctx: Context) {
 /**
  * 退出群组
  */
-export async function leaveGroup(ctx: Context) {
+async function leaveGroupLocked(ctx: Context) {
   try {
     const groupId = parseInt(ctx.params.id);
     const userId = ctx.state.user?.userId;
@@ -366,6 +370,7 @@ export async function leaveGroup(ctx: Context) {
     }
 
     await member.destroy();
+    await revokeGroupAccess({ groupId, userId, reason: 'left' });
 
     ctx.body = { message: '已退出群组' };
   } catch (error: any) {
@@ -378,7 +383,7 @@ export async function leaveGroup(ctx: Context) {
 /**
  * 删除群组
  */
-export async function deleteGroup(ctx: Context) {
+async function deleteGroupLocked(ctx: Context) {
   const groupId = parseInt(ctx.params.id);
   const userId = ctx.state.user?.userId;
 
@@ -414,6 +419,7 @@ export async function deleteGroup(ctx: Context) {
 
   try {
     await service.delete(groupId, userId);
+    await revokeGroupAccess({ groupId, reason: 'deleted' });
 
     // 数据库删除已经成功时，缓存清理失败只记录日志，避免向客户端返回伪失败。
     try {
@@ -440,3 +446,27 @@ export async function deleteGroup(ctx: Context) {
   }
 }
 
+
+export async function leaveGroup(ctx: Context) {
+  const groupId = Number(ctx.params.id);
+  if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+  }
+  await runGroupOperation(groupId, () => leaveGroupLocked(ctx));
+}
+
+export async function deleteGroup(ctx: Context) {
+  const groupId = Number(ctx.params.id);
+  if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+  }
+  await runGroupOperation(groupId, () => deleteGroupLocked(ctx));
+}
+
+export async function setMemberPermission(ctx: Context) {
+  const groupId = Number(ctx.params.id);
+  if (!Number.isSafeInteger(groupId) || groupId <= 0) {
+    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+  }
+  await runGroupOperation(groupId, () => setMemberPermissionLocked(ctx));
+}

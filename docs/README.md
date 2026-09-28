@@ -1,5 +1,6 @@
 # 项目文档
 
+- [ToDesk 功能对标与实施路线](./plans/todesk-feature-roadmap-20260928/README.md)：官网 72 项功能逐项规划、16 个代码工作包、服务器配置、容量测算与分期验收。
 - [远程控制功能规划](./plans/2026-09-25-remote-control-design.md)：v2 设计、分期和验收门槛；当前完成范围见[实施进度](./plans/2026-09-25-remote-control-implementation.md)及[M0 实测记录](./plans/2026-09-25-remote-control-m0-validation.md)，远控尚未开放。
 - [远控签名与主控协议](./plans/2026-09-26-remote-control-wire-protocol.md)：签名格式、密钥配置、建连/短租约、主控适配器事件与原生集成边界。
 - [原生设备身份与确认](./plans/2026-09-26-remote-control-native-identity.md)：设备登记/撤销/重建、系统凭据存储、原生同意窗口与编译时可信公钥配置。
