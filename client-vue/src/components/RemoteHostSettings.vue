@@ -15,6 +15,7 @@
       <n-button :disabled="resetting" :loading="resetting" @click="resetConfirmations">恢复每次确认</n-button>
       <span>清除本机记住的协助允许选项，不会结束当前会话。</span>
     </div>
+    <RememberedApprovalSettings :reset-version="consentListVersion" />
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="!remote.capabilities?.canHostView">请先在 macOS 系统设置中为 ToDesk 开启屏幕录制权限；键鼠控制还需要辅助功能权限。更改权限后重新启动客户端。</p>
     <section aria-label="键鼠控制权限">
@@ -37,6 +38,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { NButton, NSelect } from 'naive-ui';
+import RememberedApprovalSettings from './RememberedApprovalSettings.vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useRemoteControlHostStore } from '@/stores/remoteControlHost';
 import { useRemoteControlStore } from '@/stores/remoteControl';
@@ -47,6 +49,7 @@ const props = defineProps<{ devices: RemoteDevice[] }>();
 const host = useRemoteControlHostStore(), remote = useRemoteControlStore(), socket = useSocketStore(), auth = useAuthStore();
 const selectedDevice = ref<string | null>(null), controller = ref<number | null>(null);
 const resetting = ref(false), notice = ref('');
+const consentListVersion = ref(0);
 const busy = ref(false), error = ref(''), grants = ref<AssistanceGrant[]>([]);
 const duration = ref<AssistanceDuration>('15m');
 const durationOptions = [{ label: '15 分钟', value: '15m' }, { label: '1 小时', value: '1h' }, { label: '长期有效，直到手动撤销', value: 'permanent' }];
@@ -75,7 +78,7 @@ async function resetConfirmations() {
   resetting.value = true; error.value = ''; notice.value = '';
   try {
     await invoke('remote_control_clear_remembered_approvals');
-    if (mounted) notice.value = '已恢复每次确认，下次协助请求将重新弹窗。';
+    if (mounted) { consentListVersion.value++; notice.value = '已恢复每次确认，下次协助请求将重新弹窗。'; }
   } catch {
     if (mounted) error.value = '未能清除记住的允许选项，请重试。';
   } finally { resetting.value = false; }

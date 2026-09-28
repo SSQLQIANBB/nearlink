@@ -86,6 +86,10 @@ fn signing_key(
         .map_err(|_| "REMOTE_KEYSTORE_INVALID")?;
     Ok(SigningKey::from_bytes(bytes))
 }
+pub(super) fn consent_verifying_key(store: &impl SeedStore, user: u64) -> Result<ed25519_dalek::VerifyingKey, &'static str> {
+    if user == 0 || user > MAX_SAFE { return Err("REMOTE_IDENTITY_INVALID"); }
+    Ok(signing_key(store, user, false)?.verifying_key())
+}
 fn public_der(key: &SigningKey) -> Vec<u8> {
     let mut der = vec![
         0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,

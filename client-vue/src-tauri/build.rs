@@ -56,6 +56,8 @@ fn main() {
             "remote_control_register_device",
             "remote_control_confirm_request",
             "remote_control_clear_remembered_approvals",
+            "remote_control_list_remembered_approvals",
+            "remote_control_remove_remembered_approval",
             "remote_control_reset_identity",
             "remote_control_presence",
             "remote_control_start_host",

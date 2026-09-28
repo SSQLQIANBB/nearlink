@@ -17,6 +17,8 @@
     "allow-remote-control-register-device",
     "allow-remote-control-confirm-request",
     "allow-remote-control-clear-remembered-approvals",
+    "allow-remote-control-list-remembered-approvals",
+    "allow-remote-control-remove-remembered-approval",
     "allow-remote-control-reset-identity",
     "allow-remote-control-presence",
     "allow-remote-control-start-host",

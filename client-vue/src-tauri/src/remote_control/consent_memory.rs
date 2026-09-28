@@ -4,6 +4,7 @@ use super::{authorization::Scope, identity::Decision};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{Read, Write},
@@ -41,6 +42,17 @@ struct Entry {
 #[serde(deny_unknown_fields)]
 pub(super) struct Preferences {
     entries: Vec<Entry>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RememberedApproval {
+    pub id: String,
+    pub host_device_id: String,
+    pub controller_user_id: u64,
+    pub scope: Scope,
+}
+fn entry_id(entry: &Entry) -> String {
+    format!("{:x}", Sha256::digest(message(&entry.choice).into_iter().chain(entry.signature.bytes()).collect::<Vec<_>>()))
 }
 fn message(choice: &Choice) -> Vec<u8> {
     [
@@ -87,6 +99,23 @@ impl Preferences {
                 Decision::View
             })
         })
+    }
+    /// Display only verified metadata; never export signatures or auth-version bindings.
+    pub fn list(&self, host_user: u64, key: &VerifyingKey) -> Vec<RememberedApproval> {
+        self.entries.iter().filter_map(|entry| {
+            let binding = &entry.choice.binding;
+            if binding.host_user != host_user { return None; }
+            let signature = Signature::from_slice(&URL_SAFE_NO_PAD.decode(&entry.signature).ok()?).ok()?;
+            key.verify_strict(&message(&entry.choice), &signature).ok()?;
+            Some(RememberedApproval { id: entry_id(entry), host_device_id: binding.host_device.clone(),
+                controller_user_id: binding.controller_user, scope: entry.choice.scope })
+        }).collect()
+    }
+    /// Removing one exact record cannot create a new grant or widen another scope.
+    pub fn remove(&mut self, host_user: u64, id: &str) -> bool {
+        let before = self.entries.len();
+        self.entries.retain(|entry| entry.choice.binding.host_user != host_user || entry_id(entry) != id);
+        before != self.entries.len()
     }
     pub fn remember(
         &mut self,
@@ -167,6 +196,33 @@ mod tests {
             controller_auth_version: "controller-auth".into(),
             screen: "primary".into(),
         }
+    }
+    #[test]
+    fn listing_verifies_signatures_and_removal_is_account_scoped() {
+        let key = SigningKey::from_bytes(&[9; 32]);
+        let mut prefs = Preferences::default();
+        let first = binding();
+        let other_controller = Binding { controller_user: 3, ..first.clone() };
+        let other_host = Binding { host_user: 4, ..first.clone() };
+        prefs.remember(first.clone(), Decision::View, true, &key);
+        prefs.remember(other_controller.clone(), Decision::Control, true, &key);
+        prefs.remember(other_host.clone(), Decision::Control, true, &key);
+        let list = prefs.list(1, &key.verifying_key());
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].controller_user_id, 2);
+        assert_eq!(list[0].scope, Scope::View);
+        let json = serde_json::to_string(&list).unwrap();
+        assert!(!json.contains("signature"));
+        assert!(!json.contains("auth_version"));
+        assert!(!prefs.remove(4, &list[0].id));
+        assert!(prefs.remove(1, &list[0].id));
+        assert!(!prefs.remove(1, &list[0].id));
+        assert_eq!(prefs.decision(&first, Scope::View, &key.verifying_key()), None);
+        assert_eq!(prefs.decision(&other_controller, Scope::Control, &key.verifying_key()), Some(Decision::Control));
+        assert_eq!(prefs.list(4, &key.verifying_key()).len(), 1);
+        assert!(prefs.list(1, &SigningKey::from_bytes(&[8; 32]).verifying_key()).is_empty());
+        prefs.entries[0].choice.scope = Scope::View;
+        assert!(prefs.list(1, &key.verifying_key()).is_empty());
     }
     #[test]
     fn only_checked_allow_is_remembered() {

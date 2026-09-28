@@ -64,6 +64,7 @@ declare module 'vue' {
     NText: typeof import('naive-ui')['NText']
     NTooltip: typeof import('naive-ui')['NTooltip']
     NUpload: typeof import('naive-ui')['NUpload']
+    RememberedApprovalSettings: typeof import('./src/components/RememberedApprovalSettings.vue')['default']
     RemoteDeviceSettings: typeof import('./src/components/RemoteDeviceSettings.vue')['default']
     RemoteHostSettings: typeof import('./src/components/RemoteHostSettings.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

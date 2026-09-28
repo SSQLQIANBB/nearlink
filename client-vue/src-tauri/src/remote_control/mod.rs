@@ -423,6 +423,40 @@ pub async fn remote_control_clear_remembered_approvals(
     Ok(())
 }
 
+/// Read-only metadata. No invoke command may create a remembered approval.
+#[tauri::command]
+pub async fn remote_control_list_remembered_approvals(
+    window: tauri::WebviewWindow, app: tauri::AppHandle, state: tauri::State<'_, RemoteControlState>, user_id: u64,
+) -> Result<Vec<consent_memory::RememberedApproval>, &'static str> {
+    require_main_window(window.label())?;
+    let path = consent_memory_path(&app)?;
+    let epoch = state.consent_memory_epoch.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let key = identity::consent_verifying_key(&device_store::OsSeedStore, user_id)?;
+        let _guard = epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+        Ok(consent_memory::Preferences::load(&path).list(user_id, &key))
+    }).await.map_err(|_| "REMOTE_NATIVE_WORKER_FAILED")?
+}
+
+#[tauri::command]
+pub async fn remote_control_remove_remembered_approval(
+    window: tauri::WebviewWindow, app: tauri::AppHandle, state: tauri::State<'_, RemoteControlState>, user_id: u64, id: String,
+) -> Result<(), &'static str> {
+    require_main_window(window.label())?;
+    if user_id == 0 || user_id > 9_007_199_254_740_991 || id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("REMOTE_CONSENT_RECORD_INVALID");
+    }
+    let path = consent_memory_path(&app)?;
+    let mut epoch = state.consent_memory_epoch.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?;
+    let mut preferences = consent_memory::Preferences::load(&path);
+    if preferences.remove(user_id, &id) {
+        preferences.save(&path)?;
+        // An approval already in flight cannot reintroduce the deleted record.
+        *epoch = epoch.wrapping_add(1);
+    }
+    Ok(())
+}
+
 #[derive(Serialize)]
 pub struct IdentityResetResult {
     reset: bool,

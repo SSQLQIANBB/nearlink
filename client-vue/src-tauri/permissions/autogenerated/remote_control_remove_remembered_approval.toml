@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-control-remove-remembered-approval"
+description = "Enables the remote_control_remove_remembered_approval command without any pre-configured scope."
+commands.allow = ["remote_control_remove_remembered_approval"]
+
+[[permission]]
+identifier = "deny-remote-control-remove-remembered-approval"
+description = "Denies the remote_control_remove_remembered_approval command without any pre-configured scope."
+commands.deny = ["remote_control_remove_remembered_approval"]
