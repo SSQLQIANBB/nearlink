@@ -36,7 +36,7 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { NButton, NSelect } from 'naive-ui';
 import RememberedApprovalSettings from './RememberedApprovalSettings.vue';
 import { invoke } from '@tauri-apps/api/core';
@@ -45,7 +45,7 @@ import { useRemoteControlStore } from '@/stores/remoteControl';
 import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
 import { createAssistanceGrant, getAssistanceGrants, revokeAssistanceGrant, type AssistanceGrant, type AssistanceDuration, type RemoteDevice } from '@/api/remoteControl';
-const props = defineProps<{ devices: RemoteDevice[] }>();
+const props = defineProps<{ devices: RemoteDevice[]; localDeviceId?: string | null }>();
 const host = useRemoteControlHostStore(), remote = useRemoteControlStore(), socket = useSocketStore(), auth = useAuthStore();
 const selectedDevice = ref<string | null>(null), controller = ref<number | null>(null);
 const resetting = ref(false), notice = ref('');
@@ -64,6 +64,11 @@ async function refreshPermissions() {
   else error.value = '';
 }
 const deviceOptions = computed(() => props.devices.filter(d => !d.revokedAt && d.platform === 'macos').map(d => ({ label: d.alias, value: d.deviceId })));
+watch(() => props.localDeviceId, (value, previous) => {
+  if (host.phase !== 'offline') return;
+  if (value && deviceOptions.value.some(device => device.value === value)) selectedDevice.value = value;
+  else if (selectedDevice.value === previous) selectedDevice.value = null;
+}, { immediate: true });
 const contacts = computed(() => [...(auth.currentUser ? [{ label: '当前账号的另一台电脑', value: auth.currentUser.id }] : []), ...socket.userList.map(u => ({ label: u.username, value: u.id }))]);
 async function refresh() { const result = await getAssistanceGrants(); if (mounted) grants.value = result.grants; }
 async function grant() {

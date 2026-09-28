@@ -169,6 +169,35 @@ pub(super) fn register(
         platform,
     })
 }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceIdentityProof {
+    challenge_id: String,
+    public_key: String,
+    signature: String,
+    platform: &'static str,
+}
+pub(super) fn identify(store: &impl SeedStore, challenge: DeviceChallenge, now: u64) -> Result<DeviceIdentityProof, &'static str> {
+    let started = Instant::now();
+    if !uuid(&challenge.id) || !uuid(&challenge.sid) || !positive(challenge.user_id)
+        || challenge.action != "identify-device" || decode(&challenge.nonce, Some(32)).is_err()
+        || challenge.expires_at <= now || challenge.expires_at > now.saturating_add(30_000) {
+        return Err("INVALID_DEVICE_CHALLENGE");
+    }
+    let platform = platform()?;
+    // Never create or rotate a key when merely identifying this machine.
+    let key = signing_key(store, challenge.user_id, false)?;
+    if started.elapsed() >= Duration::from_millis(challenge.expires_at - now) { return Err("INVALID_DEVICE_CHALLENGE"); }
+    let public_key = format!("-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----\n", STANDARD.encode(public_der(&key)));
+    let mut message = serde_json::to_value(&challenge).map_err(|_| "INVALID_DEVICE_CHALLENGE")?;
+    let map = message.as_object_mut().unwrap();
+    map.insert("protocolVersion".into(), 1.into());
+    map.insert("publicKey".into(), public_key.clone().into());
+    map.insert("platform".into(), platform.into());
+    let signature = STANDARD.encode(key.sign(canonical(&message).as_bytes()).to_bytes());
+    Ok(DeviceIdentityProof { challenge_id: challenge.id, public_key, signature, platform })
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct ApprovalRequest {
@@ -783,6 +812,23 @@ mod tests {
             VerifiedApproval::verify(store, keys, token, ms, now)?,
             now,
         )
+    }
+    #[test]
+    fn identification_matches_node_and_never_creates_a_key() {
+        let (_, store, _, _, ms, _) = fixture();
+        let vector: Value = serde_json::from_str(include_str!("../../../../fixtures/remote-device-identification-v1.json")).unwrap();
+        let challenge: DeviceChallenge = serde_json::from_value(vector["challenge"].clone()).unwrap();
+        let result = identify(&store, challenge.clone(), ms).unwrap();
+        assert_eq!(result.public_key, vector["proof"]["publicKey"]);
+        #[cfg(target_os = "macos")]
+        assert_eq!(result.signature, vector["proof"]["signature"]);
+        let empty = MemoryStore::default();
+        assert!(identify(&empty, challenge.clone(), ms).is_err());
+        assert!(empty.0.borrow().is_empty());
+        let mut wrong = challenge.clone(); wrong.action = "register-device".into();
+        assert!(identify(&store, wrong, ms).is_err());
+        assert!(register(&store, challenge.clone(), "test".into(), ms).is_err());
+        assert!(identify(&store, challenge, ms + 30_001).is_err());
     }
     #[test]
     fn registration_is_exactly_the_node_canonical_signature() {

@@ -3,10 +3,10 @@ import Koa from 'koa';
 import { koaBody } from 'koa-body';
 import { createServer, type Server } from 'http';
 import { Op } from 'sequelize';
-import { generateKeyPairSync, randomUUID } from 'crypto';
+import { generateKeyPairSync, randomUUID, randomBytes, sign, createHash } from 'crypto';
 
-const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), rename: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), authority: vi.fn(), grants: vi.fn(), createGrant: vi.fn(), user: vi.fn() }));
-vi.mock('../../../src/config/redis', () => ({ default: { get: mocks.redisGet } }));
+const mocks = vi.hoisted(() => ({ validate: vi.fn(), devices: vi.fn(), rename: vi.fn(), sessions: vi.fn(), revoke: vi.fn(), redisGet: vi.fn(), redisEval: vi.fn(), redisSet: vi.fn(), authority: vi.fn(), grants: vi.fn(), createGrant: vi.fn(), user: vi.fn() }));
+vi.mock('../../../src/config/redis', () => ({ default: { get: mocks.redisGet, eval: mocks.redisEval, set: mocks.redisSet } }));
 vi.mock('../../../src/services/loginSessionService', () => ({ validateAuthenticatedSession: mocks.validate }));
 vi.mock('../../../src/models/RemoteControl', () => ({
   RemoteDevice: { findAll: mocks.devices, findOne: mocks.revoke, update: mocks.rename },
@@ -14,6 +14,7 @@ vi.mock('../../../src/models/RemoteControl', () => ({
 }));
 vi.mock('../../../src/services/remoteSessionHistory', () => ({ RemoteSessionHistory: class { assertAuthorized = mocks.authority; } }));
 vi.mock('../../../src/models/User', () => ({ default: { findByPk: mocks.user } }));
+import { canonicalJson } from '../../../src/services/remoteControlProtocol';
 import remoteRouter from '../../../src/router/remoteControl';
 import cors from '../../../src/middleware/cors';
 let server: Server, origin: string;
@@ -157,5 +158,28 @@ describe('设备名称修改', () => {
   });
   it.each([{ alias: ' ' }, { alias: 'a'.repeat(81) }, { alias: 'a\u0000b' }, { alias: 3 }, { alias: '名称', ownerUserId: 8 }])('拒绝无效名称和额外字段 %j', async body => {
     expect((await patch(randomUUID(), body)).status).toBe(400); expect(mocks.rename).not.toHaveBeenCalled();
+  });
+});
+
+describe('本机识别 HTTP', () => {
+  it('验证签名后仅查询本人有效登记；不会登记或授予权限', async () => {
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const sid = randomUUID(); mocks.validate.mockResolvedValue({ userId: 7, sid });
+    const challenge = { id: randomUUID(), nonce: randomBytes(32).toString('base64url'), userId: 7, sid, action: 'identify-device', expiresAt: Date.now() + 30000 };
+    const pem = publicKey.export({ format: 'pem', type: 'spki' }).toString();
+    const signature = sign(null, Buffer.from(canonicalJson({ protocolVersion: 1, ...challenge, publicKey: pem, platform: 'macos' })), privateKey).toString('base64');
+    mocks.redisEval.mockResolvedValue(JSON.stringify(challenge));
+    const id = randomUUID(); mocks.revoke.mockResolvedValue({ id, alias: '本机', platform: 'macos', revokedAt: null, publicKey: pem });
+    const submit = () => fetch(`${origin}/api/remote-control/device-identity/verify`, { method: 'POST', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId: challenge.id, publicKey: pem, platform: 'macos', signature }) });
+    const response = await submit(); expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ device: { deviceId: id, alias: '本机', platform: 'macos', revokedAt: null } });
+    expect(mocks.revoke).toHaveBeenCalledWith({ where: { ownerUserId: 7, revokedAt: null, platform: 'macos', fingerprint: createHash('sha256').update(publicKey.export({ type: 'spki', format: 'der' })).digest('hex') } });
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    mocks.revoke.mockResolvedValue(null); expect((await submit()).status).toBe(404);
+  });
+  it('挑战接口限流并拒绝额外字段', async () => {
+    const submit = (body: unknown) => fetch(`${origin}/api/remote-control/device-identity-challenges`, { method: 'POST', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    mocks.redisEval.mockResolvedValue(6); expect((await submit({})).status).toBe(429);
+    expect((await submit({ userId: 8 })).status).toBe(400); expect(mocks.redisSet).not.toHaveBeenCalled();
   });
 });

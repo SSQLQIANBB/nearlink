@@ -48,6 +48,7 @@ pub struct RemoteControlCapabilities {
     can_capture: bool,
     can_inject_input: bool,
     device_registration_ready: bool,
+    device_identification_ready: bool,
     device_identity_reset_ready: bool,
     consent_prompt_ready: bool,
     permissions: Permissions,
@@ -259,6 +260,7 @@ fn capabilities(engine_ready: bool) -> RemoteControlCapabilities {
         can_capture: engine_ready,
         can_inject_input: engine_ready,
         device_registration_ready: probe.candidate_platform,
+        device_identification_ready: probe.candidate_platform,
         device_identity_reset_ready: probe.candidate_platform,
         consent_prompt_ready: probe.candidate_platform
             && identity::trusted_keys()
@@ -300,6 +302,40 @@ pub async fn remote_control_register_device(
             &device_store::OsSeedStore,
             challenge,
             alias,
+            identity::wall_ms()?,
+        );
+        worker_state
+            .lock()
+            .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+            .check(operation)?;
+        result
+    })
+    .await
+    .map_err(|_| "REMOTE_NATIVE_WORKER_FAILED");
+    state
+        .lock()
+        .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+        .finish(operation)?;
+    result?
+}
+
+#[tauri::command]
+pub async fn remote_control_identify_device(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, RemoteControlState>,
+    challenge: identity::DeviceChallenge,
+) -> Result<identity::DeviceIdentityProof, &'static str> {
+    require_main_window(window.label())?;
+    let state = state.identity.clone();
+    let operation = state
+        .lock()
+        .map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
+        .begin()?;
+    let worker_state = state.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let result = identity::identify(
+            &device_store::OsSeedStore,
+            challenge,
             identity::wall_ms()?,
         );
         worker_state

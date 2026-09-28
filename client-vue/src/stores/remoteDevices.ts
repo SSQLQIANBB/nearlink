@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
-import { getRemoteDeviceChallenge, getRemoteDevices, registerRemoteDevice, revokeRemoteDevice, renameRemoteDevice, type RemoteDevice } from '@/api/remoteControl';
-import { createRemoteDeviceProof, probeRemoteDeviceSupport, resetRemoteDeviceIdentity, validDeviceChallenge, type RemoteDeviceSupport } from '@/services/remoteDeviceNative';
+import { getRemoteIdentityChallenge, verifyRemoteIdentity, getRemoteDeviceChallenge, getRemoteDevices, registerRemoteDevice, revokeRemoteDevice, renameRemoteDevice, type RemoteDevice } from '@/api/remoteControl';
+import { identifyRemoteDevice, validIdentityChallenge, createRemoteDeviceProof, probeRemoteDeviceSupport, resetRemoteDeviceIdentity, validDeviceChallenge, type RemoteDeviceSupport } from '@/services/remoteDeviceNative';
 import { registerRemoteControlCleanup } from '@/services/remoteControlSafety';
 import { useAuthStore } from './auth';
 
@@ -11,8 +11,9 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
   const support = shallowRef<RemoteDeviceSupport | null>(null);
   const loading = ref(false);
   const probing = ref(false);
-  const phase = ref<'idle' | 'challenge' | 'native' | 'submitting' | 'revoking' | 'resetting' | 'renaming'>('idle');
+  const phase = ref<'idle' | 'challenge' | 'native' | 'submitting' | 'revoking' | 'resetting' | 'renaming' | 'identifying'>('idle');
   const identityUnavailable = ref(false);
+  const localDeviceId = ref<string | null>(null);
   const error = ref('');
   const notice = ref('');
   const busy = computed(() => phase.value !== 'idle');
@@ -38,6 +39,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     actionAbort?.abort(); actionAbort = null;
     notice.value = phase.value === 'submitting' ? '登记请求可能已提交，请刷新设备列表确认。'
       : phase.value === 'revoking' ? '撤销请求可能已提交，请刷新设备列表确认。'
+      : phase.value === 'identifying' ? '已取消本机设备识别。'
       : phase.value === 'renaming' ? '名称可能已保存，请刷新设备列表确认。'
       : phase.value === 'resetting' ? '已停止等待身份重建结果，请重新检测后确认。' : busy.value ? '已取消设备登记。' : notice.value;
     phase.value = 'idle';
@@ -45,7 +47,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
   function reset() {
     cancel(); listSequence++; supportSequence++;
     listAbort?.abort(); listAbort = null;
-    devices.value = []; support.value = null; loading.value = false; probing.value = false;
+    devices.value = []; localDeviceId.value = null; support.value = null; loading.value = false; probing.value = false;
     error.value = ''; notice.value = ''; identityUnavailable.value = false;
   }
   registerRemoteControlCleanup(reset);
@@ -60,7 +62,10 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     loading.value = true; error.value = '';
     try {
       const result = await getRemoteDevices(abort.signal);
-      if (sameIdentity(expected, current) && sequence === listSequence) devices.value = result.devices;
+      if (sameIdentity(expected, current) && sequence === listSequence) {
+        devices.value = result.devices;
+        if (!result.devices.some(device => device.deviceId === localDeviceId.value && !device.revokedAt)) localDeviceId.value = null;
+      }
     } catch {
       if (!abort.signal.aborted && sameIdentity(expected, current) && sequence === listSequence) error.value = '无法读取设备列表，请稍后刷新。';
     } finally { if (sequence === listSequence) { loading.value = false; listAbort = null; } }
@@ -80,6 +85,30 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     const abort = new AbortController(); actionAbort = abort;
     error.value = ''; notice.value = '';
     return { expected, current, abort };
+  }
+  async function identify() {
+    if (busy.value) return false;
+    if (!support.value?.desktop || !support.value.identification) { error.value = '请使用支持本机识别的新版桌面客户端。'; return false; }
+    const { expected, current, abort } = begin();
+    phase.value = 'identifying'; localDeviceId.value = null;
+    try {
+      const { challenge } = await getRemoteIdentityChallenge(abort.signal);
+      if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
+      if (!validIdentityChallenge(challenge, expected.userId, expected.sid)) throw new Error('INVALID_DEVICE_CHALLENGE');
+      const proof = await identifyRemoteDevice(challenge, abort.signal);
+      if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
+      const { device } = await verifyRemoteIdentity(proof, abort.signal);
+      if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
+      if (device.revokedAt) throw new Error('DEVICE_REVOKED');
+      listSequence++; listAbort?.abort(); listAbort = null; loading.value = false;
+      devices.value = [device, ...devices.value.filter(item => item.deviceId !== device.deviceId)];
+      localDeviceId.value = device.deviceId;
+      notice.value = `已识别本机：${device.alias}。识别不会开启远程协助。`;
+      return true;
+    } catch {
+      if (sameIdentity(expected, current) && !abort.signal.aborted) error.value = '未能识别本机，请确认当前账号已登记此设备、登记未撤销且系统凭据可访问。';
+      return false;
+    } finally { if (current === generation) { phase.value = 'idle'; actionAbort = null; } }
   }
   async function register(alias: string) {
     if (busy.value || identityUnavailable.value) return false;
@@ -101,6 +130,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
       if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
       listSequence++; listAbort?.abort(); listAbort = null; loading.value = false;
       devices.value = [device, ...devices.value.filter(item => item.deviceId !== device.deviceId)];
+      localDeviceId.value = device.deviceId;
       notice.value = '设备身份已登记。登记不会开启远程观看或键鼠控制。';
       return true;
     } catch (failure) {
@@ -124,6 +154,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     try {
       await revokeRemoteDevice(deviceId, abort.signal);
       if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
+      if (localDeviceId.value === deviceId) localDeviceId.value = null;
       // Invalidate a list captured before this deletion, then read authoritative revocation time.
       listSequence++; listAbort?.abort();
       devices.value = devices.value.filter(device => device.deviceId !== deviceId);
@@ -160,7 +191,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
     try {
       const rebuilt = await resetRemoteDeviceIdentity(expected.userId, abort.signal);
       if (!sameIdentity(expected, current) || abort.signal.aborted) return false;
-      if (rebuilt) identityUnavailable.value = false;
+      if (rebuilt) { identityUnavailable.value = false; localDeviceId.value = null; }
       notice.value = rebuilt ? '本机设备身份已重建，请重新登记。原设备记录和协助许可不会继承。' : '已取消重建，原设备身份未更改。';
       return rebuilt;
     } catch {
@@ -168,5 +199,5 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
       return false;
     } finally { if (current === generation) { phase.value = 'idle'; actionAbort = null; } }
   }
-  return { devices, support, loading, probing, phase, busy, identityUnavailable, error, notice, initialize, refresh, register, revoke, rename, rebuildIdentity, cancel, reset };
+  return { devices, localDeviceId, identify, support, loading, probing, phase, busy, identityUnavailable, error, notice, initialize, refresh, register, revoke, rename, rebuildIdentity, cancel, reset };
 });

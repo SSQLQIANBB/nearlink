@@ -62,6 +62,15 @@ afterAll(async () => {
 });
 
 describe('真实Redis远控竞争与隔离（独立Unix socket，不访问应用Redis）', () => {
+  it('识别挑战按账号、登录会话及用途隔离，只能消费一次', async () => {
+    const challenges = new RemoteDeviceChallengeStore(redis);
+    const challenge = await challenges.create(1, 'sid1', 'identify-device');
+    await expect(challenges.consume(challenge.id, 2, 'sid1', 'identify-device')).rejects.toThrow();
+    await expect(challenges.consume(challenge.id, 1, 'sid2', 'identify-device')).rejects.toThrow();
+    await expect(challenges.consume(challenge.id, 1, 'sid1', 'register-device')).rejects.toThrow();
+    expect(await challenges.consume(challenge.id, 1, 'sid1', 'identify-device')).toEqual(challenge);
+    await expect(challenges.consume(challenge.id, 1, 'sid1', 'identify-device')).rejects.toThrow();
+  });
   it('两个主控并发请求只允许一个占用目标设备', async () => {
     const attempts = await Promise.allSettled([
       service.request(request()),

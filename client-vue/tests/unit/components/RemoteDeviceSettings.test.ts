@@ -8,10 +8,18 @@ vi.mock('@/stores/remoteDevices', () => ({ useRemoteDevicesStore: () => mocks.st
 import RemoteDeviceSettings from '@/components/RemoteDeviceSettings.vue';
 beforeEach(() => {
   mocks.store = reactive({ devices: [], support: { desktop: false, registration: false, identityReset: false }, loading: false, probing: false,
-    phase: 'idle', busy: false, identityUnavailable: false, error: '', notice: '', initialize: vi.fn(), refresh: vi.fn(), register: vi.fn(), revoke: vi.fn(), rename: vi.fn().mockResolvedValue(true), cancel: vi.fn(), rebuildIdentity: vi.fn() });
+    localDeviceId: null, identify: vi.fn(), phase: 'idle', busy: false, identityUnavailable: false, error: '', notice: '', initialize: vi.fn(), refresh: vi.fn(), register: vi.fn(), revoke: vi.fn(), rename: vi.fn().mockResolvedValue(true), cancel: vi.fn(), rebuildIdentity: vi.fn() });
 });
 const render = () => mount(RemoteDeviceSettings);
 describe('远程设备设置界面', () => {
+  it('识别入口只对支持客户端显示，成功记录展示本机标记', async () => {
+    const wrapper = render(); expect(wrapper.text()).not.toContain('识别本机设备');
+    Object.assign(mocks.store.support, { desktop: true, identification: true });
+    mocks.store.devices = [{ deviceId: 'device-1', alias: '本机', platform: 'macos', revokedAt: null }];
+    await flushPromises(); await wrapper.findAll('button').find(item => item.text() === '识别本机设备')!.trigger('click');
+    expect(mocks.store.identify).toHaveBeenCalledOnce(); mocks.store.localDeviceId = 'device-1'; await flushPromises();
+    expect(wrapper.text()).toContain('本机（已验证）'); wrapper.unmount();
+  });
   it('组合名称、登记状态和系统筛选，区分无设备和无匹配结果', async () => {
     mocks.store.devices = [
       { deviceId: '1', alias: 'Office Mac', platform: 'macos', revokedAt: null },

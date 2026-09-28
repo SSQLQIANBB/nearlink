@@ -1,10 +1,10 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import type { RemoteDeviceChallenge, RemoteDeviceRegistration } from '@/api/remoteControl';
+import type { RemoteDeviceChallenge, RemoteDeviceRegistration, RemoteIdentityChallenge, RemoteIdentityProof } from '@/api/remoteControl';
 import type { NativeRemoteCapabilities } from './remoteControlCapabilities';
 import type { RemoteSignedEnvelope } from './remoteControlProof';
 import { registerRemoteControlCleanup } from './remoteControlSafety';
 
-export interface RemoteDeviceSupport { desktop: boolean; registration: boolean; identityReset: boolean; consent: boolean; platform: string; }
+export interface RemoteDeviceSupport { desktop: boolean; registration: boolean; identification?: boolean; identityReset: boolean; consent: boolean; platform: string; }
 let generation = 0;
 let active = false;
 let authorityMayExist = false;
@@ -27,6 +27,7 @@ export async function probeRemoteDeviceSupport(): Promise<RemoteDeviceSupport> {
       result.platform = capability.platform;
       result.registration = capability.deviceRegistrationReady === true;
       result.identityReset = capability.deviceIdentityResetReady === true;
+      result.identification = capability.deviceIdentificationReady === true;
       result.consent = capability.consentPromptReady === true;
     }
   } catch { /* Older clients and unavailable OS credential stores remain unavailable. */ }
@@ -118,4 +119,17 @@ export async function resetRemoteDeviceIdentity(userId: number, signal: AbortSig
   const result = await operation<{ reset: boolean }>('remote_control_reset_identity', { userId }, signal, 45000);
   if (!result || Object.keys(result).length !== 1 || typeof result.reset !== 'boolean') throw new Error('REMOTE_RESET_INVALID');
   return result.reset;
+}
+
+export function validIdentityChallenge(value: RemoteIdentityChallenge, userId: number, sid: string) {
+  return value?.action === 'identify-device' && validDeviceChallenge({ ...value, action: 'register-device' }, userId, sid);
+}
+export async function identifyRemoteDevice(challenge: RemoteIdentityChallenge, signal: AbortSignal) {
+  const value = await operation<RemoteIdentityProof>('remote_control_identify_device', { challenge }, signal, Math.max(1, challenge.expiresAt - Date.now()));
+  if (!value || Object.keys(value).some(key => !['challengeId', 'publicKey', 'signature', 'platform'].includes(key))
+    || value.challengeId !== challenge.id || !['macos', 'windows'].includes(value.platform)
+    || typeof value.publicKey !== 'string' || value.publicKey.length > 1024 || !value.publicKey.startsWith('-----BEGIN PUBLIC KEY-----\n')
+    || typeof value.signature !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(value.signature)
+    || challenge.expiresAt <= Date.now()) throw new Error('REMOTE_DEVICE_PROOF_INVALID');
+  return value;
 }

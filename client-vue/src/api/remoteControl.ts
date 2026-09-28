@@ -62,3 +62,8 @@ export const getRemoteSigningKeys = () => http.get<{ keys: import('@/services/re
 export const getRemoteSessionIce = (sessionId: string) => http.get<import('@/services/remoteControlIce').RemoteIceConfiguration>(`/api/remote-control/sessions/${encodeURIComponent(sessionId)}/ice`);
 
 export const renameRemoteDevice = (deviceId: string, alias: string, signal?: AbortSignal) => request<{ device: RemoteDevice }>(`/api/remote-control/devices/${encodeURIComponent(deviceId)}`, { method: 'PATCH', body: { alias }, signal });
+
+export interface RemoteIdentityChallenge extends Omit<RemoteDeviceChallenge, 'action'> { action: 'identify-device' }
+export type RemoteIdentityProof = Omit<RemoteDeviceRegistration, 'alias'>;
+export const getRemoteIdentityChallenge = (signal?: AbortSignal) => request<{ challenge: RemoteIdentityChallenge }>('/api/remote-control/device-identity-challenges', { method: 'POST', body: {}, signal });
+export const verifyRemoteIdentity = (proof: RemoteIdentityProof, signal?: AbortSignal) => request<{ device: RemoteDevice }>('/api/remote-control/device-identity/verify', { method: 'POST', body: proof, signal });

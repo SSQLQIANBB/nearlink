@@ -10,7 +10,7 @@ export const deviceRegistrationSchema = z.object({
   platform: z.enum(['macos', 'windows']),
 }).strict();
 export type RegistrationProof = z.infer<typeof deviceRegistrationSchema>;
-export type DeviceChallenge = { id: string; nonce: string; userId: number; sid: string; action: 'register-device'; expiresAt: number };
+export type DeviceChallenge = { id: string; nonce: string; userId: number; sid: string; action: 'register-device' | 'identify-device'; expiresAt: number };
 export function registrationMessage(challenge: DeviceChallenge, data: Omit<RegistrationProof, 'signature' | 'challengeId'>) {
   return canonicalJson({ protocolVersion: 1, ...challenge, ...data });
 }
@@ -30,21 +30,36 @@ export function verifyRegistrationProof(challenge: DeviceChallenge, input: Regis
 
 export class RemoteDeviceChallengeStore {
   constructor(private readonly redis: Pick<Redis, 'set' | 'eval'>, private readonly now = Date.now) {}
-  async create(userId: number, sid: string): Promise<DeviceChallenge> {
+  async create(userId: number, sid: string, action: DeviceChallenge['action'] = 'register-device'): Promise<DeviceChallenge> {
     const challenge: DeviceChallenge = { id: randomUUID(), nonce: randomBytes(32).toString('base64url'),
-      userId, sid, action: 'register-device', expiresAt: this.now() + REMOTE_LIMITS.challengeMs };
+      userId, sid, action, expiresAt: this.now() + REMOTE_LIMITS.challengeMs };
     await this.redis.set(`remote:challenge:${challenge.id}`, JSON.stringify(challenge), 'PX', REMOTE_LIMITS.challengeMs);
     return challenge;
   }
-  async consume(id: string, userId: number, sid: string): Promise<DeviceChallenge> {
+  async consume(id: string, userId: number, sid: string, action: DeviceChallenge['action'] = 'register-device'): Promise<DeviceChallenge> {
     const raw = await this.redis.eval(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return false end
 local challenge = cjson.decode(raw)
-if challenge.userId ~= tonumber(ARGV[1]) or challenge.sid ~= ARGV[2] then return false end
+if challenge.userId ~= tonumber(ARGV[1]) or challenge.sid ~= ARGV[2] or challenge.action ~= ARGV[3] then return false end
 redis.call('DEL', KEYS[1])
-return raw`, 1, `remote:challenge:${id}`, userId, sid);
+return raw`, 1, `remote:challenge:${id}`, userId, sid, action);
     if (typeof raw !== 'string') throw new RemoteControlError('INVALID_DEVICE_PROOF', 403);
     return JSON.parse(raw);
   }
+}
+
+export const deviceIdentitySchema = deviceRegistrationSchema.omit({ alias: true });
+export type DeviceIdentityProof = z.infer<typeof deviceIdentitySchema>;
+export function verifyDeviceIdentity(challenge: DeviceChallenge, input: DeviceIdentityProof, userId: number, sid: string, now: number) {
+  if (challenge.id !== input.challengeId || challenge.userId !== userId || challenge.sid !== sid
+    || challenge.action !== 'identify-device' || challenge.expiresAt <= now) throw new RemoteControlError('INVALID_DEVICE_PROOF', 403);
+  try {
+    const key = createPublicKey(input.publicKey);
+    if (key.asymmetricKeyType !== 'ed25519') throw new Error('key type');
+    const message = canonicalJson({ protocolVersion: 1, ...challenge, publicKey: input.publicKey, platform: input.platform });
+    const signature = Buffer.from(input.signature, 'base64');
+    if (signature.length !== 64 || !verify(null, Buffer.from(message), key, signature)) throw new Error('signature');
+    return createHash('sha256').update(key.export({ type: 'spki', format: 'der' })).digest('hex');
+  } catch { throw new RemoteControlError('INVALID_DEVICE_PROOF', 403); }
 }

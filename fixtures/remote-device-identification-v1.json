@@ -1,0 +1,17 @@
+{
+  "now": 1700000000000,
+  "challenge": {
+    "id": "88888888-8888-4888-8888-888888888888",
+    "nonce": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "userId": 1,
+    "sid": "11111111-1111-4111-8111-111111111111",
+    "action": "identify-device",
+    "expiresAt": 1700000030000
+  },
+  "proof": {
+    "challengeId": "88888888-8888-4888-8888-888888888888",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=\n-----END PUBLIC KEY-----\n",
+    "platform": "macos",
+    "signature": "Bejz9no0yP6rcmM2YOmcay8wlZGBRl/+91cEgVMYUTJAr+PpTcB6Ob8aMlb8pvBCpgz6fyP58tE8L+mOswXPCQ=="
+  }
+}

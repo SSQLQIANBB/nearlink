@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => mocks);
-import { cancelRemoteNativeOperation, confirmRemoteNativeRequest, createRemoteDeviceProof, probeRemoteDeviceSupport, resetRemoteDeviceIdentity, validDeviceChallenge } from '@/services/remoteDeviceNative';
+import { identifyRemoteDevice, validIdentityChallenge, cancelRemoteNativeOperation, confirmRemoteNativeRequest, createRemoteDeviceProof, probeRemoteDeviceSupport, resetRemoteDeviceIdentity, validDeviceChallenge } from '@/services/remoteDeviceNative';
 import { clearRemoteControlLocally } from '@/services/remoteControlSafety';
 const challenge = () => ({ id: '11111111-1111-4111-8111-111111111111', nonce: 'A'.repeat(43), userId: 1, sid: '22222222-2222-4222-8222-222222222222', action: 'register-device' as const, expiresAt: Date.now() + 29000 });
 const proof = () => ({ challengeId: challenge().id, publicKey: '-----BEGIN PUBLIC KEY-----\npublic\n-----END PUBLIC KEY-----\n', signature: `${'A'.repeat(86)}==`, alias: '办公电脑', platform: 'macos' });
@@ -12,6 +12,14 @@ beforeEach(async () => {
   await cancelRemoteNativeOperation(); vi.clearAllMocks();
 });
 describe('设备身份与OS授权桥', () => {
+  it('识别使用独立命令，不携带别名或调用登记，验证挑战用途', async () => {
+    const input = { ...challenge(), action: 'identify-device' as const };
+    const { alias: _, ...identityProof } = proof(); mocks.invoke.mockResolvedValue(identityProof);
+    expect(validIdentityChallenge(input, 1, input.sid)).toBe(true);
+    expect(validIdentityChallenge(challenge() as any, 1, input.sid)).toBe(false);
+    expect(await identifyRemoteDevice(input, new AbortController().signal)).toEqual(identityProof);
+    expect(mocks.invoke).toHaveBeenCalledWith('remote_control_identify_device', { challenge: input });
+  });
   it('Web和缺少新能力的旧桌面都不能登记；检测不会创建密钥', async () => {
     mocks.isTauri.mockReturnValue(false);
     expect(await probeRemoteDeviceSupport()).toMatchObject({ desktop: false, registration: false });
@@ -23,7 +31,7 @@ describe('设备身份与OS授权桥', () => {
   });
   it('登记能力独立于远控发布与引擎，不以其开启控制', async () => {
     mocks.invoke.mockResolvedValue({ runtime: 'tauri', protocolVersion: 1, platform: 'macos', engineReady: false, deviceRegistrationReady: true, consentPromptReady: false });
-    expect(await probeRemoteDeviceSupport()).toEqual({ desktop: true, platform: 'macos', registration: true, identityReset: false, consent: false });
+    expect(await probeRemoteDeviceSupport()).toEqual({ desktop: true, platform: 'macos', registration: true, identityReset: false, identification: false, consent: false });
   });
   it('只调用限定用途登记命令，结果只含公钥和proof', async () => {
     const input = challenge(); mocks.invoke.mockResolvedValue(proof());

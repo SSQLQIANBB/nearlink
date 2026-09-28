@@ -3,14 +3,18 @@
     <h2>我的远程设备</h2>
     <p>管理绑定到当前账号的设备身份。远程协助是否可用取决于客户端和系统权限。</p>
     <p class="note">设备登记不会开启屏幕观看或键鼠控制，也不代表设备在线。发起远程协助无需先登记本机。</p>
-    <RemoteHostSettings v-if="remote.capabilities?.showHostEntry" :devices="devices.devices" />
+    <RemoteHostSettings v-if="remote.capabilities?.showHostEntry" :devices="devices.devices" :local-device-id="devices.localDeviceId" />
+    <div v-if="devices.support?.desktop && devices.support.identification" class="actions">
+      <n-button :disabled="devices.busy" :loading="devices.phase === 'identifying'" @click="devices.identify">识别本机设备</n-button>
+      <n-button v-if="devices.phase === 'identifying'" @click="devices.cancel">取消识别</n-button>
+    </div>
     <n-spin :show="devices.probing">
       <form v-if="devices.support?.desktop && devices.support.registration" class="registration" @submit.prevent="register">
         <label for="remote-device-alias">当前设备名称</label>
         <n-input id="remote-device-alias" v-model:value="alias" placeholder="例如：办公电脑" :maxlength="80" :disabled="devices.busy" />
         <div class="actions">
           <n-button attr-type="submit" type="primary" :disabled="devices.busy || devices.identityUnavailable || !alias.trim()" :loading="['challenge', 'native', 'submitting'].includes(devices.phase)">登记当前设备</n-button>
-          <n-button v-if="devices.busy && !['revoking', 'renaming'].includes(devices.phase)" @click="devices.cancel">{{ devices.phase === 'resetting' ? '取消等待' : '取消登记' }}</n-button>
+          <n-button v-if="devices.busy && !['revoking', 'renaming', 'identifying'].includes(devices.phase)" @click="devices.cancel">{{ devices.phase === 'resetting' ? '取消等待' : '取消登记' }}</n-button>
         </div>
       </form>
       <p v-else-if="devices.support?.desktop">当前客户端暂不支持设备登记，请升级桌面客户端后重试。</p>
@@ -36,7 +40,7 @@
     <p v-else-if="devices.devices.length && !filteredDevices.length">没有符合条件的设备，请调整搜索或筛选。</p>
     <ul v-else>
       <li v-for="device in filteredDevices" :key="device.deviceId">
-        <div><strong>{{ device.alias }}</strong><span> · {{ device.platform === 'macos' ? 'macOS' : 'Windows' }} · {{ device.revokedAt ? '已撤销' : '已登记' }}</span></div>
+        <div><strong>{{ device.alias }}</strong><span v-if="devices.localDeviceId === device.deviceId && !device.revokedAt"> · 本机（已验证）</span><span> · {{ device.platform === 'macos' ? 'macOS' : 'Windows' }} · {{ device.revokedAt ? '已撤销' : '已登记' }}</span></div>
         <form v-if="editingId === device.deviceId && !device.revokedAt" class="rename-form" @submit.prevent="saveName">
           <label :for="`rename-${device.deviceId}`">设备名称</label>
           <n-input :id="`rename-${device.deviceId}`" v-model:value="editedName" :maxlength="80" :disabled="devices.busy" placeholder="输入设备名称" />

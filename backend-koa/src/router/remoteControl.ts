@@ -9,7 +9,7 @@ import { validateAuthenticatedSession } from '../services/loginSessionService';
 import { REMOTE_HISTORY_RETENTION_MS } from '../services/remoteControlRetention';
 import { getRemoteControlCapabilities } from '../services/remoteControlPolicy';
 import { RemoteControlError, uuid } from '../services/remoteControlProtocol';
-import { deviceRegistrationSchema, RemoteDeviceChallengeStore, verifyRegistrationProof } from '../services/remoteDeviceProof';
+import { deviceRegistrationSchema, deviceIdentitySchema, verifyDeviceIdentity, RemoteDeviceChallengeStore, verifyRegistrationProof } from '../services/remoteDeviceProof';
 import { remoteCredentialSignerFromEnvironment } from '../services/remoteCredentials';
 import { RemoteIceService, turnSettingsFromEnvironment } from '../services/remoteIce';
 import { RedisRemoteSessionStore } from '../services/redisRemoteSessionStore';
@@ -59,6 +59,26 @@ router.post('/device-challenges', async ctx => {
   const count = Number(await redis.eval(`local n=redis.call('INCR', KEYS[1]); if n==1 then redis.call('PEXPIRE', KEYS[1], 60000) end; return n`, 1, `remote:challenge-rate:${userId}`));
   if (count > 5) throw new RemoteControlError('RATE_LIMITED', 429);
   ctx.body = { challenge: await challenges.create(userId, sid) };
+});
+
+router.post('/device-identity-challenges', async ctx => {
+  z.object({}).strict().parse(ctx.request.body || {});
+  const { userId, sid } = ctx.state.remoteAuth;
+  const count = Number(await redis.eval(`local n=redis.call('INCR', KEYS[1]); if n==1 then redis.call('PEXPIRE', KEYS[1], 60000) end; return n`, 1, `remote:identity-rate:${userId}`));
+  if (count > 5) throw new RemoteControlError('RATE_LIMITED', 429);
+  ctx.set('Cache-Control', 'no-store');
+  ctx.body = { challenge: await challenges.create(userId, sid, 'identify-device') };
+});
+router.post('/device-identity/verify', async ctx => {
+  const input = deviceIdentitySchema.parse(ctx.request.body);
+  const { userId, sid } = ctx.state.remoteAuth;
+  const challenge = await challenges.consume(input.challengeId, userId, sid, 'identify-device');
+  const fingerprint = verifyDeviceIdentity(challenge, input, userId, sid, Date.now());
+  const device = await RemoteDevice.findOne({ where: { fingerprint, ownerUserId: userId, revokedAt: null, platform: input.platform } });
+  if (!device) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
+  ctx.set('Cache-Control', 'no-store');
+  // Identification is not presence, a trusted-controller policy, or authorization.
+  ctx.body = { device: safeDevice(device) };
 });
 
 router.post('/devices', async ctx => {

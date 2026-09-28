@@ -3,11 +3,11 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({
   auth: { token: '', currentUser: { id: 1 }, authGeneration: 1, loggingOut: false },
-  list: vi.fn(), challenge: vi.fn(), register: vi.fn(), rename: vi.fn(), revoke: vi.fn(), probe: vi.fn(), proof: vi.fn(), rebuild: vi.fn(),
+  identityChallenge: vi.fn(), identify: vi.fn(), verifyIdentity: vi.fn(), list: vi.fn(), challenge: vi.fn(), register: vi.fn(), rename: vi.fn(), revoke: vi.fn(), probe: vi.fn(), proof: vi.fn(), rebuild: vi.fn(),
 }));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }));
-vi.mock('@/api/remoteControl', () => ({ getRemoteDevices: mocks.list, getRemoteDeviceChallenge: mocks.challenge, registerRemoteDevice: mocks.register, revokeRemoteDevice: mocks.revoke, renameRemoteDevice: mocks.rename }));
-vi.mock('@/services/remoteDeviceNative', async original => ({ ...await original<typeof import('@/services/remoteDeviceNative')>(), probeRemoteDeviceSupport: mocks.probe, createRemoteDeviceProof: mocks.proof, resetRemoteDeviceIdentity: mocks.rebuild }));
+vi.mock('@/api/remoteControl', () => ({ getRemoteIdentityChallenge: mocks.identityChallenge, verifyRemoteIdentity: mocks.verifyIdentity, getRemoteDevices: mocks.list, getRemoteDeviceChallenge: mocks.challenge, registerRemoteDevice: mocks.register, revokeRemoteDevice: mocks.revoke, renameRemoteDevice: mocks.rename }));
+vi.mock('@/services/remoteDeviceNative', async original => ({ ...await original<typeof import('@/services/remoteDeviceNative')>(), identifyRemoteDevice: mocks.identify, probeRemoteDeviceSupport: mocks.probe, createRemoteDeviceProof: mocks.proof, resetRemoteDeviceIdentity: mocks.rebuild }));
 import { useRemoteDevicesStore } from '@/stores/remoteDevices';
 import { clearRemoteControlLocally } from '@/services/remoteControlSafety';
 const sid = '22222222-2222-4222-8222-222222222222';
@@ -128,5 +128,35 @@ describe('设备重命名', () => {
     expect(await store.rename(device.deviceId, '名称')).toBe(false); expect(mocks.rename).not.toHaveBeenCalled();
     store.devices = [device]; mocks.rename.mockRejectedValueOnce(new Error('offline'));
     expect(await store.rename(device.deviceId, '名称')).toBe(false); expect(store.busy).toBe(false); expect(store.error).toContain('刷新');
+  });
+});
+
+describe('本机设备识别', () => {
+  async function ready() {
+    const store = await setup(); store.support!.identification = true;
+    mocks.identityChallenge.mockResolvedValue({ challenge: { id: device.deviceId, nonce: 'A'.repeat(43), userId: 1, sid, action: 'identify-device', expiresAt: Date.now() + 29000 } });
+    mocks.identify.mockResolvedValue({ proof: 'native' }); mocks.verifyIdentity.mockResolvedValue({ device });
+    return store;
+  }
+  it('验证后标记本机，不创建新登记或发起远控', async () => {
+    const store = await ready(); expect(await store.identify()).toBe(true);
+    expect(store.localDeviceId).toBe(device.deviceId); expect(store.devices).toEqual([device]);
+    expect(mocks.register).not.toHaveBeenCalled(); expect(store.notice).toContain('不会开启');
+    mocks.list.mockResolvedValue({ devices: [{ ...device, revokedAt: '2026-09-28' }] });
+    await store.refresh(); expect(store.localDeviceId).toBeNull();
+  });
+  it('账号切换后的旧识别证明不向新账号提交', async () => {
+    const store = await ready(); const wait = deferred(); mocks.identify.mockReturnValueOnce(wait.promise);
+    const pending = store.identify(); await flushPromises();
+    mocks.auth.authGeneration++; clearRemoteControlLocally('AUTH_REPLACED'); wait.resolve({ proof: 'old' });
+    expect(await pending).toBe(false); expect(mocks.verifyIdentity).not.toHaveBeenCalled(); expect(store.localDeviceId).toBeNull();
+  });
+  it('取消或失败不保留本机标记，旧客户端不签名', async () => {
+    const store = await ready(); const wait = deferred(); mocks.verifyIdentity.mockReturnValueOnce(wait.promise);
+    const pending = store.identify(); await flushPromises(); store.cancel(); wait.resolve({ device });
+    expect(await pending).toBe(false); expect(store.localDeviceId).toBeNull();
+    mocks.identify.mockRejectedValueOnce(new Error('no key')); expect(await store.identify()).toBe(false);
+    expect(store.error).toContain('未能识别'); store.support!.identification = false;
+    expect(await store.identify()).toBe(false);
   });
 });
