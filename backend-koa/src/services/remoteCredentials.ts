@@ -117,6 +117,15 @@ export class RemoteCredentialSigner {
       hostKeyVersion: device.keyVersion, hostKeyFingerprint: device.fingerprint,
       issuedAt: now, expiresAt: now + REMOTE_LIMITS.challengeMs }, this.key);
   }
+  issueControllerChallenge(controller: import('./remoteControlProtocol').RemoteEndpoint, device: ApprovalHostDevice, challenge: string, now = Date.now()) {
+    endpoint.parse(controller); nonce.parse(challenge); uuid.parse(device.id);
+    if (device.revokedAt || device.ownerUserId !== controller.userId || now < this.publicKey.notBefore
+      || now + REMOTE_LIMITS.challengeMs > this.publicKey.notAfter) return fail();
+    return signed(this.publicKey.keyId, { protocolVersion: 1, issuer: 'todesk-remote-control',
+      audience: 'todesk-native-controller', purpose: 'controller-challenge', controller,
+      deviceId: device.id, keyVersion: device.keyVersion, keyFingerprint: device.fingerprint,
+      challenge, issuedAt: now, expiresAt: now + REMOTE_LIMITS.challengeMs }, this.key);
+  }
   /** Called only after the ICE service revalidates live session and durable authority. */
   issueIceConfiguration(session: RemoteSession, configuration: RemoteIceConfiguration, now = Date.now()) {
     integer.parse(now);
@@ -229,4 +238,14 @@ export function verifyRemoteApproval(envelope: unknown, trustedKey: RemotePublic
     || claims.sessionExpiresAt < claims.expiresAt || claims.sessionExpiresAt - claims.issuedAt > REMOTE_LIMITS.sessionMs
     || (claims.action === 'grant-control' && claims.requestedScope !== 'control')) return fail();
   return claims;
+}
+
+const controllerBindingSchema = z.object({ protocolVersion: z.literal(1), purpose: z.literal('native-controller-binding'),
+  controller: endpoint, deviceId: uuid, challenge: nonce, issuedAt: integer, expiresAt: positive }).strict();
+export function verifyControllerBinding(proof: unknown, device: import('./remoteAuthorizationCoordinator').RemoteAuthorityDevice,
+  controller: import('./remoteControlProtocol').RemoteEndpoint, challenge: string, issuedAt: number, now: number) {
+  const claims = controllerBindingSchema.parse(decodeRemoteDeviceEvidence(proof, device));
+  if (device.ownerUserId !== controller.userId || claims.deviceId !== device.id || !isEndpoint(controller, claims.controller)
+    || claims.challenge !== challenge || claims.issuedAt < issuedAt || claims.issuedAt > now
+    || claims.expiresAt <= now || claims.expiresAt > issuedAt + REMOTE_LIMITS.challengeMs) return fail();
 }

@@ -13,6 +13,7 @@ export interface NativeRemoteCapabilities {
   canInjectInput: boolean;
   deviceRegistrationReady?: boolean;
   deviceIdentificationReady?: boolean;
+  controllerDeviceBindingReady?: boolean;
   deviceIdentityResetReady?: boolean;
   consentPromptReady?: boolean;
   permissions: { screenCapture: RemotePermission; inputControl: RemotePermission };

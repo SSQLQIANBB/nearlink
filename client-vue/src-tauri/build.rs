@@ -55,6 +55,7 @@ fn main() {
             "remote_control_stop",
             "remote_control_register_device",
             "remote_control_identify_device",
+            "remote_control_bind_controller",
             "remote_control_confirm_request",
             "remote_control_clear_remembered_approvals",
             "remote_control_list_remembered_approvals",

@@ -2,16 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({
-  capabilities: { canControl: true, targets: [{ deviceId: 'device', alias: 'Test device', platform: 'macos', online: true, busy: false, canHostView: true, canHostControl: true }], capabilities: { runtime: 'web' } },
+  localDeviceId: null as string | null,
+  capabilities: { canControl: true, targets: [{ deviceId: 'device', alias: 'Test device', platform: 'macos', online: true, busy: false, canHostView: true, canHostControl: true }], capabilities: { runtime: 'web' } as any },
   ice: vi.fn(), keys: vi.fn(), peers: [] as any[], adapters: [] as any[],
 }));
+vi.mock('@/stores/remoteDevices', () => ({ useRemoteDevicesStore: () => ({ localDeviceId: mocks.localDeviceId }) }));
+vi.mock('@/services/remoteDeviceNative', () => ({ proveRemoteController: vi.fn() }));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ token: 'authenticated-token', loggingOut: false }) }));
 vi.mock('@/stores/remoteControl', () => ({ useRemoteControlStore: () => mocks.capabilities }));
 vi.mock('@/api/remoteControl', () => ({ getRemoteSessionIce: mocks.ice, getRemoteSigningKeys: mocks.keys }));
 vi.mock('@/services/remoteControlAdapter', () => ({ SocketRemoteControllerAdapter: class {
   request = vi.fn().mockResolvedValue('session'); signal = vi.fn().mockResolvedValue(undefined); ready = vi.fn().mockResolvedValue(undefined);
   end = vi.fn().mockResolvedValue(undefined); dispose = vi.fn(); requestControl = vi.fn().mockResolvedValue(undefined);
-  constructor(_token: string, _platform: string, public event: (value: any) => void) { mocks.adapters.push(this); }
+  constructor(_token: string, _platform: string, public event: (value: any) => void, public binding?: any) { mocks.adapters.push(this); }
 } }));
 vi.mock('@/services/remoteControlPeer', () => ({ sdpSha256Fingerprint: vi.fn(), RemoteControlPeer: class {
   start = vi.fn().mockResolvedValue(undefined); end = vi.fn(); attachVideo = vi.fn(); pauseInput = vi.fn();
@@ -26,6 +29,7 @@ const bootstrap = { sessionId: 'session', host: {}, controller: {}, consentNonce
 beforeEach(() => {
   mediaOccupancy.stop('TEST_RESET');
   setActivePinia(createPinia()); vi.clearAllMocks();
+  mocks.localDeviceId = null; mocks.capabilities.capabilities = { runtime: 'web' };
   mocks.capabilities.canControl = true; mocks.peers = []; mocks.adapters = [];
   mocks.ice.mockResolvedValue({ iceServers: [{ urls: ['turn:turn.example.com:3478?transport=udp'], username: 'temporary', credential: 'test-only' }], iceTransportPolicy: 'all', expiresAt: bootstrap.hardDeadline + 299000 });
   mocks.keys.mockResolvedValue({ keys: [] });
@@ -38,6 +42,20 @@ async function connected() {
   return store;
 }
 describe('远控主控会话接线', () => {
+  it('已识别的桌面使用设备绑定；旧版缺少能力时拒绝而不降级', async () => {
+    mocks.localDeviceId = '11111111-1111-4111-8111-111111111111';
+    mocks.capabilities.capabilities = { runtime: 'tauri', native: { platform: 'macos', controllerDeviceBindingReady: false } };
+    const store = useRemoteControlSessionStore();
+    await expect(store.start(mocks.capabilities.targets[0]!, 'view')).rejects.toThrow('升级');
+    expect(mocks.adapters).toHaveLength(0); expect(mediaOccupancy.current.value).toBeNull();
+    mocks.capabilities.capabilities.native.controllerDeviceBindingReady = true;
+    await store.start(mocks.capabilities.targets[0]!, 'view');
+    expect(mocks.adapters[0].binding.deviceId).toBe(mocks.localDeviceId);
+    mocks.adapters[0].event({ type: 'device-verified', deviceId: mocks.localDeviceId }); await flushPromises();
+    expect(store.controllerDeviceVerified).toBe(true); expect(store.scope).toBe('view'); expect(store.inputArmed).toBe(false);
+    store.end(); expect(store.controllerDeviceVerified).toBe(false);
+  });
+
   it('仅观看不会在焦点变化后显示恢复键鼠操作提示', async () => {
     const store = await connected();
     const peer = mocks.peers[0];
@@ -75,7 +93,8 @@ describe('远控主控会话接线', () => {
     mocks.capabilities.canControl = false;
     await expect(store.start(mocks.capabilities.targets[0]!, 'control')).rejects.toThrow();
     expect(mocks.adapters).toHaveLength(0);
-    mocks.capabilities.canControl = true;
+    mocks.localDeviceId = null; mocks.capabilities.capabilities = { runtime: 'web' };
+  mocks.capabilities.canControl = true;
     const group = mediaOccupancy.acquire('group-call', 'group')!;
     await expect(store.start(mocks.capabilities.targets[0]!, 'control')).rejects.toThrow('请先结束');
     expect(group.isCurrent()).toBe(true); group.release();

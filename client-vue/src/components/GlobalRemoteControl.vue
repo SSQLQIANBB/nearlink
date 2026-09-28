@@ -3,6 +3,7 @@
     <header>
       <strong>{{ session.device?.alias || '远程协助' }}</strong>
       <span>{{ session.statusMessage }}</span>
+      <span v-if="session.controllerDeviceVerified">主控设备身份已验证</span>
       <n-button size="small" @click="minimize">{{ compact ? '展开' : '缩小' }}</n-button>
       <n-button size="small" type="error" @click="session.end()">结束协助</n-button>
     </header>

@@ -10,7 +10,7 @@ import type { LiveConnection } from '../services/remoteLiveAuthority';
 import { validateAuthenticatedSession } from '../services/loginSessionService';
 
 const handshake = z.discriminatedUnion('role', [
-  z.object({ token: z.string().min(1).max(8192), role: z.literal('controller'), platform: z.enum(['web', 'macos', 'windows']), controllerInstanceId: uuid }).strict(),
+  z.object({ token: z.string().min(1).max(8192), role: z.literal('controller'), platform: z.enum(['web', 'macos', 'windows']), controllerInstanceId: uuid, controllerDeviceId: uuid.optional() }).strict(),
   z.object({ token: z.string().min(1).max(8192), role: z.literal('host'), platform: z.literal('macos'), deviceId: uuid }).strict(),
 ]);
 const signalSchema = z.discriminatedUnion('type', [
@@ -71,7 +71,7 @@ export function initializeRemoteControl(io: Server) {
         : input.platform === 'web' ? !policy.webControllerReleaseEnabled
           : !policy.desktopControllerEnabled || !policy.releasedPlatforms.includes(input.platform))) fail(policy.reason);
       connection = await authority!.connect(input.token, socket.id,
-        input.role === 'host' ? input.deviceId : input.controllerInstanceId, input.role, input.platform);
+        input.role === 'host' ? input.deviceId : input.controllerInstanceId, input.role, input.platform, input.role === 'controller' ? input.controllerDeviceId : undefined);
       socket.data.remote = connection;
       // Engine close may race asynchronous authentication before Socket connection is established.
       if (socket.conn.readyState !== 'open') { authority!.disconnect(connection); return; }
@@ -92,11 +92,37 @@ export function initializeRemoteControl(io: Server) {
       void authority!.presenceChallenge(connection).then(proof => socket.emit('remote:presence-challenge', { proof }))
         .catch(() => socket.disconnect(true));
     }, 10_000) : undefined;
+    let bindingAttempts = 0, checkingController = false;
+    const controllerTimer = connection.controllerDeviceId ? setInterval(() => {
+      if (!connection.controllerDevice && Date.now() - connectedAt >= 30_000) { socket.disconnect(true); return; }
+      if (connection.controllerDevice && !checkingController) {
+        checkingController = true;
+        void authority!.assertCurrent(connection.endpoint).catch(() => socket.disconnect(true)).finally(() => { checkingController = false; });
+      }
+    }, 5000) : undefined;
+    controllerTimer?.unref();
+    for (const event of ['controller-challenge', 'controller-proof'] as const) {
+      socket.on(`remote:${event}`, async (raw: unknown, ack: unknown) => {
+        if (typeof ack !== 'function') return;
+        if (++bindingAttempts > 4 || pending >= 2) { ack({ ok: false, code: 'REMOTE_BACKPRESSURE' }); return; }
+        pending++;
+        try {
+          if (Buffer.byteLength(JSON.stringify(raw) || '') > 20000) fail('REMOTE_PAYLOAD_LIMIT');
+          const result = await serial(socket.id, async () => {
+            if (event === 'controller-challenge') { empty.parse(raw); return { proof: await authority!.controllerChallenge(connection) }; }
+            const { proof } = z.object({ proof: z.unknown() }).strict().parse(raw);
+            await authority!.acceptController(connection, proof); return {};
+          });
+          ack({ ok: true, ...result });
+        } catch { ack({ ok: false, code: 'CONTROLLER_DEVICE_PROOF_REJECTED' }); socket.disconnect(true); }
+        finally { pending--; }
+      });
+    }
     deadline.unref(); presence?.unref();
     if (connection.role === 'host') void authority!.presenceChallenge(connection)
       .then(proof => socket.emit('remote:presence-challenge', { proof })).catch(() => socket.disconnect(true));
     socket.on('disconnect', () => {
-      clearTimeout(deadline); clearInterval(presence);
+      clearTimeout(deadline); clearInterval(presence); clearInterval(controllerTimer);
       authority!.disconnect(connection);
       const sessionId = sessionsBySocket.get(socket.id);
       if (sessionId) void service.end(sessionId, 'ENDPOINT_DISCONNECTED').catch(() => {});

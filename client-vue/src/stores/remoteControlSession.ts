@@ -2,6 +2,8 @@ import { validateRemoteIceConfiguration } from '@/services/remoteControlIce';
 import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import { getRemoteSessionIce, getRemoteSigningKeys, type RemoteTarget } from '@/api/remoteControl';
+import { useRemoteDevicesStore } from './remoteDevices';
+import { proveRemoteController } from '@/services/remoteDeviceNative';
 import { useAuthStore } from './auth';
 import { useRemoteControlStore } from './remoteControl';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
@@ -18,6 +20,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   const sessionId = ref<string | null>(null);
   const stream = shallowRef<MediaStream | null>(null);
   const stats = shallowRef<RemotePeerStats | null>(null);
+  const controllerDeviceVerified = ref(false);
   const scope = ref<'view' | 'control'>('view');
   const inputArmed = ref(false);
   const needsApproval = ref(false);
@@ -45,6 +48,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     if (!claim) throw new Error('请先结束当前通话或屏幕共享');
     const current = ++generation;
     device.value = { ...discovered };
+    controllerDeviceVerified.value = false;
     sessionId.value = null; stream.value = null; stats.value = null;
     inputArmed.value = false; needsApproval.value = false; textQueue.cancel(); scope.value = 'view';
     phase.value = 'requesting'; statusMessage.value = '正在请求对方确认';
@@ -54,7 +58,11 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     try {
       const platform = capabilities.capabilities?.runtime === 'tauri' ? capabilities.capabilities.native?.platform : 'web';
       if (platform !== 'web' && platform !== 'macos' && platform !== 'windows') throw new Error('当前平台不支持远程协助');
-      adapter = new SocketRemoteControllerAdapter(auth.token, platform, event => queue(event, current));
+      const localDeviceId = useRemoteDevicesStore().localDeviceId;
+      const bindDevice = platform !== 'web' && !!localDeviceId;
+      if (bindDevice && !capabilities.capabilities?.native?.controllerDeviceBindingReady) throw new Error('请升级桌面客户端以验证主控设备身份');
+      adapter = new SocketRemoteControllerAdapter(auth.token, platform, event => queue(event, current),
+        bindDevice ? { deviceId: localDeviceId!, prove: proveRemoteController } : undefined);
       const id = await adapter.request(target.deviceId, requestedScope);
       if (current !== generation) return;
       sessionId.value = id;
@@ -87,7 +95,9 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   }
 
   async function handleEvent(event: Exclude<RemoteControllerEvent, { type: 'ended' }>, current: number) {
-    if (event.type === 'connecting') {
+    if (event.type === 'device-verified') {
+      controllerDeviceVerified.value = true;
+    } else if (event.type === 'connecting') {
       if (peer) throw new Error('REMOTE_CONNECTING_REPLAY');
       phase.value = 'connecting'; statusMessage.value = '正在建立安全连接'; sessionId.value = event.value.sessionId;
       if (deadline) clearTimeout(deadline);
@@ -167,11 +177,12 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     currentPeer?.end(reason);
     claim?.release(); claim = null;
     stream.value = null; stats.value = null; inputArmed.value = false; needsApproval.value = false; textQueue.cancel(); scope.value = 'view';
+    controllerDeviceVerified.value = false;
     phase.value = 'ended'; statusMessage.value = '远程协助已结束';
     failureCode.value = reason !== 'REMOTE_LOCAL_END' && /^REMOTE_[A-Z_]{1,64}$/.test(reason) ? reason : '';
     if (notify) void currentAdapter?.end(reason).catch(() => currentAdapter.dispose());
     else currentAdapter?.dispose();
   }
   registerRemoteControlCleanup(reason => end(reason));
-  return { phase, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, failureCode, visible, start, attachVideo, mapPointer, sendInput, continueInput, commitText, requestControl, pauseInput, end };
+  return { phase, controllerDeviceVerified, device, sessionId, stream, stats, scope, inputArmed, needsApproval, statusMessage, failureCode, visible, start, attachVideo, mapPointer, sendInput, continueInput, commitText, requestControl, pauseInput, end };
 });

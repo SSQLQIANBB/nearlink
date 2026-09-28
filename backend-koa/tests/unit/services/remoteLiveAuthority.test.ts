@@ -101,3 +101,62 @@ describe('production live authority and native evidence', () => {
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
   });
 });
+
+describe('主控连接设备证明', () => {
+  async function boundFixture() {
+    let now = 1_800_000_000_000, revokedLogin = false;
+    const keys = generateKeyPairSync('ed25519'), server = generateKeyPairSync('ed25519');
+    const device = { id: randomUUID(), ownerUserId: 2, keyVersion: 1, revokedAt: null as Date | null,
+      fingerprint: createHash('sha256').update(keys.publicKey.export({ format: 'der', type: 'spki' })).digest('hex'), publicKey: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
+    const sid = randomUUID(), authVersion = randomUUID();
+    const signer = new RemoteCredentialSigner('test-server', server.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(), now - 1000, now + 1000000);
+    const authority = new RemoteLiveAuthority({ authenticate: async () => {
+      if (revokedLogin) throw new Error('AUTH_REVOKED');
+      return { userId: 2, sid, authVersion, exp: Math.floor((now + 100000) / 1000) } as any;
+    }, device: async id => id === device.id ? device : null, released: async () => {} }, signer, () => now);
+    const connection = await authority.connect('token', 'socket-a', randomUUID(), 'controller', 'macos', device.id);
+    const proof = async (edit: (body: any) => void = () => {}) => {
+      const challenge = await authority.controllerChallenge(connection);
+      const c = JSON.parse(Buffer.from(challenge.payload, 'base64url').toString());
+      const body = { protocolVersion: 1, purpose: 'native-controller-binding', controller: c.controller, deviceId: c.deviceId, challenge: c.challenge, issuedAt: now, expiresAt: c.expiresAt };
+      edit(body);
+      const keyId = `device:${device.id}:${device.keyVersion}`, payload = Buffer.from(JSON.stringify(body)).toString('base64url');
+      return { format: 'rc-signed-v1', keyId, payload, signature: sign(null, remoteSignatureMessage(keyId, payload), keys.privateKey).toString('base64url') };
+    };
+    return { device, connection, authority, proof, advance: (ms: number) => { now += ms; }, revokeLogin: () => { revokedLogin = true; } };
+  }
+  it('声明设备但未验签不能创建会话，通过后持续检查撤销与密钥版本', async () => {
+    const f = await boundFixture();
+    await expect(f.authority.resolveConnection(f.connection.handle)).rejects.toThrow('CONTROLLER_DEVICE_PROOF_REQUIRED');
+    const proof = await f.proof(); await f.authority.acceptController(f.connection, proof);
+    expect(await f.authority.resolveConnection(f.connection.handle)).toEqual(f.connection.endpoint);
+    await expect(f.authority.acceptController(f.connection, proof)).rejects.toThrow('CONTROLLER_CHALLENGE_REQUIRED');
+    f.device.keyVersion++; await expect(f.authority.assertCurrent(f.connection.endpoint)).rejects.toThrow('CONTROLLER_DEVICE_REVOKED');
+    f.device.keyVersion--; f.device.revokedAt = new Date();
+    await expect(f.authority.assertCurrent(f.connection.endpoint)).rejects.toThrow('CONTROLLER_DEVICE_REVOKED');
+  });
+  it.each(['socket', 'sid', 'instance', 'nonce', 'purpose', 'device', 'scope'])('拒绝 %s 替换，失败证明不可重放', async variant => {
+    const f = await boundFixture();
+    const proof = await f.proof(body => {
+      if (variant === 'socket') body.controller.connectionId = 'socket-b';
+      if (variant === 'sid') body.controller.sid = randomUUID();
+      if (variant === 'instance') body.controller.endpointId = randomUUID();
+      if (variant === 'nonce') body.challenge = randomBytes(32).toString('base64url');
+      if (variant === 'purpose') body.purpose = 'host-consent';
+      if (variant === 'device') body.deviceId = randomUUID();
+      if (variant === 'scope') body.scope = 'control';
+    });
+    await expect(f.authority.acceptController(f.connection, proof)).rejects.toThrow();
+    await expect(f.authority.acceptController(f.connection, proof)).rejects.toThrow('CONTROLLER_CHALLENGE_REQUIRED');
+    expect(f.connection.controllerDevice).toBeUndefined();
+  });
+  it('旧连接、过期证明、撤销登录都不能保持设备认证', async () => {
+    const f = await boundFixture(); const proof = await f.proof(); f.advance(30001);
+    await expect(f.authority.acceptController(f.connection, proof)).rejects.toThrow();
+    await f.authority.acceptController(f.connection, await f.proof()); f.revokeLogin();
+    await expect(f.authority.assertCurrent(f.connection.endpoint)).rejects.toThrow('AUTH_REVOKED');
+    f.authority.disconnect(f.connection);
+    await expect(f.authority.acceptController(f.connection, proof)).rejects.toThrow('REMOTE_DISCONNECTED');
+    expect(f.connection.controllerDevice).toBeUndefined();
+  });
+});

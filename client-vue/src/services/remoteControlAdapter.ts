@@ -10,7 +10,7 @@ export interface RemoteConnecting {
   host: RemoteEndpointIdentity; controller: RemoteEndpointIdentity; consentNonce: string;
   screenId: string; negotiationId: string; hardDeadline: number;
 }
-export type RemoteControllerEvent = { type: 'connecting'; value: RemoteConnecting }
+export type RemoteControllerEvent = { type: 'device-verified'; deviceId: string } | { type: 'connecting'; value: RemoteConnecting }
   | { type: 'signal'; value: RemotePeerSignal }
   | { type: 'connection-proof' | 'lease'; value: RemoteSignedEnvelope }
   | { type: 'state'; value: RemoteStateSnapshot }
@@ -42,6 +42,10 @@ export function validRemoteConnecting(value: unknown): value is RemoteConnecting
     && typeof item.screenId === 'string' && item.screenId.length > 0 && item.screenId.length <= 128;
 }
 
+export interface ControllerDeviceBinding {
+  deviceId: string;
+  prove(challenge: RemoteSignedEnvelope, expected: { controller: RemoteEndpointIdentity; deviceId: string }, signal: AbortSignal): Promise<RemoteSignedEnvelope>;
+}
 /** Production adapter; constructing it does not connect. The release gate is enforced by the store and server. */
 export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
   private readonly socket: Socket;
@@ -53,16 +57,18 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
   private eventQueue: Array<() => void> = [];
   private queuedBytes = 0;
   private connectReject: (() => void) | null = null;
+  private readonly bindingAbort = new AbortController();
   private tokenDeadline: ReturnType<typeof setTimeout>;
   private readonly instanceId = createRequestId();
   private readonly identity: { userId: number; sid: string; authVersion: string; exp: number };
 
-  constructor(token: string, platform: 'web' | 'windows' | 'macos', private readonly event: (event: RemoteControllerEvent) => void) {
+  constructor(token: string, platform: 'web' | 'windows' | 'macos', private readonly event: (event: RemoteControllerEvent) => void, private readonly deviceBinding?: ControllerDeviceBinding) {
     // Parsing is only a consistency check. The namespace authenticates this token independently.
     try { this.identity = JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/'))); }
     catch { throw new Error('REMOTE_AUTH_REQUIRED'); }
     if (!this.identity || !isInteger(this.identity.userId) || !isId(this.identity.sid) || !isId(this.identity.authVersion) || !isInteger(this.identity.exp) || this.identity.exp * 1000 <= Date.now()) throw new Error('REMOTE_AUTH_REQUIRED');
-    this.socket = io(`${publicEnv.socketUrl}/remote-control`, { path: '/meeting', transports: ['websocket'], autoConnect: false, reconnection: false, auth: { token, controllerInstanceId: this.instanceId, platform, role: 'controller' } });
+    if (deviceBinding && (platform === 'web' || !isId(deviceBinding.deviceId))) throw new Error('REMOTE_CONTROLLER_DEVICE_INVALID');
+    this.socket = io(`${publicEnv.socketUrl}/remote-control`, { path: '/meeting', transports: ['websocket'], autoConnect: false, reconnection: false, auth: { token, controllerInstanceId: this.instanceId, platform, role: 'controller', ...(deviceBinding ? { controllerDeviceId: deviceBinding.deviceId } : {}) } });
     this.signaling = new RemoteSignalClient(this.socket, 1, reason => this.stop(reason), value => { this.state = value; this.event({ type: 'state', value }); });
     this.socket.on('disconnect', () => this.stop('REMOTE_DISCONNECTED'));
     this.socket.on('remote:state', value => this.deliver(value, () => this.signaling.receiveState(value)));
@@ -105,11 +111,36 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
       this.socket.once('connect', connected); this.socket.once('connect_error', failed); this.socket.connect();
     });
     if (this.closed) throw new Error('REMOTE_DISCONNECTED');
+    if (this.deviceBinding) {
+      try {
+        const { proof } = await this.bindingCommand('remote:controller-challenge', {});
+        const controller = { userId: this.identity.userId, sid: this.identity.sid, authVersion: this.identity.authVersion,
+          endpointId: this.instanceId, connectionId: this.socket.id!, generation: 1 };
+        const signed = await this.deviceBinding.prove(proof, { controller, deviceId: this.deviceBinding.deviceId }, this.bindingAbort.signal);
+        if (this.closed) throw new Error('REMOTE_DISCONNECTED');
+        await this.bindingCommand('remote:controller-proof', { proof: signed });
+        this.event({ type: 'device-verified', deviceId: this.deviceBinding.deviceId });
+      } catch (error) { this.stop('REMOTE_CONTROLLER_DEVICE_REJECTED'); throw error; }
+    }
     const ack = await this.signaling.command('remote:request', { targetDeviceId, scope });
     this.sessionId = ack.sessionId!;
     for (const deliver of this.eventQueue.splice(0)) { if (!this.closed) deliver(); }
     this.queuedBytes = 0;
     return this.sessionId;
+  }
+  private bindingCommand(event: string, value: object): Promise<{ proof?: any }> {
+    return new Promise((resolve, reject) => {
+      if (this.closed) { reject(new Error('REMOTE_DISCONNECTED')); return; }
+      const finish = () => { clearTimeout(timer); this.bindingAbort.signal.removeEventListener('abort', aborted); };
+      const aborted = () => { finish(); reject(new Error('REMOTE_DISCONNECTED')); };
+      const timer = setTimeout(() => { finish(); reject(new Error('REMOTE_CONTROLLER_DEVICE_TIMEOUT')); }, 5000);
+      this.bindingAbort.signal.addEventListener('abort', aborted, { once: true });
+      this.socket.emit(event, value, (result: any) => {
+        finish();
+        if (this.closed || result?.ok !== true || (event === 'remote:controller-challenge' && !result.proof)) reject(new Error('REMOTE_CONTROLLER_DEVICE_REJECTED'));
+        else resolve(result);
+      });
+    });
   }
   async signal(signal: RemotePeerSignal) { await this.signaling.command('remote:signal', signal); }
   async ready(binding: { negotiationId: string; hostFingerprint: string; controllerFingerprint: string }) { await this.signaling.command('remote:ready', binding); }
@@ -131,6 +162,7 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
   private stop(reason: string) {
     if (this.closed) return;
     this.closed = true;
+    this.bindingAbort.abort();
     this.connectReject?.();
     clearTimeout(this.tokenDeadline);
     this.eventQueue = []; this.queuedBytes = 0;

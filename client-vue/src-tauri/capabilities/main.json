@@ -16,6 +16,7 @@
     "allow-remote-control-stop",
     "allow-remote-control-register-device",
     "allow-remote-control-identify-device",
+    "allow-remote-control-bind-controller",
     "allow-remote-control-confirm-request",
     "allow-remote-control-clear-remembered-approvals",
     "allow-remote-control-list-remembered-approvals",

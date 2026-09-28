@@ -6,7 +6,7 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>ToDesk 需要使用麦克风进行语音消息和音视频通话。</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.7.0</string>
+  <string>0.8.0</string>
   <key>CFBundleGetInfoString</key>
-  <string>ToDesk 内测版 0.7.0-beta.1</string>
+  <string>ToDesk 内测版 0.8.0-beta.1</string>
 </dict></plist>

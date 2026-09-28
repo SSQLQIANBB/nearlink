@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { RemoteDeviceChallenge, RemoteDeviceRegistration, RemoteIdentityChallenge, RemoteIdentityProof } from '@/api/remoteControl';
 import type { NativeRemoteCapabilities } from './remoteControlCapabilities';
-import type { RemoteSignedEnvelope } from './remoteControlProof';
+import type { RemoteSignedEnvelope, RemoteEndpointIdentity } from './remoteControlProof';
 import { registerRemoteControlCleanup } from './remoteControlSafety';
 
 export interface RemoteDeviceSupport { desktop: boolean; registration: boolean; identification?: boolean; identityReset: boolean; consent: boolean; platform: string; }
@@ -132,4 +132,11 @@ export async function identifyRemoteDevice(challenge: RemoteIdentityChallenge, s
     || typeof value.signature !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(value.signature)
     || challenge.expiresAt <= Date.now()) throw new Error('REMOTE_DEVICE_PROOF_INVALID');
   return value;
+}
+
+export async function proveRemoteController(challenge: RemoteSignedEnvelope, expected: { controller: RemoteEndpointIdentity; deviceId: string }, signal: AbortSignal) {
+  if (!envelope(challenge)) throw new Error('REMOTE_CONTROLLER_CHALLENGE_INVALID');
+  const result = await operation<RemoteSignedEnvelope>('remote_control_bind_controller', { challenge, expected }, signal, 30000);
+  if (!envelope(result)) throw new Error('REMOTE_CONTROLLER_PROOF_INVALID');
+  return result;
 }

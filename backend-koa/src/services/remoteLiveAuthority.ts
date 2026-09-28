@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'crypto';
 import type { AuthenticatedSessionPayload } from './loginSessionService';
 import { RemoteControlError, isEndpoint, REMOTE_LIMITS, type RemoteEndpoint, type RemoteSession } from './remoteControlProtocol';
-import { RemoteCredentialSigner, type RemoteTransportBinding } from './remoteCredentials';
+import { RemoteCredentialSigner, verifyControllerBinding, type RemoteTransportBinding } from './remoteCredentials';
 import { verifyNativePresence, verifyNativeSessionFact, readyEvidence, challengeEvidence, type NativePresence } from './remoteNativeEvidence';
 import type { RemoteCoordinatorAuthority, RemoteAuthorityDevice, RemoteReadyEvidence, RemoteNativeChallenge } from './remoteAuthorizationCoordinator';
 
@@ -9,6 +9,9 @@ export interface LiveConnection {
   readonly handle: object; readonly endpoint: RemoteEndpoint; readonly role: 'host' | 'controller';
   readonly platform: 'macos' | 'windows' | 'web'; readonly token: string;
   readonly expiresAt: number;
+  readonly controllerDeviceId?: string;
+  controllerDevice?: { id: string; keyVersion: number; fingerprint: string };
+  controllerChallenge?: { value: string; issuedAt: number; device: RemoteAuthorityDevice };
   presence?: NativePresence;
   challenge?: { value: string; issuedAt: number };
 }
@@ -29,8 +32,9 @@ export class RemoteLiveAuthority implements RemoteCoordinatorAuthority {
   private readonly challenges = new WeakMap<object, RemoteNativeChallenge>();
   constructor(private readonly dependencies: LiveAuthorityDependencies, private readonly signer: RemoteCredentialSigner,
     private readonly now = Date.now, private readonly capacity = 256) {}
-  async connect(token: string, id: string, endpointId: string, role: LiveConnection['role'], platform: LiveConnection['platform']) {
+  async connect(token: string, id: string, endpointId: string, role: LiveConnection['role'], platform: LiveConnection['platform'], controllerDeviceId?: string) {
     if (this.connections.size >= this.capacity || this.byId.has(id)) return fail('REMOTE_CAPACITY');
+    if (controllerDeviceId && (role !== 'controller' || platform === 'web')) return fail('CONTROLLER_DEVICE_UNSUPPORTED');
     const auth = await this.dependencies.authenticate(token);
     if (this.connections.size >= this.capacity || this.byId.has(id)) return fail('REMOTE_CAPACITY');
     if (role === 'host') {
@@ -42,7 +46,7 @@ export class RemoteLiveAuthority implements RemoteCoordinatorAuthority {
     if (role === 'host' && this.hosts.has(endpointId)) return fail('DEVICE_ALREADY_ONLINE');
     const endpoint = Object.freeze({ userId: auth.userId, sid: auth.sid, authVersion: auth.authVersion,
       endpointId, connectionId: id, generation: 1 });
-    const value: LiveConnection = { handle: Object.freeze({}), endpoint, role, platform, token, expiresAt: auth.exp * 1000 };
+    const value: LiveConnection = { handle: Object.freeze({}), endpoint, role, platform, token, expiresAt: auth.exp * 1000, controllerDeviceId };
     this.connections.set(value.handle, value); this.byId.set(id, value);
     if (role === 'host') this.hosts.set(endpointId, value);
     return value;
@@ -51,7 +55,7 @@ export class RemoteLiveAuthority implements RemoteCoordinatorAuthority {
     this.connections.delete(value.handle);
     if (this.byId.get(value.endpoint.connectionId) === value) this.byId.delete(value.endpoint.connectionId);
     if (this.hosts.get(value.endpoint.endpointId) === value) this.hosts.delete(value.endpoint.endpointId);
-    value.presence = undefined; value.challenge = undefined;
+    value.presence = undefined; value.challenge = undefined; value.controllerChallenge = undefined; value.controllerDevice = undefined;
   }
   private current(value: LiveConnection) {
     if (this.connections.get(value.handle) !== value || this.byId.get(value.endpoint.connectionId) !== value
@@ -61,14 +65,42 @@ export class RemoteLiveAuthority implements RemoteCoordinatorAuthority {
     const value = this.connections.get(handle); if (!value) return fail('REMOTE_DISCONNECTED');
     await this.assertCurrent(value.endpoint); return value.endpoint;
   }
-  async assertCurrent(endpoint: RemoteEndpoint) {
+  async assertCurrent(endpoint: RemoteEndpoint, allowUnverified = false) {
     const value = this.byId.get(endpoint.connectionId);
     if (!value || !isEndpoint(value.endpoint, endpoint)) return fail('REMOTE_DISCONNECTED');
     this.current(value);
     const auth = await this.dependencies.authenticate(value.token);
     this.current(value);
     if (auth.userId !== endpoint.userId || auth.sid !== endpoint.sid || auth.authVersion !== endpoint.authVersion) return fail('AUTH_REVOKED');
+    if (value.controllerDeviceId) {
+      const device = await this.dependencies.device(value.controllerDeviceId);
+      this.current(value);
+      if (!device || device.revokedAt || device.ownerUserId !== endpoint.userId
+        || (value.controllerDevice && (device.keyVersion !== value.controllerDevice.keyVersion || device.fingerprint !== value.controllerDevice.fingerprint))) return fail('CONTROLLER_DEVICE_REVOKED');
+      if (!allowUnverified && !value.controllerDevice) return fail('CONTROLLER_DEVICE_PROOF_REQUIRED');
+    }
     if (value.role === 'host' && (!value.presence || value.presence.expiresAt <= this.now())) return fail('HOST_OFFLINE');
+  }
+  async controllerChallenge(value: LiveConnection) {
+    if (value.role !== 'controller' || !value.controllerDeviceId || value.controllerDevice) return fail('CONTROLLER_DEVICE_UNEXPECTED');
+    await this.assertCurrent(value.endpoint, true);
+    const device = await this.dependencies.device(value.controllerDeviceId);
+    this.current(value);
+    if (!device || device.revokedAt || device.ownerUserId !== value.endpoint.userId) return fail('CONTROLLER_DEVICE_REVOKED');
+    const pending = { value: randomBytes(32).toString('base64url'), issuedAt: this.now(), device: { ...device } };
+    value.controllerChallenge = pending;
+    return this.signer.issueControllerChallenge(value.endpoint, device, pending.value, pending.issuedAt);
+  }
+  async acceptController(value: LiveConnection, proof: unknown) {
+    this.current(value);
+    if (value.role !== 'controller' || !value.controllerDeviceId || value.controllerDevice || !value.controllerChallenge) return fail('CONTROLLER_CHALLENGE_REQUIRED');
+    const pending = value.controllerChallenge; value.controllerChallenge = undefined;
+    await this.assertCurrent(value.endpoint, true);
+    const device = await this.dependencies.device(value.controllerDeviceId);
+    this.current(value);
+    if (!device || device.revokedAt || device.keyVersion !== pending.device.keyVersion || device.fingerprint !== pending.device.fingerprint) return fail('CONTROLLER_DEVICE_REVOKED');
+    verifyControllerBinding(proof, device, value.endpoint, pending.value, pending.issuedAt, this.now());
+    value.controllerDevice = Object.freeze({ id: device.id, keyVersion: device.keyVersion, fingerprint: device.fingerprint });
   }
   async presenceChallenge(value: LiveConnection) {
     this.current(value); if (value.role !== 'host') return fail('HOST_REQUIRED');
