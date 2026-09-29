@@ -1,0 +1,21 @@
+/* Shared visual language for remote-control surfaces only. */
+.remote-ui .remote-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: #f0f6ff;
+  color: #3867dc;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.remote-ui .remote-info { padding: 18px 20px; border-radius: 12px; background: #f0f6ff; color: #72839e; line-height: 1.8; }
+.remote-ui .n-button { border-radius: 8px; min-height: 36px; }
+.remote-ui .n-button:not(.n-button--primary-type):not(.n-button--error-type) { background: #f0f6ff; color: #3867dc; }
+.remote-ui .n-button--primary-type { background: #2860ed; color: #fff; }
+.remote-ui .n-button--error-type { background: #fff3f3; color: #ce3030; }
+.remote-ui .n-button:not(.n-button--disabled):hover { filter: brightness(.96); }
+.remote-ui .n-button:focus-visible, .remote-ui input:focus-visible, .remote-ui select:focus-visible { outline: 2px solid #2860ed; outline-offset: 3px; }
+.remote-ui .n-button--disabled { opacity: .5; }
+.remote-ui .n-base-selection, .remote-ui .n-input { --n-border-radius: 8px; }

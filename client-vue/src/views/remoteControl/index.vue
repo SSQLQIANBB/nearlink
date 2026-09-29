@@ -1,9 +1,9 @@
 <template>
-  <main class="remote-control-page">
+  <main class="remote-ui remote-control-page">
     <header>
       <n-button quaternary @click="router.push({ name: 'Remote' })">返回聊天</n-button>
-      <h1>远程控制</h1>
-      <p>远程查看与操作需要指定设备开启协助许可，并在本机逐次确认。</p>
+      <h1>远程控制 <span class="remote-badge">内测版</span></h1>
+      <p>远程查看与操作需要指定设备开启协助许可，由被控机按已保存的允许范围确认。</p>
     </header>
     <n-spin :show="remote.loading">
       <section class="status-card" aria-live="polite">
@@ -26,7 +26,7 @@
         <li v-for="target in remote.targets" :key="target.deviceId">
           <strong>{{ target.alias }}</strong> · {{ target.platform }} · {{ !target.online ? '离线' : target.busy ? '使用中' : '在线' }}
           <n-button size="small" :disabled="!target.online || target.busy || !target.canHostView || mediaBusy" @click="request(target, 'view')">请求观看</n-button>
-          <n-button size="small" :disabled="!target.online || target.busy || !target.canHostControl || mediaBusy" @click="request(target, 'control')">请求控制</n-button>
+          <n-button size="small" type="primary" :disabled="!target.online || target.busy || !target.canHostControl || mediaBusy" @click="request(target, 'control')">请求控制</n-button>
           <span v-if="!target.canHostControl" class="note">对方需开启辅助功能权限并重新检测，才能控制键盘鼠标。</span>
         </li>
       </ul>
@@ -67,7 +67,7 @@ onUnmounted(() => window.removeEventListener('focus', refresh));
 </script>
 
 <style scoped>
-.remote-control-page { max-width: 880px; margin: auto; padding: 32px 20px; color: #1e293b; }
+.remote-control-page { max-width: 1080px; margin: auto; padding: 32px 20px; color: #1e293b; }
 header { margin-bottom: 24px; }
 h1 { margin: 16px 0 8px; font-size: 28px; }
 h2 { margin-bottom: 12px; font-size: 18px; }
@@ -76,5 +76,10 @@ p { line-height: 1.7; }
 dl { display: grid; grid-template-columns: 150px 1fr; gap: 12px; margin: 20px 0; }
 dt, .note { color: #64748b; }
 .note { font-size: 13px; margin: 16px 0; }
-ul { padding-left: 20px; }
+ul { padding: 0; list-style: none; display: grid; gap: 14px; }
+li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px; border: 1px solid #e0e6ef; border-radius: 12px; background: #f8fafd; overflow-wrap: anywhere; }
+li strong { margin-right: auto; } li .note { flex-basis: 100%; margin: 0; }
+h1 { display: flex; align-items: center; gap: 12px; }
+.status-card > .note { background: #f0f6ff; border-radius: 10px; padding: 16px; }
+@media (max-width: 600px) { .remote-control-page { padding: 20px 12px; } .status-card { padding: 18px; } dl { grid-template-columns: 1fr; gap: 6px; } dd { margin: 0 0 10px; } }
 </style>

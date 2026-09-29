@@ -1,8 +1,8 @@
 <template>
-  <section class="remote-device-settings" aria-label="远程设备管理">
+  <section class="remote-ui remote-device-settings" aria-label="远程设备管理">
     <h2>我的远程设备</h2>
     <p>管理绑定到当前账号的设备身份。远程协助是否可用取决于客户端和系统权限。</p>
-    <p class="note">设备登记不会开启屏幕观看或键鼠控制，也不代表设备在线。发起远程协助无需先登记本机。</p>
+    <p class="note remote-info">设备登记不会开启屏幕观看或键鼠控制，也不代表设备在线。发起远程协助无需先登记本机。</p>
     <RemoteHostSettings v-if="remote.capabilities?.showHostEntry" :devices="devices.devices" :local-device-id="devices.localDeviceId" />
     <div v-if="devices.support?.desktop && devices.support.identification" class="actions">
       <n-button :disabled="devices.busy" :loading="devices.phase === 'identifying'" @click="devices.identify">识别本机设备</n-button>
@@ -98,9 +98,18 @@ p { line-height: 1.7; margin: 12px 0; }
 .rename-form { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .rename-form .n-input { max-width: 320px; }
 .registration { max-width: 420px; display: grid; gap: 10px; margin: 20px 0; }
-.actions { display: flex; gap: 10px; margin: 12px 0; }
+.actions { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
 ul { display: grid; gap: 12px; padding: 0; list-style: none; }
-li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
+li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 20px; background: #f8fafd; border: 1px solid #e2e8f0; border-radius: 12px; }
 span { color: #64748b; }
 [role=alert] { color: #b91c1c; }
+
+.remote-device-settings { color: #293548; min-width: 0; }
+h2 { font-size: 22px; }
+.device-filters { padding: 18px; background: #f7f9fc; border-radius: 12px; }
+.device-filters label:first-child { flex: 1; min-width: 160px; }
+.device-filters select { min-height: 36px; color: #293548; }
+li > div { min-width: 0; overflow-wrap: anywhere; }
+.registration { max-width: none; padding: 20px; border: 1px solid #e0e6ef; border-radius: 12px; }
+@media (max-width: 600px) { .device-filters label { width: 100%; } li { padding: 14px; } }
 </style>

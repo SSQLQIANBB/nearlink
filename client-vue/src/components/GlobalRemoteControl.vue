@@ -1,18 +1,18 @@
 <template>
-  <section v-if="session.visible" class="remote-session" :class="{ compact }" aria-label="远程协助会话">
+  <section v-if="session.visible" class="remote-ui remote-session" :class="{ compact }" aria-label="远程协助会话">
     <header>
       <strong>{{ session.device?.alias || '远程协助' }}</strong>
       <span>{{ session.statusMessage }}</span>
-      <span v-if="session.controllerDeviceVerified">主控设备身份已验证</span>
+      <span v-if="session.controllerDeviceVerified" class="verified-badge">主控设备身份已验证</span>
       <n-button size="small" @click="minimize">{{ compact ? '展开' : '缩小' }}</n-button>
-      <n-button size="small" type="error" @click="session.end()">结束协助</n-button>
+      <n-button size="small" type="error" secondary @click="session.end()">结束协助</n-button>
     </header>
     <div ref="viewport" class="remote-video-area">
       <video ref="video" :style="videoStyle" @loadedmetadata="updateDimensions" @resize="updateDimensions" autoplay playsinline muted tabindex="0" :aria-label="session.scope === 'control' ? '远程画面，点击继续操作后可使用键盘鼠标' : '远程画面，仅观看'"
         @pointerdown="pointer($event, true)" @pointerup="pointer($event, false)" @pointermove="move"
         @lostpointercapture="captureLost" @pointercancel="pause" @wheel="wheel" @contextmenu.prevent
         @keydown="key($event, true)" @keyup="key($event, false)" @blur="pause" />
-      <div v-if="!session.stream" class="waiting">{{ session.phase === 'pending' ? '等待对方在本机确认' : '正在建立安全连接' }}</div>
+      <div v-if="!session.stream" class="waiting" role="status"><div class="waiting-card"><span class="waiting-mark" aria-hidden="true">◷</span><h2>{{ session.phase === 'pending' ? '等待对方在本机确认' : '正在建立安全连接' }}</h2><p>连接完成后将在这里显示远程画面。</p><p>你可以随时点击右上角“结束协助”。</p></div></div>
     </div>
     <footer v-if="!compact">
       <span>{{ session.scope === 'control' ? (session.inputArmed ? '键鼠操作中' : '键鼠操作已暂停') : '仅观看' }}</span>
@@ -134,9 +134,9 @@ onBeforeUnmount(() => { window.removeEventListener('blur', pause); document.remo
 </script>
 <style scoped>
 .remote-ended { position: fixed; right: 20px; bottom: 20px; z-index: 2000; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 40px); padding: 16px; background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; border-radius: 10px; }
-.remote-session { position: fixed; z-index: 2000; inset: 6vh 5vw; display: flex; flex-direction: column; background: #111827; color: #e2e8f0; border: 1px solid #475569; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 80px #0008; }
+.remote-session { position: fixed; z-index: 2000; inset: 6vh 5vw; display: flex; flex-direction: column; background: #111827; color: #e2e8f0; border: 1px solid #475569; border-radius: 18px; overflow: hidden; box-shadow: 0 15px 80px #0008; }
 .remote-session.compact { inset: auto 20px 20px auto; width: min(520px, calc(100vw - 40px)); height: 340px; }
-header, footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; background: #1e293b; }
+header, footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; background: #172133; }
 header strong { flex: 1; }
 header span, .hint, .stats { font-size: 12px; }
 .remote-video-area { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -148,4 +148,17 @@ video:focus { box-shadow: inset 0 0 0 2px #60a5fa; }
 .view-option { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .view-option select { padding: 4px; color: #e2e8f0; background: #111827; border: 1px solid #64748b; border-radius: 4px; }
 .hint { color: #94a3b8; }
+
+.remote-session { border-color: #2a3548; }
+.remote-video-area { margin: 0 16px; border-radius: 10px; background: #0e1625; }
+.waiting { padding: 24px; text-align: center; }
+.waiting-card { max-width: 460px; }
+.waiting h2 { margin: 16px 0 12px; font-size: 22px; font-weight: 500; }
+.waiting p { margin: 6px 0; color: #a6b7ce; line-height: 1.7; }
+.waiting-mark { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: #253b60; color: #9ebeff; font-size: 32px; }
+.verified-badge { padding: 5px 9px; background: #253b60; color: #bdd3ff; border-radius: 6px; }
+.view-option select, .remote-text input { min-height: 34px; border-radius: 8px; }
+.view-option input { accent-color: #2563eb; }
+footer { max-height: 45%; overflow-y: auto; flex-shrink: 0; }
+@media (max-width: 600px) { .remote-session { inset: 12px; } header, footer { padding: 12px; gap: 10px; } header strong { flex-basis: 100%; } .remote-video-area { margin: 0 8px; } .waiting { padding: 12px; } .waiting h2 { font-size: 17px; } .waiting p { font-size: 12px; } .remote-session.compact { right: 12px; bottom: 12px; width: calc(100vw - 24px); } }
 </style>

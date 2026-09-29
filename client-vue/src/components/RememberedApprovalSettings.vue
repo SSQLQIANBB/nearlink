@@ -1,5 +1,5 @@
 <template>
-  <section aria-label="本机已记住的授权">
+  <section class="remote-ui" aria-label="本机已记住的授权">
     <h4>本机已记住的授权</h4>
     <p>查看此前在本机确认窗口勾选“不再提示”的记录。恢复确认后，该记录不再用于自动批准；当前会话不受影响，需要立即结束时请点击“停止协助并离线”。</p>
     <n-button :loading="loading" :disabled="busy" @click="refresh">{{ loaded ? '刷新授权记录' : '查看授权记录' }}</n-button>
@@ -67,12 +67,14 @@ async function remove(record: Approval) {
 onUnmounted(() => { mounted = false; reset(); });
 </script>
 <style scoped>
-section { display: grid; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
+section { display: grid; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafd; }
 h4 { margin: 0; }
-p { margin: 0; line-height: 1.7; }
+p { color: #72839e; margin: 0; line-height: 1.7; }
 ul { display: grid; gap: 12px; list-style: none; padding: 0; }
 li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 small { overflow-wrap: anywhere; }
 .note, small { color: #64748b; }
 [role=alert] { color: #b91c1c; }
+section > .n-button { justify-self: start; }
+li { padding-top: 12px; border-top: 1px solid #e0e6ef; }
 </style>

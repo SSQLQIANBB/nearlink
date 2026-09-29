@@ -4,7 +4,7 @@
 
 ## 统一产品版本与提交规则
 
-当前源码产品版本为 `0.8.0-beta.1`，处于内测阶段。根目录 `package.json` 的 `version` 是唯一维护入口，前端、后端、Tauri、Rust 包及 `Cargo.lock` 中的自有包版本保持一致。第三方依赖版本不加内测标识。界面、桌面窗口、托盘和 Release 说明显示“内测版”及完整版本；应用名与标识仍为 `ToDesk` / `top.sycsq.todesk`，保留原有安装路径和用户数据。
+当前源码产品版本为 `0.8.0-beta.2`，处于内测阶段。根目录 `package.json` 的 `version` 是唯一维护入口，前端、后端、Tauri、Rust 包及 `Cargo.lock` 中的自有包版本保持一致。第三方依赖版本不加内测标识。界面、桌面窗口、托盘和 Release 说明显示“内测版”及完整版本；应用名与标识仍为 `ToDesk` / `top.sycsq.todesk`，保留原有安装路径和用户数据。
 
 | 变更 | 版本操作示例 |
 | --- | --- |
@@ -31,9 +31,9 @@ pnpm test:release
 
 ## 系统版本字段
 
-产品版本与安装包文件名保留 `0.8.0-beta.1`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.8.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `27`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
+产品版本与安装包文件名保留 `0.8.0-beta.2`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.8.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `28`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
 
-Windows 使用当前 Tauri 2.11.5 的 NSIS 默认流程：数字资源版本为 `0.8.0.0`，显示版本和安装包名保留 `0.8.0-beta.1`；安装升级比较完整语义版本，因此 beta 序号仍能区分升级。无需把预发布后缀塞入数字字段，也不改造默认安装模板。依据：[Tauri NSIS 数字版本转换](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/mod.rs)、[默认安装模板与版本比较](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)。若以后切换 MSI，需要另行核对 MSI 版本限制。
+Windows 使用当前 Tauri 2.11.5 的 NSIS 默认流程：数字资源版本为 `0.8.0.0`，显示版本和安装包名保留 `0.8.0-beta.2`；安装升级比较完整语义版本，因此 beta 序号仍能区分升级。无需把预发布后缀塞入数字字段，也不改造默认安装模板。依据：[Tauri NSIS 数字版本转换](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/mod.rs)、[默认安装模板与版本比较](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)。若以后切换 MSI，需要另行核对 MSI 版本限制。
 
 ## 一次发布的操作
 
@@ -61,9 +61,9 @@ git push origin desktop-v0.2.0-beta.1
 
 | 系统 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows x64 | `ToDesk_0.8.0-beta.1_x64-setup.exe` | 运行安装程序 |
-| Apple 芯片 Mac | `ToDesk_0.8.0-beta.1_aarch64.dmg` | 打开后拖入 Applications |
-| Intel Mac | `ToDesk_0.8.0-beta.1_x64.dmg` | 打开后拖入 Applications |
+| Windows x64 | `ToDesk_0.8.0-beta.2_x64-setup.exe` | 运行安装程序 |
+| Apple 芯片 Mac | `ToDesk_0.8.0-beta.2_aarch64.dmg` | 打开后拖入 Applications |
+| Intel Mac | `ToDesk_0.8.0-beta.2_x64.dmg` | 打开后拖入 Applications |
 
 文件名中的版本随配置变化。Mac 需要 macOS 12 或更新版本。
 

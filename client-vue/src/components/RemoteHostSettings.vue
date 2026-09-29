@@ -1,13 +1,13 @@
 <template>
-  <section aria-label="本机协助设置">
-    <h3>开启本机协助</h3>
+  <section class="remote-ui host-settings" aria-label="本机协助设置">
+    <div class="section-heading"><h3>开启本机协助</h3><span class="remote-badge">桌面端专属</span></div>
     <p>选择本机登记的设备和允许请求协助的联系人。可选择临时或长期许可。首次连接需在本机确认；勾选“不再提示”并允许后，同一请求账号在已允许范围内的后续请求可自动批准。</p>
-    <n-select v-model:value="selectedDevice" :options="deviceOptions" placeholder="选择本机登记的设备" :disabled="host.phase !== 'offline'" />
-    <n-select v-model:value="controller" :options="contacts" placeholder="选择允许协助的账号" />
-    <n-select v-model:value="duration" :options="durationOptions" aria-label="协助许可有效期" :disabled="busy" />
-    <p v-if="duration === 'permanent'">长期许可允许该账号持续发起请求；是否自动批准取决于你是否在确认窗口勾选“不再提示”并允许。手动撤销、退出授权账号或撤销设备后失效。</p>
+    <div class="host-field"><span id="host-device-label">本机设备</span><n-select aria-labelledby="host-device-label" v-model:value="selectedDevice" :options="deviceOptions" placeholder="选择本机登记的设备" :disabled="host.phase !== 'offline'" /></div>
+    <div class="host-field"><span id="host-contact-label">允许请求的联系人</span><n-select aria-labelledby="host-contact-label" v-model:value="controller" :options="contacts" placeholder="选择允许协助的账号" /></div>
+    <div class="host-field"><span id="host-duration-label">许可有效期</span><n-select aria-labelledby="host-duration-label" v-model:value="duration" :options="durationOptions" aria-label="协助许可有效期" :disabled="busy" /></div>
+    <p v-if="duration === 'permanent'" class="remote-info">长期许可允许该账号持续发起请求；是否自动批准取决于你是否在确认窗口勾选“不再提示”并允许。手动撤销、退出授权账号或撤销设备后失效。</p>
     <div class="actions">
-      <n-button :disabled="!selectedDevice || !controller || busy" :loading="busy" @click="grant">允许请求协助</n-button>
+      <n-button type="primary" :disabled="!selectedDevice || !controller || busy" :loading="busy" @click="grant">允许请求协助</n-button>
       <n-button v-if="host.phase === 'offline'" type="primary" :disabled="!selectedDevice" @click="host.start(selectedDevice!)">本机上线</n-button>
       <n-button v-else type="error" @click="host.stop()">停止协助并离线</n-button>
     </div>
@@ -18,7 +18,7 @@
     <RememberedApprovalSettings :reset-version="consentListVersion" />
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="!remote.capabilities?.canHostView">请先在 macOS 系统设置中为 ToDesk 开启屏幕录制权限；键鼠控制还需要辅助功能权限。更改权限后重新启动客户端。</p>
-    <section aria-label="键鼠控制权限">
+    <section class="permissions" aria-label="键鼠控制权限"><h4>系统权限与被控能力</h4>
       <strong>客户端支持键鼠控制，须经本机允许</strong>
       <p>{{ remote.capabilities?.canHostControl ? '系统权限已就绪，对方可以请求控制。' : '尚未具备键鼠控制权限。请为 /Applications/ToDesk.app 开启屏幕录制和辅助功能权限，再重新检测。' }}</p>
       <n-button @click="openPermission('screenCapture')">打开屏幕录制设置</n-button>
@@ -30,7 +30,7 @@
       <li v-for="item in grants" :key="item.id">
         {{ deviceOptions.find(d => d.value === item.hostDeviceId)?.label || '设备' }} → {{ contacts.find(c => c.value === item.controllerUserId)?.label || `账号 ${item.controllerUserId}` }}
         （{{ item.expiresAt ? new Date(item.expiresAt).toLocaleString() + ' 到期' : '长期有效，直到撤销' }}）
-        <n-button size="small" :disabled="busy" @click="revoke(item.id)">撤销许可</n-button>
+        <n-button size="small" type="error" secondary :disabled="busy" @click="revoke(item.id)">撤销许可</n-button>
       </li>
     </ul>
   </section>
@@ -98,8 +98,20 @@ onMounted(() => { void refresh().catch(() => { error.value = '暂时无法读取
 onUnmounted(() => { mounted = false; });
 </script>
 <style scoped>
-section { display: grid; gap: 12px; padding: 18px 0; }
-p, li { line-height: 1.7; }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.host-settings { display: grid; gap: 20px; padding: 28px 0; color: #293548; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h3 { margin: 0; font-size: 22px; font-weight: 600; } h4 { margin: 0; font-size: 18px; }
+p { margin: 0; color: #72839e; line-height: 1.8; }
+.host-field { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 20px; }
+.host-field > span { color: #72839e; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.actions > span { color: #72839e; font-size: 13px; }
+.permissions { display: grid; gap: 14px; padding-top: 24px; border-top: 1px solid #e0e6ef; }
+.permissions > .n-button { justify-self: start; }
+ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px; background: #f7f9fc; border-radius: 10px; line-height: 1.7; overflow-wrap: anywhere; }
 [role=alert] { color: #b91c1c; }
+@media (max-width: 600px) { .host-field { grid-template-columns: 1fr; gap: 8px; } .section-heading { flex-wrap: wrap; } }
+
 </style>
