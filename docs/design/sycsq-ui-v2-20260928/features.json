@@ -1,0 +1,578 @@
+[
+  {
+    "id": 1,
+    "category": "基础远程控制",
+    "name": "跨平台连接",
+    "status": "部分：Web→macOS；其他平台待验收",
+    "page": 1,
+    "source": "client-vue/src/views/remoteControl/index.vue"
+  },
+  {
+    "id": 2,
+    "category": "基础远程控制",
+    "name": "浏览器发起连接",
+    "status": "已有主控链路；按实际能力开放",
+    "page": 1,
+    "source": "client-vue/src/views/remoteControl/index.vue"
+  },
+  {
+    "id": 3,
+    "category": "基础远程控制",
+    "name": "电视投屏",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 14,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 4,
+    "category": "基础远程控制",
+    "name": "多显示器查看与切换",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 5,
+    "category": "基础远程控制",
+    "name": "分辨率适配与缩放",
+    "status": "部分：现有画面适配；选择项待补",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 6,
+    "category": "基础远程控制",
+    "name": "隐藏桌面壁纸",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 7,
+    "category": "基础远程控制",
+    "name": "手机触控与虚拟鼠标",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 14,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 8,
+    "category": "基础远程控制",
+    "name": "安卓设备控制",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 14,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 9,
+    "category": "基础远程控制",
+    "name": "多标签会话",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 15,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 10,
+    "category": "基础远程控制",
+    "name": "仅观看",
+    "status": "已有：明确区分查看与控制",
+    "page": 4,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 11,
+    "category": "基础远程控制",
+    "name": "远程摄像头",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 12,
+    "category": "基础远程控制",
+    "name": "多会话切换",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 15,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 13,
+    "category": "基础远程控制",
+    "name": "消息通知",
+    "status": "部分：聊天已有；远控状态需补",
+    "page": 0,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 14,
+    "category": "基础远程控制",
+    "name": "设备别名",
+    "status": "部分：登记时命名；编辑待补",
+    "page": 10,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 15,
+    "category": "基础远程控制",
+    "name": "同账号免密连接",
+    "status": "部分：许可与记住允许；非无条件免密",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 16,
+    "category": "基础远程控制",
+    "name": "防止休眠",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 17,
+    "category": "基础远程控制",
+    "name": "网络代理",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 18,
+    "category": "网络与画质",
+    "name": "SD-WAN加速",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 19,
+    "category": "网络与画质",
+    "name": "全球节点加速",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 20,
+    "category": "网络与画质",
+    "name": "低延迟传输",
+    "status": "部分：WebRTC/TURN；性能待验收",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 21,
+    "category": "网络与画质",
+    "name": "鼠标响应优化",
+    "status": "部分：已有输入链路；优化待验收",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 22,
+    "category": "网络与画质",
+    "name": "高清与真彩/HDR",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 23,
+    "category": "网络与画质",
+    "name": "高帧率与垂直同步",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 24,
+    "category": "网络与画质",
+    "name": "性能模式切换",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 25,
+    "category": "网络与画质",
+    "name": "带宽限额",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 26,
+    "category": "网络与画质",
+    "name": "高延迟时暂停输入",
+    "status": "部分：已有安全暂停；阈值策略待补",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 27,
+    "category": "远程协作",
+    "name": "跨平台文件传输",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 8,
+    "source": "client-vue/src/components/ChatMediaComposer.vue"
+  },
+  {
+    "id": 28,
+    "category": "远程协作",
+    "name": "双向剪贴板",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 8,
+    "source": "client-vue/src/components/ChatMediaComposer.vue"
+  },
+  {
+    "id": 29,
+    "category": "远程协作",
+    "name": "文字与语音交流",
+    "status": "部分：聊天/通话已有；并发需验收",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 30,
+    "category": "远程协作",
+    "name": "电脑向手机输入文字",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 14,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 31,
+    "category": "远程协作",
+    "name": "扩展屏与镜像屏",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 14,
+    "source": "client-vue/src/views/remoteShare/index.vue"
+  },
+  {
+    "id": 32,
+    "category": "远程协作",
+    "name": "虚拟显示器",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 33,
+    "category": "远程协作",
+    "name": "窗口共享",
+    "status": "部分：屏幕共享已有；远控选择待补",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 34,
+    "category": "远程协作",
+    "name": "白板标注",
+    "status": "部分：共享组件已有；远控整合待补",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 35,
+    "category": "远程协作",
+    "name": "远程打印",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 8,
+    "source": "client-vue/src/components/ChatMediaComposer.vue"
+  },
+  {
+    "id": 36,
+    "category": "远程协作",
+    "name": "多人同时控制",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 37,
+    "category": "远程协作",
+    "name": "多光标协作",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 38,
+    "category": "远程协作",
+    "name": "链接或协助码邀请",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 9,
+    "source": "client-vue/src/components/ScreenAnnotation.vue"
+  },
+  {
+    "id": 39,
+    "category": "远程协作",
+    "name": "指定应用远控",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 7,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 40,
+    "category": "外设映射",
+    "name": "游戏鼠标",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 41,
+    "category": "外设映射",
+    "name": "手机虚拟游戏键盘",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 42,
+    "category": "外设映射",
+    "name": "3D鼠标",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 43,
+    "category": "外设映射",
+    "name": "游戏手柄",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 44,
+    "category": "外设映射",
+    "name": "数位板与压感笔",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 45,
+    "category": "外设映射",
+    "name": "摄像头与麦克风",
+    "status": "部分：通话已有；外设映射未实现",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 46,
+    "category": "外设映射",
+    "name": "自定义快捷键及键盘适配",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 47,
+    "category": "外设映射",
+    "name": "加密狗与U盾",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 13,
+    "source": "client-vue/src/components/GlobalPrivateCall.vue"
+  },
+  {
+    "id": 48,
+    "category": "设备与运维",
+    "name": "无人值守连接",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 49,
+    "category": "设备与运维",
+    "name": "远程开关机/重启/锁屏",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 50,
+    "category": "设备与运维",
+    "name": "系统快捷操作",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 51,
+    "category": "设备与运维",
+    "name": "设备列表与分组",
+    "status": "部分：设备列表已有；分组待补",
+    "page": 10,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 52,
+    "category": "设备与运维",
+    "name": "按设备保存设置",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 53,
+    "category": "设备与运维",
+    "name": "启动应用与远程更新",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 54,
+    "category": "设备与运维",
+    "name": "上下线提醒",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 10,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 55,
+    "category": "设备与运维",
+    "name": "硬件信息",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 56,
+    "category": "设备与运维",
+    "name": "诊断日志",
+    "status": "部分：工程日志已有；用户界面待补",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 57,
+    "category": "设备与运维",
+    "name": "多设备屏幕墙",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 15,
+    "source": "client-vue/src/components/GlobalRemoteControl.vue"
+  },
+  {
+    "id": 58,
+    "category": "设备与运维",
+    "name": "批量分发文件",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 8,
+    "source": "client-vue/src/components/ChatMediaComposer.vue"
+  },
+  {
+    "id": 59,
+    "category": "设备与运维",
+    "name": "CMD/SSH终端",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 11,
+    "source": "client-vue/src/components/RemoteDeviceSettings.vue"
+  },
+  {
+    "id": 60,
+    "category": "安全与隐私",
+    "name": "传输加密",
+    "status": "已有协议基础；安全整体仍需验收",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 61,
+    "category": "安全与隐私",
+    "name": "访问黑白名单",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 62,
+    "category": "安全与隐私",
+    "name": "连接权限策略",
+    "status": "部分：许可/范围/撤销已有",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 63,
+    "category": "安全与隐私",
+    "name": "系统密码验证与解锁",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 64,
+    "category": "安全与隐私",
+    "name": "临时密码轮换",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 65,
+    "category": "安全与隐私",
+    "name": "二次验证",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 66,
+    "category": "安全与隐私",
+    "name": "隐私黑屏",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 67,
+    "category": "安全与隐私",
+    "name": "客户端锁定",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 68,
+    "category": "安全与隐私",
+    "name": "结束远控后锁屏",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 69,
+    "category": "安全与隐私",
+    "name": "禁用本地键鼠与锁定光标",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 70,
+    "category": "安全与隐私",
+    "name": "AI操作审计",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 71,
+    "category": "安全与隐私",
+    "name": "同账号控制状态提示",
+    "status": "部分：会话状态已有；跨端提示待补",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  },
+  {
+    "id": 72,
+    "category": "安全与隐私",
+    "name": "会话录像",
+    "status": "规划：未验证当前项目具备该能力",
+    "page": 12,
+    "source": "client-vue/src/components/RemoteHostSettings.vue"
+  }
+]
