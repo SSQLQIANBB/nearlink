@@ -69,7 +69,7 @@
                 <n-input v-model:value="emailLoginForm.email" type="email" placeholder="请输入已绑定邮箱" @keyup.enter="handleEmailLogin" />
               </n-form-item>
               <n-form-item path="code" label="邮箱验证码">
-                <div class="flex w-full gap-2">
+                <div class="flex w-full gap-2 items-center">
                   <n-input v-model:value="emailLoginForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" @keyup.enter="handleEmailLogin" />
                   <n-button :loading="codeSending" :disabled="loginCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendLoginCode">{{ loginCooldown > 0 ? `${loginCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
@@ -132,7 +132,7 @@
                 <n-input v-model:value="registerForm.email" type="email" placeholder="用于接收验证码与找回密码" />
               </n-form-item>
               <n-form-item path="emailCode" label="邮箱验证码">
-                <div class="flex w-full gap-2">
+                <div class="flex w-full gap-2 items-center">
                   <n-input v-model:value="registerForm.emailCode" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
                   <n-button :loading="codeSending" :disabled="registerCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendRegisterCode">{{ registerCooldown > 0 ? `${registerCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>
@@ -157,7 +157,7 @@
                 <n-input v-model:value="resetForm.email" type="email" placeholder="请输入已绑定邮箱" />
               </n-form-item>
               <n-form-item path="code" label="邮箱验证码">
-                <div class="flex w-full gap-2">
+                <div class="flex w-full gap-2 items-center">
                   <n-input v-model:value="resetForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
                   <n-button :loading="codeSending" :disabled="resetCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendResetCode">{{ resetCooldown > 0 ? `${resetCooldown}s 后重发` : '发送验证码' }}</n-button>
                 </div>

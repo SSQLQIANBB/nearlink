@@ -117,7 +117,7 @@
                 <div v-else class="mt-3 space-y-3">
                   <p class="text-sm text-gray-500">绑定并验证邮箱后，可找回或修改密码。</p>
                   <n-input v-model:value="bindEmailForm.email" type="email" placeholder="请输入邮箱" />
-                  <div class="flex flex-wrap gap-2">
+                  <div class="flex flex-wrap gap-2 items-center">
                     <n-input v-model:value="bindEmailForm.code" maxlength="6" placeholder="6 位验证码" class="min-w-[120px] flex-1" />
                     <n-button :loading="emailCodeLoading" :disabled="bindCooldown > 0" class="w-28 shrink-0 tabular-nums" @click="sendBindEmailCode">{{ bindCooldown > 0 ? `${bindCooldown}s 后重发` : '发送验证码' }}</n-button>
                     <n-button type="primary" :loading="bindLoading" @click="handleBindEmail">绑定邮箱</n-button>
@@ -297,7 +297,7 @@
             />
           </n-form-item>
           <n-form-item label="邮箱验证码" path="emailCode">
-            <div class="flex w-full gap-2">
+            <div class="flex w-full gap-2 items-center">
               <n-input v-model:value="passwordForm.emailCode" maxlength="6" placeholder="6 位验证码" class="min-w-0 flex-1" />
               <n-button :disabled="!verifiedEmail || passwordCooldown > 0" :loading="emailCodeLoading" class="w-28 shrink-0 tabular-nums" @click="sendPasswordEmailCode">{{ passwordCooldown > 0 ? `${passwordCooldown}s 后重发` : '发送验证码' }}</n-button>
             </div>
