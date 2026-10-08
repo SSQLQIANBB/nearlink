@@ -11,6 +11,7 @@ import setupStore from '@/stores/index';
 if (import.meta.env.VITE_DESKTOP === 'true') {
   document.documentElement.classList.add('desktop-app');
   if (/Mac/.test(navigator.platform)) document.documentElement.classList.add('desktop-macos');
+  if (/Win/.test(navigator.platform)) document.documentElement.classList.add('desktop-windows');
 }
 
 document.title = `NearLink ${APP_VERSION_LABEL}`;

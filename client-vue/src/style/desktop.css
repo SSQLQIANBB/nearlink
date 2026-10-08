@@ -1,3 +1,11 @@
+/* 滚动交给页面及列表，避免窗口外层滚动或边缘回弹露出底部空白。 */
+html.desktop-app,
+html.desktop-app body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* 桌面客户端使用整个内容区；网页保留原有居中卡片布局。 */
 html.desktop-app .im-page,
 html.desktop-app .group-im-page {
@@ -36,6 +44,7 @@ html.desktop-fullscreen .desktop-chat-top-drag-region {
 html.desktop-app .app-route-content {
   height: 100dvh;
   overflow: auto;
+  overscroll-behavior: none;
 }
 
 html.desktop-app .app-route-content .h-screen {
@@ -79,4 +88,23 @@ html.desktop-macos .groups-shell {
 
 html.desktop-macos .login-page {
   padding-top: calc(var(--desktop-window-inset) + 24px);
+}
+
+/* Windows 按钮叠放在内容右上角，仅避让交互区，不增加独立标题栏。 */
+html.desktop-windows:not(.desktop-fullscreen) .chat-header,
+html.desktop-windows:not(.desktop-fullscreen) .group-im-shell header,
+html.desktop-windows:not(.desktop-fullscreen) .desktop-call-header {
+  padding-right: 154px;
+}
+
+html.desktop-windows:not(.desktop-fullscreen) .profile-page,
+html.desktop-windows:not(.desktop-fullscreen) .groups-shell,
+html.desktop-windows:not(.desktop-fullscreen) .login-page,
+html.desktop-windows:not(.desktop-fullscreen) .remote-control-page {
+  padding-top: 48px;
+}
+
+html.desktop-fullscreen .desktop-window-controls,
+html.desktop-fullscreen .desktop-windows-drag-region {
+  display: none;
 }

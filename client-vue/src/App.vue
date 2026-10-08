@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme-overrides="designTheme" style="height: 100%; overflow: auto;">
+  <n-config-provider :theme-overrides="designTheme" :style="{ height: '100%', overflow: showDesktopTitlebar ? 'hidden' : 'auto' }">
     <n-message-provider>
       <n-notification-provider>
       <n-dialog-provider>

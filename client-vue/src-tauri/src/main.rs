@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod remote_control;
+#[cfg(target_os = "windows")]
+mod windows_window;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -18,6 +20,20 @@ fn show_main(app: &tauri::AppHandle) {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "windows")]
+    let context = {
+        let mut context = context;
+        context
+            .config_mut()
+            .app
+            .windows
+            .iter_mut()
+            .find(|window| window.label == "main")
+            .expect("missing main window config")
+            .decorations = false;
+        context
+    };
     tauri::Builder::default()
         .manage(remote_control::RemoteControlState::default())
         .invoke_handler(tauri::generate_handler![
@@ -49,6 +65,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            windows_window::set_taskbar_icon(
+                &app.get_webview_window("main").expect("missing main window"),
+            )?;
             let open = MenuItem::with_id(app, "open", "打开 NearLink", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出 NearLink", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;
@@ -89,7 +109,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to build NearLink desktop")
         .run(|app, event| {
             if matches!(

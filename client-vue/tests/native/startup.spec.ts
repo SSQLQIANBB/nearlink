@@ -30,6 +30,27 @@ test('Windows 客户端启动、原生 IPC、刷新与单实例', async ({}, tes
     await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible();
+    const windowState = (command: string) => page.evaluate(command => {
+      const native = window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: { label: string }) => Promise<boolean> } };
+      return native.__TAURI_INTERNALS__.invoke(`plugin:window|${command}`, { label: 'main' });
+    }, command);
+    expect(await windowState('is_decorated')).toBe(false);
+    await expect(page.getByRole('group', { name: '窗口控制' })).toBeVisible();
+    await page.getByRole('button', { name: '最大化', exact: true }).click();
+    await expect.poll(() => windowState('is_maximized')).toBe(true);
+    await page.getByRole('button', { name: '还原', exact: true }).click();
+    await expect.poll(() => windowState('is_maximized')).toBe(false);
+    await page.locator('.desktop-windows-drag-region').dblclick({ position: { x: 200, y: 16 } });
+    await expect.poll(() => windowState('is_maximized')).toBe(true);
+    await page.getByRole('button', { name: '还原', exact: true }).click();
+    await expect.poll(() => windowState('is_maximized')).toBe(false);
+    // 回归主窗口只有 ICON_SMALL、任务栏回退到旧图标的问题。
+    const largeIcon = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+      Add-Type 'using System; using System.Runtime.InteropServices; public static class TaskbarIconProbe { [DllImport("user32.dll")] public static extern IntPtr SendMessageW(IntPtr hwnd, uint msg, IntPtr kind, IntPtr value); }';
+      $window = (Get-Process -Id ${app.pid}).MainWindowHandle;
+      [TaskbarIconProbe]::SendMessageW($window, 0x007F, [IntPtr]1, [IntPtr]::Zero).ToInt64()
+    `], { encoding: 'utf8', windowsHide: true }).trim();
+    expect(Number(largeIcon)).toBeGreaterThan(0);
     await expect(page.locator('.n-input').filter({ has: page.locator('input[type="password"]') })).toHaveCSS('display', /^(inline-)?flex$/);
     await expect(page.locator('.n-tabs-rail')).toHaveCSS('display', 'flex');
     expect(await page.evaluate(() => {
@@ -44,6 +65,17 @@ test('Windows 客户端启动、原生 IPC、刷新与单实例', async ({}, tes
     second = spawn(executable, [], { windowsHide: true });
     await expect.poll(() => second!.exitCode, { timeout: 10000 }).toBe(0);
     expect(app.exitCode).toBeNull();
+    await page.getByRole('button', { name: '最小化', exact: true }).click();
+    await expect.poll(() => windowState('is_minimized')).toBe(true);
+    second = spawn(executable, [], { windowsHide: true });
+    await expect.poll(() => second!.exitCode, { timeout: 10000 }).toBe(0);
+    await expect.poll(() => windowState('is_minimized')).toBe(false);
+    await page.getByRole('button', { name: '关闭窗口', exact: true }).click();
+    await expect.poll(() => windowState('is_visible')).toBe(false);
+    expect(app.exitCode).toBeNull();
+    second = spawn(executable, [], { windowsHide: true });
+    await expect.poll(() => second!.exitCode, { timeout: 10000 }).toBe(0);
+    await expect.poll(() => windowState('is_visible')).toBe(true);
     expect(errors).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath('windows-login.png') });
   } finally {
