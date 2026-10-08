@@ -2208,6 +2208,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "nearlink-desktop"
+version = "0.8.0-alpha.4"
+dependencies = [
+ "base64 0.22.1",
+ "block2",
+ "ed25519-dalek",
+ "getrandom 0.2.17",
+ "hmac",
+ "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "security-framework",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-notification",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-window-state",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4041,34 +4069,6 @@ name = "tinyvec"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
-
-[[package]]
-name = "todesk-desktop"
-version = "0.8.0-beta.2"
-dependencies = [
- "base64 0.22.1",
- "block2",
- "ed25519-dalek",
- "getrandom 0.2.17",
- "hmac",
- "libc",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "security-framework",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-notification",
- "tauri-plugin-single-instance",
- "tauri-plugin-window-state",
- "windows-sys 0.61.2",
- "zeroize",
-]
 
 [[package]]
 name = "tokio"

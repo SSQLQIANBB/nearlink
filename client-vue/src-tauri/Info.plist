@@ -2,11 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>NSCameraUsageDescription</key>
-  <string>ToDesk 需要使用摄像头进行视频通话。</string>
+  <string>NearLink 需要使用摄像头进行视频通话。</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>ToDesk 需要使用麦克风进行语音消息和音视频通话。</string>
+  <string>NearLink 需要使用麦克风进行语音消息和音视频通话。</string>
   <key>CFBundleShortVersionString</key>
   <string>0.8.0</string>
   <key>CFBundleGetInfoString</key>
-  <string>ToDesk 内测版 0.8.0-beta.2</string>
+  <string>NearLink 内测版 0.8.0-alpha.4</string>
 </dict></plist>

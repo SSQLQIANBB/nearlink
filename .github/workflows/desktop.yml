@@ -89,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
-          name: ToDesk-${{ matrix.platform }}
+          name: NearLink-${{ matrix.platform }}
           path: |
             client-vue/src-tauri/target/release/bundle/nsis/*.exe
             client-vue/src-tauri/target/*/release/bundle/dmg/*.dmg

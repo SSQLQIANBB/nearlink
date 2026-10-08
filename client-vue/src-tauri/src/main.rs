@@ -49,13 +49,13 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let open = MenuItem::with_id(app, "open", "打开 ToDesk", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "退出 ToDesk", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "打开 NearLink", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出 NearLink", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().expect("missing app icon").clone())
                 .tooltip(format!(
-                    "ToDesk 内测版 {} · 关闭窗口后仍在后台运行",
+                    "NearLink 内测版 {} · 关闭窗口后仍在后台运行",
                     env!("CARGO_PKG_VERSION")
                 ))
                 .menu(&menu)
@@ -90,7 +90,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build ToDesk desktop")
+        .expect("failed to build NearLink desktop")
         .run(|app, event| {
             if matches!(
                 event,

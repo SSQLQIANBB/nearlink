@@ -6,8 +6,8 @@ export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '
 const packagePaths = ['package.json', 'client-vue/package.json', 'backend-koa/package.json'];
 
 export function parseProductVersion(version) {
-  const match = typeof version === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.([1-9]\d*)$/.exec(version);
-  if (!match) throw new Error('当前内测版本必须为 major.minor.patch-beta.N，例如 0.2.0-beta.1');
+  const match = typeof version === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-alpha\.([1-9]\d*)$/.exec(version);
+  if (!match) throw new Error('当前内测版本必须为 major.minor.patch-alpha.N，例如 0.2.0-alpha.1');
   const parts = match.slice(1).map(Number);
   if (parts.some(value => !Number.isSafeInteger(value)) || parts.slice(0, 3).some(value => value > 65535)) {
     throw new Error('版本数值超出桌面平台范围（主、次、修订版本不得超过 65535）');
@@ -57,7 +57,7 @@ export function planVersionSync(root, requestedVersion) {
   config.version = next.version;
   const mainWindow = config.app.windows.find(window => window.label === 'main');
   if (!mainWindow) throw new Error('Tauri 缺少 main 窗口');
-  mainWindow.title = `ToDesk 内测版 ${next.version}`;
+  mainWindow.title = `NearLink 内测版 ${next.version}`;
   putJson(configPath, config);
   const macPath = 'client-vue/src-tauri/tauri.macos.conf.json';
   const mac = json(macPath);
@@ -66,9 +66,9 @@ export function planVersionSync(root, requestedVersion) {
   const cargoPath = 'client-vue/src-tauri/Cargo.toml';
   changes.set(cargoPath, replaceOne(read(cargoPath), /(\[package\][\s\S]*?\nversion\s*=\s*")[^"]+("[^\n]*)/, `$1${next.version}$2`, cargoPath));
   const lockPath = 'client-vue/src-tauri/Cargo.lock';
-  changes.set(lockPath, replaceOne(read(lockPath), /(\[\[package\]\]\nname = "todesk-desktop"\nversion = ")[^"]+(")/, `$1${next.version}$2`, lockPath));
+  changes.set(lockPath, replaceOne(read(lockPath), /(\[\[package\]\]\nname = "nearlink-desktop"\nversion = ")[^"]+(")/, `$1${next.version}$2`, lockPath));
   const plistPath = 'client-vue/src-tauri/Info.plist';
-  changes.set(plistPath, plistValue(plistValue(read(plistPath), 'CFBundleShortVersionString', next.base), 'CFBundleGetInfoString', `ToDesk 内测版 ${next.version}`));
+  changes.set(plistPath, plistValue(plistValue(read(plistPath), 'CFBundleShortVersionString', next.base), 'CFBundleGetInfoString', `NearLink 内测版 ${next.version}`));
   return { version: next.version, buildNumber, changes: [...changes].filter(([path, value]) => value !== read(path)) };
 }
 
@@ -87,7 +87,7 @@ export function syncProductVersion(root = repositoryRoot, version) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [command, version, ...extra] = process.argv.slice(2);
   if (extra.length || !['check', 'sync', 'set'].includes(command) || (command === 'set') !== Boolean(version)) {
-    throw new Error('用法：product-version.mjs check | sync | set 0.2.0-beta.1');
+    throw new Error('用法：product-version.mjs check | sync | set 0.2.0-alpha.1');
   }
   const result = command === 'check' ? checkProductVersion() : syncProductVersion(repositoryRoot, version);
   console.log(`产品内测版本${command === 'check' ? '校验通过' : '已同步'}：${result.version}（构建号 ${result.buildNumber}）`);

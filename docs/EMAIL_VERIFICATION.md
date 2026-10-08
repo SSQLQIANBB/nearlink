@@ -1,6 +1,6 @@
 # 邮箱验证配置
 
-注册、绑定邮箱、找回密码、修改密码和邮箱验证码登录使用 SMTP 邮箱验证码。本项目使用 QQ 邮箱时，先在 QQ 邮箱设置中开启 SMTP 服务并取得授权码。上线前在服务器的 `/opt/todesk/.env.production` 中设置 `SMTP_HOST=smtp.qq.com`、`SMTP_PORT=465`、`SMTP_USER=完整的QQ邮箱地址`、`SMTP_PASSWORD=SMTP授权码`、`SMTP_FROM=ToDesk <同一QQ邮箱地址>`。`SMTP_PASSWORD` 不是 QQ 登录密码，不能提交到仓库，也不要发送到聊天中。465 端口使用 TLS；修改环境变量后重启后端容器。
+注册、绑定邮箱、找回密码、修改密码和邮箱验证码登录使用 SMTP 邮箱验证码。本项目使用 QQ 邮箱时，先在 QQ 邮箱设置中开启 SMTP 服务并取得授权码。上线前在服务器的 `/opt/todesk/.env.production` 中设置 `SMTP_HOST=smtp.qq.com`、`SMTP_PORT=465`、`SMTP_USER=完整的QQ邮箱地址`、`SMTP_PASSWORD=SMTP授权码`、`SMTP_FROM=NearLink <同一QQ邮箱地址>`。`SMTP_PASSWORD` 不是 QQ 登录密码，不能提交到仓库，也不要发送到聊天中。465 端口使用 TLS；修改环境变量后重启后端容器。
 
 本地开发可把相同的 `SMTP_*` 变量写入 `backend-koa/.env.local`，`pnpm run server` 会自动加载该文件；它已被 Git 忽略，请将文件权限设为 `600`。若没有配置，发送验证码接口返回 503，注册与找回密码无法完成；已注册账号的正常登录不受影响。
 

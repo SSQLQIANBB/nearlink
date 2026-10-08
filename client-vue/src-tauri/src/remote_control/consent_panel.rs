@@ -126,7 +126,7 @@ pub(super) fn show(mtm: MainThreadMarker, parent: &NSWindow, prompt: Prompt) -> 
     };
     // The Retained owner, not AppKit's close handling, owns this window.
     unsafe { panel.setReleasedWhenClosed(false) };
-    panel.setTitle(&NSString::from_str("ToDesk · 本机远程协助确认"));
+    panel.setTitle(&NSString::from_str("NearLink · 本机远程协助确认"));
     panel.setOpaque(false);
     panel.setBackgroundColor(Some(&NSColor::clearColor()));
     panel.setHasShadow(true);

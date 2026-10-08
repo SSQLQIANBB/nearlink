@@ -1,4 +1,4 @@
-# ToDesk 功能实现链路
+# NearLink 功能实现链路
 
 本文以当前 `client-vue/src` 与 `backend-koa/src` 为准，按“页面或组件 → 前端状态/API/Socket → 后端路由或事件 → MySQL/Redis/浏览器资源”的顺序说明。文中的文件名均可点击跳到源码；HTTP 地址和 Socket 事件名可直接用于排查 Network 或服务端日志。部署与启动参见 [STARTUP.md](../STARTUP.md)、[DEPLOYMENT.md](../DEPLOYMENT.md)；邮箱配置参见 [EMAIL_VERIFICATION.md](./EMAIL_VERIFICATION.md)，七牛存储与 CDN 参见 [QINIU_CDN_CERTIFICATE_AUTOMATION.md](./QINIU_CDN_CERTIFICATE_AUTOMATION.md)，带宽取舍参见 [LOW_BANDWIDTH_REALTIME.md](./LOW_BANDWIDTH_REALTIME.md)。
 

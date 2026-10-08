@@ -37,7 +37,7 @@ fn main() {
     };
     unsafe { parent.setReleasedWhenClosed(false) };
     parent.setTitle(&NSString::from_str(
-        "ToDesk · 离线授权弹窗预览（不会发起远控）",
+        "NearLink · 离线授权弹窗预览（不会发起远控）",
     ));
     parent.center();
     parent.makeKeyAndOrderFront(None);

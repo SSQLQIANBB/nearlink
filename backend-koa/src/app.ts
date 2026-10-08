@@ -44,7 +44,7 @@ app.use(async (ctx, next) => {
 async function startServer() {
   try {
     console.log(chalk.cyan.bold('\n========================================'));
-    console.log(chalk.cyan.bold('  ToDesk 服务端启动中...'));
+    console.log(chalk.cyan.bold('  NearLink 服务端启动中...'));
     console.log(chalk.cyan.bold('========================================\n'));
 
     // 1. 初始化数据库
@@ -103,7 +103,7 @@ async function startServer() {
     // 5. 启动HTTP服务器
     httpServer.listen(env.app.port, () => {
       console.log(chalk.cyan.bold('========================================'));
-      console.log(chalk.green.bold('✓ ToDesk 服务端启动成功！'));
+      console.log(chalk.green.bold('✓ NearLink 服务端启动成功！'));
       console.log(chalk.cyan.bold('========================================'));
       console.log(chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${env.app.port}`));
       console.log(chalk.blue('  环境: ') + chalk.yellow(env.app.nodeEnv));

@@ -107,7 +107,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
           if (current(value) && !cancel.signal.aborted) await command('remote:consent', { proof }, message.revision);
         }).catch((cause: unknown) => {
           if (current(value)) stop(cause instanceof Error && cause.message === 'REMOTE_NATIVE_TIMEOUT'
-            ? '45 秒内未完成本机确认，协助已取消。请重新上线后发起请求，并在 ToDesk 窗口确认。'
+            ? '45 秒内未完成本机确认，协助已取消。请重新上线后发起请求，并在 NearLink 窗口确认。'
             : '本机授权未完成，协助已取消。');
         })
           .finally(() => { if (approval === cancel) approval = null; });

@@ -559,7 +559,7 @@ pub async fn remote_control_reset_identity(
         let previous = identity::identity_fingerprint(&device_store::OsSeedStore, user_id)?;
         worker_state.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?.check(operation)?;
         let decision = app.dialog().message(format!("账号：{user_id}\n当前设备公钥指纹：{previous}\n\n重建将替换本机该账号的设备私钥并清除本地协助授权。旧设备记录及撤销状态仍保留在服务端，新的身份需要重新登记和取得协助许可。"))
-            .title("ToDesk · 重建设备身份")
+            .title("NearLink · 重建设备身份")
             .buttons(MessageDialogButtons::YesNoCancelCustom("保留原身份".into(), "重建身份".into(), "取消".into()))
             .blocking_show_with_result();
         worker_state.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?.check(operation)?;

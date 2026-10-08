@@ -1,23 +1,23 @@
 # 桌面版本发布
 
-开发分支为 `feature/desktop-tauri`。桌面端使用独立的 `desktop-v` 标签前缀，避免与网页版本混淆。下载地址：<https://github.com/SSQLQIANBB/toDesk/releases>。
+开发分支为 `feature/desktop-tauri`。桌面端使用独立的 `desktop-v` 标签前缀，避免与网页版本混淆。下载地址：<https://github.com/SSQLQIANBB/nearlink/releases>。
 
 ## 统一产品版本与提交规则
 
-当前源码产品版本为 `0.8.0-beta.2`，处于内测阶段。根目录 `package.json` 的 `version` 是唯一维护入口，前端、后端、Tauri、Rust 包及 `Cargo.lock` 中的自有包版本保持一致。第三方依赖版本不加内测标识。界面、桌面窗口、托盘和 Release 说明显示“内测版”及完整版本；应用名与标识仍为 `ToDesk` / `top.sycsq.todesk`，保留原有安装路径和用户数据。
+当前源码产品版本为 `0.8.0-alpha.4`，处于内测阶段。根目录 `package.json` 的 `version` 是唯一维护入口，前端、后端、Tauri、Rust 包及 `Cargo.lock` 中的自有包版本保持一致。第三方依赖版本不加内测标识。界面、桌面窗口、托盘和 Release 说明显示“内测版”及完整版本；应用名为 `NearLink`，仓库名为 `nearlink`；应用标识继续使用 `top.sycsq.todesk`，以沿用现有应用数据标识。新安装包与 macOS 应用名使用 `NearLink`，旧版安装路径和系统权限的迁移仍需实机验证。域名、服务器部署目录、容器与数据库名称、协议和存储键保持不变。
 
 | 变更 | 版本操作示例 |
 | --- | --- |
-| 新增较大功能、重要协议或架构升级 | `0.2.0-beta.1` → `0.3.0-beta.1`，次版本递增，修订版本和 beta 序号重置 |
-| 同一功能阶段的小功能、优化、尚未发布的修复 | `0.2.0-beta.1` → `0.2.0-beta.2` |
-| 对已经分发的版本单独发布兼容性缺陷或安全修复 | `0.2.0-beta.2` → `0.2.1-beta.1` |
+| 新增较大功能、重要协议或架构升级 | `0.2.0-alpha.1` → `0.3.0-alpha.1`，次版本递增，修订版本和 alpha 序号重置 |
+| 同一功能阶段的小功能、优化、尚未发布的修复 | `0.2.0-alpha.1` → `0.2.0-alpha.2` |
+| 对已经分发的版本单独发布兼容性缺陷或安全修复 | `0.2.0-alpha.2` → `0.2.1-alpha.1` |
 | 仅文档、测试整理且不产生新的分发包 | 可保留版本；不能复用已有标签覆盖安装包 |
 
-大改动应在对应批次的中文提交中同时升级版本，不能到发布时才补版本。`0.x` 内测阶段的重要不兼容变更也递增次版本，并记录兼容性影响；未来结束内测或升主版本需另行明确，当前脚本拒绝不含 `-beta.N` 的正式版本。
+大改动应在对应批次的中文提交中同时升级版本，不能到发布时才补版本。`0.x` 内测阶段的重要不兼容变更也递增次版本，并记录兼容性影响；未来结束内测或升主版本需另行明确，当前脚本拒绝不含 `-alpha.N` 的正式版本。
 
 ```sh
 # 一次同步所有版本来源，并自动递增 macOS 数字构建号
-pnpm version:set 0.3.0-beta.1
+pnpm version:set 0.3.0-alpha.1
 
 # 保留当前版本与构建号，只修复来源不一致
 pnpm version:sync
@@ -31,21 +31,21 @@ pnpm test:release
 
 ## 系统版本字段
 
-产品版本与安装包文件名保留 `0.8.0-beta.2`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.8.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `28`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
+产品版本与安装包文件名保留 `0.8.0-alpha.4`。macOS 的 `CFBundleShortVersionString` 要求三个数字段，`Info.plist` 因而显式写入 `0.8.0`；`CFBundleVersion` 使用根 `package.json` 中独立递增的 `desktopBuildNumber`（本版为 `31`），通过 `bundle.macOS.bundleVersion` 写入。完整内测版本仍在界面和 `CFBundleGetInfoString` 中展示。两项数字字段遵循 [Apple 短版本要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)和 [Apple 构建号要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleversion)。
 
-Windows 使用当前 Tauri 2.11.5 的 NSIS 默认流程：数字资源版本为 `0.8.0.0`，显示版本和安装包名保留 `0.8.0-beta.2`；安装升级比较完整语义版本，因此 beta 序号仍能区分升级。无需把预发布后缀塞入数字字段，也不改造默认安装模板。依据：[Tauri NSIS 数字版本转换](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/mod.rs)、[默认安装模板与版本比较](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)。若以后切换 MSI，需要另行核对 MSI 版本限制。
+Windows 使用当前 Tauri 2.11.5 的 NSIS 默认流程：数字资源版本为 `0.8.0.0`，显示版本和安装包名保留 `0.8.0-alpha.4`；安装升级比较完整语义版本，因此 alpha 序号仍能区分升级。无需把预发布后缀塞入数字字段，也不改造默认安装模板。依据：[Tauri NSIS 数字版本转换](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/mod.rs)、[默认安装模板与版本比较](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.5/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)。若以后切换 MSI，需要另行核对 MSI 版本限制。
 
 ## 一次发布的操作
 
-1. 在该批功能提交前运行 `pnpm version:set <新的内测版本>`，并一起提交同步后的文件。首次统一版本为 `0.2.0-beta.1`。
+1. 在该批功能提交前运行 `pnpm version:set <新的内测版本>`，并一起提交同步后的文件。首次统一版本为 `0.2.0-beta.1`（历史版本）。
 2. 运行 `pnpm version:check`、`pnpm test:release`、相关功能测试和类型检查；用 `cargo check --locked --manifest-path client-vue/src-tauri/Cargo.toml` 核对 Rust 依赖。版本脚本直接同步本包的 `Cargo.lock` 条目，不会更新第三方依赖。
-3. 提交并推送代码，再推送对应版本标签。以 `0.2.0-beta.1` 为例，在仓库根目录执行：
+3. 提交并推送代码，再推送对应版本标签。以 `0.2.0-alpha.1` 为例，在仓库根目录执行：
 
 ```sh
-node scripts/desktop-release.mjs desktop-v0.2.0-beta.1
+node scripts/desktop-release.mjs desktop-v0.2.0-alpha.1
 git push origin feature/desktop-tauri
-git tag -a desktop-v0.2.0-beta.1 -m "发布桌面端内测版 0.2.0-beta.1"
-git push origin desktop-v0.2.0-beta.1
+git tag -a desktop-v0.2.0-alpha.1 -m "发布桌面端内测版 0.2.0-alpha.1"
+git push origin desktop-v0.2.0-alpha.1
 ```
 
 当前发布一律标记为 GitHub Prerelease。已发布标签不可重复使用或移动；修复后请递增版本号。标签必须指向包含 `.github/workflows/desktop-release.yml` 的提交，无需先合并 master。普通分支推送不创建 Release。工作流由 GitHub 自带的 `GITHUB_TOKEN` 发布，不需要额外的个人访问令牌。
@@ -61,9 +61,9 @@ git push origin desktop-v0.2.0-beta.1
 
 | 系统 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows x64 | `ToDesk_0.8.0-beta.2_x64-setup.exe` | 运行安装程序 |
-| Apple 芯片 Mac | `ToDesk_0.8.0-beta.2_aarch64.dmg` | 打开后拖入 Applications |
-| Intel Mac | `ToDesk_0.8.0-beta.2_x64.dmg` | 打开后拖入 Applications |
+| Windows x64 | `NearLink_0.8.0-alpha.4_x64-setup.exe` | 运行安装程序 |
+| Apple 芯片 Mac | `NearLink_0.8.0-alpha.4_aarch64.dmg` | 打开后拖入 Applications |
+| Intel Mac | `NearLink_0.8.0-alpha.4_x64.dmg` | 打开后拖入 Applications |
 
 文件名中的版本随配置变化。Mac 需要 macOS 12 或更新版本。
 
@@ -83,3 +83,7 @@ git push origin desktop-v0.2.0-beta.1
 - 桌面 hash 路由、刷新和服务地址导航测试通过；模拟原生 CSP 的登录样式回归测试通过，Mac 原生窗口截图确认输入框、标签和图标正常。
 - 既有 Mac ARM64 `.app` / `.dmg` 打包链路已验证；每次新版本仍需核对最终安装包版本、生产服务地址、签名完整性和启动结果。版本脚本测试不代替打包验收。
 - Windows 和 Intel Mac 构建由 GitHub Actions 执行；真实设备音视频、通知与屏幕共享需要分别验收。
+
+### Alpha 标识迁移
+
+当前内测统一使用 `alpha.N`，版本校验拒绝 `beta`、`rc` 和正式版；历史标签、发布记录和第三方依赖版本不改写。本次由 `0.8.0-beta.4` 切换为 `0.8.0-alpha.4`，数字构建号从 30 增至 31。同一基础版本按 SemVer 排序时 alpha 低于 beta，数字构建号不能代替 Windows 安装器的完整版本比较；从旧 Beta 包覆盖安装的行为需实机验证，不能视为普通递增升级。后续 Alpha 迭代继续使用 `pnpm version:set`。

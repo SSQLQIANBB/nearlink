@@ -110,7 +110,7 @@ class Builder:
     def owner(self, source):
         if source.is_relative_to(self.sdk):
             return source.relative_to(self.sdk).parts[0]
-        return "CPython" if source.is_relative_to(self.base) else "toDesk"
+        return "CPython" if source.is_relative_to(self.base) else "NearLink"
 
     def copy(self, source, destination=None):
         source = source.resolve()

@@ -14,7 +14,7 @@ const { chromium } = require('@playwright/test');
 const directory = await mkdtemp(join(tmpdir(), 'todesk-wk-capabilities-'));
 const server = createServer((_request, response) => {
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; media-src blob:; connect-src 'self'" });
-  response.end('<!doctype html><html><meta charset="utf-8"><title>ToDesk WKWebView 合成画面验证</title><body></body></html>');
+  response.end('<!doctype html><html><meta charset="utf-8"><title>NearLink WKWebView 合成画面验证</title><body></body></html>');
 });
 const evidence = { browser: 'system-WKWebView', syntheticOnly: true, iceServers: [], candidatePolicy: 'loopback-first-then-verified-same-host-addresses', noDeviceCapture: true, noOsInput: true, framesStored: 0 };
 let wk, chrome, receiver, sender;

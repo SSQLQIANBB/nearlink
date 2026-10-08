@@ -1,8 +1,8 @@
 [package]
-name = "todesk-desktop"
-default-run = "todesk-desktop"
-version = "0.8.0-beta.2"
-description = "ToDesk desktop client for Windows and macOS"
+name = "nearlink-desktop"
+default-run = "nearlink-desktop"
+version = "0.8.0-alpha.4"
+description = "NearLink desktop client for Windows and macOS"
 edition = "2021"
 rust-version = "1.85"
 

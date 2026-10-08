@@ -24,7 +24,7 @@ private final class Probe: NSObject, WKNavigationDelegate, WKScriptMessageHandle
         super.init()
         web.navigationDelegate = self
         configuration.userContentController.add(self, name: "probe")
-        window.title = "ToDesk WKWebView 本机验证"
+        window.title = "NearLink WKWebView 本机验证"
         window.contentView = web
         window.orderFront(nil)
     }

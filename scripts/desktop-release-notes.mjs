@@ -2,15 +2,15 @@ import { pathToFileURL } from 'node:url';
 
 export function desktopReleaseNotes(repository, version) {
   const base = `https://github.com/${repository}/releases/download/desktop-v${version}`;
-  return `## 下载 ToDesk 内测版 ${version}
+  return `## 下载 NearLink 内测版 ${version}
 
 请按电脑系统选择安装包，点击下方对应的下载链接：
 
 | 你的电脑 | 下载入口 | 安装方式 |
 | --- | --- | --- |
-| Windows 电脑（64 位 Intel / AMD） | [下载 Windows 安装包（.exe）](${base}/ToDesk_${version}_x64-setup.exe) | 双击安装程序 |
-| Mac（Apple 芯片，M 系列） | [下载 macOS 安装包 · Apple 芯片（.dmg）](${base}/ToDesk_${version}_aarch64.dmg) | 打开后将 ToDesk 拖入“应用程序” |
-| Mac（Intel 芯片） | [下载 macOS 安装包 · Intel 芯片（.dmg）](${base}/ToDesk_${version}_x64.dmg) | 打开后将 ToDesk 拖入“应用程序” |
+| Windows 电脑（64 位 Intel / AMD） | [下载 Windows 安装包（.exe）](${base}/NearLink_${version}_x64-setup.exe) | 双击安装程序 |
+| Mac（Apple 芯片，M 系列） | [下载 macOS 安装包 · Apple 芯片（.dmg）](${base}/NearLink_${version}_aarch64.dmg) | 打开后将 NearLink 拖入“应用程序” |
+| Mac（Intel 芯片） | [下载 macOS 安装包 · Intel 芯片（.dmg）](${base}/NearLink_${version}_x64.dmg) | 打开后将 NearLink 拖入“应用程序” |
 
 **不确定 Mac 的芯片？** 点击屏幕左上角苹果菜单 →“关于本机”：显示 Apple M 系列芯片请选择“Apple 芯片”；显示 Intel 处理器请选择“Intel 芯片”。Mac 需要 macOS 12 或更新版本。
 

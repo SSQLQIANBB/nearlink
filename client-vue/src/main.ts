@@ -13,7 +13,7 @@ if (import.meta.env.VITE_DESKTOP === 'true') {
   if (/Mac/.test(navigator.platform)) document.documentElement.classList.add('desktop-macos');
 }
 
-document.title = `ToDesk ${APP_VERSION_LABEL}`;
+document.title = `NearLink ${APP_VERSION_LABEL}`;
 
 const app = createApp(App);
 

@@ -17,10 +17,10 @@
     </div>
     <RememberedApprovalSettings :reset-version="consentListVersion" />
     <p v-if="notice" role="status">{{ notice }}</p>
-    <p v-if="!remote.capabilities?.canHostView">请先在 macOS 系统设置中为 ToDesk 开启屏幕录制权限；键鼠控制还需要辅助功能权限。更改权限后重新启动客户端。</p>
+    <p v-if="!remote.capabilities?.canHostView">请先在 macOS 系统设置中为 NearLink 开启屏幕录制权限；键鼠控制还需要辅助功能权限。更改权限后重新启动客户端。</p>
     <section class="permissions" aria-label="键鼠控制权限"><h4>系统权限与被控能力</h4>
       <strong>客户端支持键鼠控制，须经本机允许</strong>
-      <p>{{ remote.capabilities?.canHostControl ? '系统权限已就绪，对方可以请求控制。' : '尚未具备键鼠控制权限。请为 /Applications/ToDesk.app 开启屏幕录制和辅助功能权限，再重新检测。' }}</p>
+      <p>{{ remote.capabilities?.canHostControl ? '系统权限已就绪，对方可以请求控制。' : '尚未具备键鼠控制权限。请为 /Applications/NearLink.app 开启屏幕录制和辅助功能权限，再重新检测。' }}</p>
       <n-button @click="openPermission('screenCapture')">打开屏幕录制设置</n-button>
       <n-button @click="openPermission('inputControl')">打开辅助功能设置</n-button>
       <n-button :loading="remote.loading" @click="refreshPermissions">重新检测权限</n-button>
@@ -56,11 +56,11 @@ const durationOptions = [{ label: '15 分钟', value: '15m' }, { label: '1 小�
 let mounted = true;
 async function openPermission(permission: 'screenCapture' | 'inputControl') {
   try { await invoke('remote_control_open_permission_settings', { permission }); }
-  catch { error.value = '无法打开设置，请在系统设置 → 隐私与安全性中为 ToDesk 开启对应权限。'; }
+  catch { error.value = '无法打开设置，请在系统设置 → 隐私与安全性中为 NearLink 开启对应权限。'; }
 }
 async function refreshPermissions() {
   await remote.refreshCapabilities();
-  if (!remote.capabilities?.canHostControl) error.value = '辅助功能权限尚未生效。若已开启，请核对应用路径并重启 ToDesk；更新安装包后可能需要重新授权。';
+  if (!remote.capabilities?.canHostControl) error.value = '辅助功能权限尚未生效。若已开启，请核对应用路径并重启 NearLink；更新安装包后可能需要重新授权。';
   else error.value = '';
 }
 const deviceOptions = computed(() => props.devices.filter(d => !d.revokedAt && d.platform === 'macos').map(d => ({ label: d.alias, value: d.deviceId })));

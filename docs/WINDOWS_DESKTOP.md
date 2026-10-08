@@ -6,13 +6,13 @@
 
 - 桌面私聊与群聊铺满窗口可用内容区，无网页外层留白、最大宽度限制和卡片阴影。Mac 红黄绿按钮直接叠加在页面背景上，顶部仅有透明拖动热区，不显示独立横条、标题文字或分隔线；页面顶部操作避让窗口按钮，顶部可拖动及双击缩放；Windows 保留系统原生标题栏。
 - 原生窗口支持缩放、最小化和最大化，恢复上次窗口大小与位置。
-- 关闭窗口隐藏到托盘，保留消息连接和正在进行的通话；点击托盘或重复启动返回现有窗口；托盘菜单“退出 ToDesk”结束进程。
+- 关闭窗口隐藏到托盘，保留消息连接和正在进行的通话；点击托盘或重复启动返回现有窗口；托盘菜单“退出 NearLink”结束进程。
 - 桌面系统通知复用账号级通知类型、内容预览和声音设置。切换到其他应用也视为后台，回到窗口后清除当前会话未读。
 - 录制文件使用系统另存为对话框。取消保留录制内容，写入失败可重试；文件权限只授予用户所选路径。
 - PNG/JPEG 头像通过系统文件选择器上传，20 MB 上限和裁剪流程与网页一致。
 - NSIS 安装包按当前用户安装，无 WebView2 时下载安装运行时。
 
-通知插件在 Windows 中需要安装后的应用才能显示正式名称和图标；系统通知点击跳转会话尚不支持，请通过托盘返回聊天。系统“请勿打扰”或禁用 ToDesk 通知仍会影响提醒。参考 [Tauri 通知说明](https://v2.tauri.app/plugin/notification/)。
+通知插件在 Windows 中需要安装后的应用才能显示正式名称和图标；系统通知点击跳转会话尚不支持，请通过托盘返回聊天。系统“请勿打扰”或禁用 NearLink 通知仍会影响提醒。参考 [Tauri 通知说明](https://v2.tauri.app/plugin/notification/)。
 
 ## Windows 构建环境
 
@@ -29,7 +29,7 @@
 - 安装 Xcode Command Line Tools：`xcode-select --install`。
 - `pnpm desktop:build` 自动读取 `tauri.macos.conf.json`，生成 `.app` 和 `.dmg`，不再尝试构建 Windows NSIS。
 - 本机构建使用当前 CPU 架构；CI 分别构建 Apple 芯片（aarch64）和 Intel（x64）版本。
-- macOS 权限声明包含摄像头和麦克风用途；首次使用需授权。关闭窗口后可从 Dock 或菜单栏托盘的“打开 ToDesk”恢复。
+- macOS 权限声明包含摄像头和麦克风用途；首次使用需授权。关闭窗口后可从 Dock 或菜单栏托盘的“打开 NearLink”恢复。
 - 语音与通话录制按 WebView 支持情况选择 WebM 或 MP4，保存文件扩展名与实际内容一致。
 - 目前采用 ad-hoc 临时签名，未完成 Developer ID 签名及 Apple 公证，下载后可能被 Gatekeeper 拦截；临时签名不等于 Apple 认证。
 - 屏幕共享取决于系统 WKWebView 的捕获能力和系统权限；macOS 上游存在兼容性限制，不能将打包成功视为屏幕共享通过验收，参见 [Wry 跟踪问题](https://github.com/tauri-apps/wry/issues/1101)。
@@ -67,12 +67,12 @@ pnpm desktop:build
 安装包位于 `client-vue/src-tauri/target/`：
 
 - Windows：`release/bundle/nsis/*.exe`。
-- macOS 本机：`release/bundle/dmg/*.dmg` 和 `release/bundle/macos/ToDesk.app`。
+- macOS 本机：`release/bundle/dmg/*.dmg` 和 `release/bundle/macos/NearLink.app`。
 - CI 指定 Mac 架构时：`<target>/release/bundle/dmg/*.dmg`。
 
 Windows 当前未签名，macOS 为临时签名；尚未配置应用内自动更新。
 
-GitHub Actions 的 **Desktop Build** 工作流在桌面功能分支推送和 PR 中检查编译与打包。分支构建默认连接现有站点 `https://www.sycsq.top`，可通过仓库变量 `DESKTOP_SERVER_URL` 覆盖；手动运行时填写的地址优先级最高。分支或手动构建成功后，从 `ToDesk-windows-x64`、`ToDesk-macos-arm64` 或 `ToDesk-macos-x64` artifact 下载安装包。普通分支构建只上传 artifact；版本标签通过 **Desktop Release** 发布安装包，均不触发网页部署。发布方式见 [桌面版本发布](DESKTOP_RELEASE.md)。
+GitHub Actions 的 **Desktop Build** 工作流在桌面功能分支推送和 PR 中检查编译与打包。分支构建默认连接现有站点 `https://www.sycsq.top`，可通过仓库变量 `DESKTOP_SERVER_URL` 覆盖；手动运行时填写的地址优先级最高。分支或手动构建成功后，从 `NearLink-windows-x64`、`NearLink-macos-arm64` 或 `NearLink-macos-x64` artifact 下载安装包。普通分支构建只上传 artifact；版本标签通过 **Desktop Release** 发布安装包，均不触发网页部署。发布方式见 [桌面版本发布](DESKTOP_RELEASE.md)。
 
 ## 验证与验收
 

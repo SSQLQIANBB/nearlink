@@ -51,8 +51,8 @@ async function sendMail(email: string, code: string, purpose: EmailCodePurpose) 
     await transport.sendMail({
       from: smtp.from,
       to: email,
-      subject: `ToDesk ${label[purpose]}验证码`,
-      text: `您的 ToDesk ${label[purpose]}验证码为 ${code}，10 分钟内有效。若非本人操作，请忽略本邮件。`,
+      subject: `NearLink ${label[purpose]}验证码`,
+      text: `您的 NearLink ${label[purpose]}验证码为 ${code}，10 分钟内有效。若非本人操作，请忽略本邮件。`,
     });
   } finally {
     transport.close();

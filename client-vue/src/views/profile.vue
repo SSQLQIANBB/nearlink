@@ -6,7 +6,7 @@
         <div>
           <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">个人中心</h1>
           <p class="text-gray-500 mt-1">管理您的个人信息</p>
-          <p class="mt-1 text-xs text-slate-500">ToDesk {{ APP_VERSION_LABEL }}</p>
+          <p class="mt-1 text-xs text-slate-500">NearLink {{ APP_VERSION_LABEL }}</p>
         </div>
         <n-button @click="goBack" secondary>
           <template #icon>
@@ -168,7 +168,7 @@
           <!-- 通知设置 -->
           <n-tab-pane name="notification" tab="通知设置">
             <div v-if="desktop" class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-              关闭窗口后 ToDesk 会留在系统托盘，继续接收消息和通话。点击托盘图标可返回，右键选择“退出 ToDesk”可结束应用。
+              关闭窗口后 NearLink 会留在系统托盘，继续接收消息和通话。点击托盘图标可返回，右键选择“退出 NearLink”可结束应用。
               系统通知由 Windows 通知设置控制；收到通知后可从托盘回到聊天。
             </div>
             <p v-if="notificationSettings.error" role="alert" class="text-red-600 mb-4">

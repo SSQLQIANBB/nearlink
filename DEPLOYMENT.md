@@ -1,9 +1,9 @@
-# ToDesk 新服务器部署
+# NearLink 新服务器部署
 
 本方案将服务拆成两个独立部分：
 
 - 服务器级共享基础设施：MySQL、Redis 和 `shared-services` Docker 网络。
-- ToDesk 应用：Caddy、Web、后端、七牛对象存储接入和 HTTPS 证书。
+- NearLink 应用：Caddy、Web、后端、七牛对象存储接入和 HTTPS 证书。
 
 共享 MySQL/Redis 可以减少每个项目重复运行数据库进程和保存镜像带来的内存、
 磁盘占用。代价是维护或故障会同时影响多个项目，因此基础设施必须独立部署、
@@ -72,9 +72,9 @@ docker network inspect shared-services
 ```
 
 MySQL 和 Redis 应显示为 `healthy`。这套 Compose 只在首次安装、升级或维护基础
-设施时操作，不应加入 ToDesk 的日常发布流程。
+设施时操作，不应加入 NearLink 的日常发布流程。
 
-## 3. 配置 ToDesk
+## 3. 配置 NearLink
 
 创建应用目录：
 
@@ -158,7 +158,7 @@ openssl rand -hex 32
 - `DOCKERHUB_TOKEN`：Docker Hub 访问令牌。
 
 工作流会将应用镜像推送到 Docker Hub，同时把相同镜像导出并通过 SSH 上传到
-服务器。服务器使用 `docker load` 导入镜像后启动 ToDesk，不需要直接访问
+服务器。服务器使用 `docker load` 导入镜像后启动 NearLink，不需要直接访问
 Docker Hub 或 ACR。它只检查共享 MySQL/Redis 是否可访问，不会启停共享
 基础设施。
 
@@ -244,7 +244,7 @@ REDIS_PORT=6379
 
 1. 创建独立的 MySQL 数据库。
 2. 创建独立 MySQL 用户，并且只授权该数据库。
-3. 使用不同的 Redis DB 编号；ToDesk 已使用 DB 1。
+3. 使用不同的 Redis DB 编号；NearLink 已使用 DB 1。
 4. 不映射数据库端口到宿主机公网。
 
 创建新项目数据库和用户时，进入共享 MySQL：

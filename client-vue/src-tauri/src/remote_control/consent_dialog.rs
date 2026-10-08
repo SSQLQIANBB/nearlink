@@ -59,7 +59,7 @@ pub(super) fn show(window: &tauri::WebviewWindow, prompt: Prompt) -> Result<Choi
         .dialog()
         .message(prompt.details)
         .parent(window)
-        .title("ToDesk · 本机远程协助确认")
+        .title("NearLink · 本机远程协助确认")
         .buttons(MessageDialogButtons::YesNoCancelCustom(
             "拒绝".into(),
             if control {

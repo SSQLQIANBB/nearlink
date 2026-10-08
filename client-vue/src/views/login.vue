@@ -11,7 +11,7 @@
           <div class="login-brand text-center">
             <div class="login-brand-lockup">
               <img class="login-brand-mark" src="/app-icon.png" alt="" aria-hidden="true" width="44" height="44" />
-              <h1 class="login-brand-title">ToDesk</h1>
+              <h1 class="login-brand-title">NearLink</h1>
             </div>
             <p class="login-brand-subtitle">远程协作平台 · 高效安全链接</p>
             <p class="mt-2 text-xs text-slate-500">{{ APP_VERSION_LABEL }}</p>

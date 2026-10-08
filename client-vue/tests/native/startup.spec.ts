@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 test('Windows 客户端启动、原生 IPC、刷新与单实例', async ({}, testInfo) => {
   test.skip(process.platform !== 'win32', '仅验证 Windows 原生程序');
-  const executable = fileURLToPath(new URL('../../src-tauri/target/release/todesk-desktop.exe', import.meta.url));
+  const executable = fileURLToPath(new URL('../../src-tauri/target/release/nearlink-desktop.exe', import.meta.url));
   const app = spawn(executable, [], { windowsHide: true });
   let startupError: Error | undefined;
   let startupOutput = '';

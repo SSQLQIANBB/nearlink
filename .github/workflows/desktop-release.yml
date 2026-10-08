@@ -50,7 +50,7 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v4
         with:
-          pattern: ToDesk-*
+          pattern: NearLink-*
           path: artifacts
           merge-multiple: true
       - name: Verify installers and create checksums
@@ -72,12 +72,12 @@ jobs:
             node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw Error("该版本已发布，请使用新版本号")'
           else
             gh release create "$RELEASE_TAG" --verify-tag --draft \
-              --title "ToDesk 内测版 v${RELEASE_VERSION}" \
+              --title "NearLink 内测版 v${RELEASE_VERSION}" \
               --notes-file release-notes.md --generate-notes
           fi
           gh release upload "$RELEASE_TAG" --clobber \
-            "release-assets/ToDesk_${RELEASE_VERSION}_x64-setup.exe#Windows 安装包（64 位 Intel / AMD）.exe" \
-            "release-assets/ToDesk_${RELEASE_VERSION}_aarch64.dmg#macOS 安装包（Apple 芯片 / M 系列）.dmg" \
-            "release-assets/ToDesk_${RELEASE_VERSION}_x64.dmg#macOS 安装包（Intel 芯片）.dmg" \
+            "release-assets/NearLink_${RELEASE_VERSION}_x64-setup.exe#Windows 安装包（64 位 Intel / AMD）.exe" \
+            "release-assets/NearLink_${RELEASE_VERSION}_aarch64.dmg#macOS 安装包（Apple 芯片 / M 系列）.dmg" \
+            "release-assets/NearLink_${RELEASE_VERSION}_x64.dmg#macOS 安装包（Intel 芯片）.dmg" \
             "release-assets/SHA256SUMS.txt#SHA-256 校验文件（不是安装包）"
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"
