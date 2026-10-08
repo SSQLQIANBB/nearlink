@@ -7,7 +7,9 @@ database_name="$("${compose[@]}" run --rm --no-deps -T backend node -p 'process.
 [[ "$database_name" =~ ^[a-zA-Z0-9_]+$ ]] || { echo 'Invalid DB_NAME; refusing migration' >&2; exit 1; }
 mysql_containers="$(docker ps -q --filter label=com.docker.compose.service=mysql --filter health=healthy --filter network="${SHARED_SERVICES_NETWORK:-shared-services}")"
 [[ -n "$mysql_containers" && "$mysql_containers" != *$'\n'* ]] || { echo 'Expected exactly one healthy MySQL container' >&2; exit 1; }
-backup_dir="$PWD/backups/schema-$(date -u +%Y%m%dT%H%M%SZ)-${IMAGE_TAG:-manual}"
+# SSH 部署账号不一定拥有 /opt/todesk 下管理员创建的备份目录。
+backup_root="${DATABASE_BACKUP_DIR:-$HOME/.local/state/nearlink/backups}"
+backup_dir="$backup_root/schema-$(date -u +%Y%m%dT%H%M%SZ)-${IMAGE_TAG:-manual}"
 mkdir -p "$backup_dir"
 docker inspect --format '{{.Config.Image}}' todesk-backend > "$backup_dir/previous-backend-image.txt" 2>/dev/null || true
 "${compose[@]}" stop backend
