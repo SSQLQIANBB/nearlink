@@ -1,5 +1,8 @@
 <template>
-  <div class="annotation-container" ref="containerRef">
+  <div
+    class="annotation-container"
+    ref="containerRef"
+  >
     <!-- 画布层 -->
     <canvas
       ref="canvasRef"
@@ -13,17 +16,41 @@
     ></canvas>
 
     <!-- 标注工具栏 -->
-    <div v-if="editable && showToolbar" ref="toolbarRef" class="annotation-toolbar" role="toolbar" aria-label="共享标注工具栏" :style="toolbarPositionStyle">
-      <div class="toolbar-header" @pointerdown="startToolbarDrag">
+    <div
+      v-if="editable && showToolbar"
+      ref="toolbarRef"
+      class="annotation-toolbar"
+      role="toolbar"
+      aria-label="共享标注工具栏"
+      :style="toolbarPositionStyle"
+    >
+      <div
+        class="toolbar-header"
+        @pointerdown="startToolbarDrag"
+      >
         <div class="toolbar-title">
-          <span class="toolbar-title-mark" aria-hidden="true"></span>
+          <span
+            class="toolbar-title-mark"
+            aria-hidden="true"
+          ></span>
           <strong>屏幕标注</strong>
           <span class="toolbar-hint">拖动这里可移动工具栏</span>
         </div>
-        <n-button class="toolbar-close" size="tiny" quaternary @click="emit('close')" aria-label="关闭标注">完成</n-button>
+        <n-button
+          class="toolbar-close"
+          size="tiny"
+          quaternary
+          @click="emit('close')"
+          aria-label="关闭标注"
+        >
+          完成
+        </n-button>
       </div>
 
-      <div class="toolbar-tools" aria-label="标注形状">
+      <div
+        class="toolbar-tools"
+        aria-label="标注形状"
+      >
         <n-button
           v-for="tool in toolOptions"
           :key="tool.value"
@@ -34,17 +61,34 @@
           size="small"
           @click="currentTool = tool.value"
         >
-          <i class="tool-glyph iconfont" :class="`icon-${tool.icon}`" aria-hidden="true"></i>{{ tool.label }}
+          <i
+            class="tool-glyph iconfont"
+            :class="`icon-${tool.icon}`"
+            aria-hidden="true"
+          ></i>
+          {{ tool.label }}
         </n-button>
       </div>
 
       <div class="toolbar-footer">
         <div class="toolbar-setting toolbar-setting--color">
           <span class="setting-label">颜色</span>
-          <n-popover trigger="click" placement="top" :show-arrow="false">
+          <n-popover
+            trigger="click"
+            placement="top"
+            :show-arrow="false"
+          >
             <template #trigger>
-              <n-button class="color-trigger" size="small" aria-label="选择标注颜色">
-                <span class="color-swatch" :style="{ backgroundColor: currentColor }" aria-hidden="true"></span>
+              <n-button
+                class="color-trigger"
+                size="small"
+                aria-label="选择标注颜色"
+              >
+                <span
+                  class="color-swatch"
+                  :style="{ backgroundColor: currentColor }"
+                  aria-hidden="true"
+                ></span>
                 <span>{{ currentColor.toUpperCase() }}</span>
               </n-button>
             </template>
@@ -71,14 +115,41 @@
           <span class="width-value">{{ lineWidth }} px</span>
         </div>
         <div class="toolbar-actions">
-          <n-button size="small" :disabled="actions.length === 0" @click="emit('undo')">撤销</n-button>
-          <n-button size="small" @click="emit('clear')">清空</n-button>
+          <n-button
+            size="small"
+            :disabled="actions.length === 0"
+            @click="emit('undo')"
+          >
+            <template #icon>
+              <i
+                class="iconfont icon-chexiao"
+                aria-hidden="true"
+              ></i>
+            </template>
+            撤销
+          </n-button>
+          <n-button
+            size="small"
+            @click="emit('clear')"
+          >
+            <template #icon>
+              <i
+                class="iconfont icon-qingkong_qingkong"
+                aria-hidden="true"
+              ></i>
+            </template>
+            清空
+          </n-button>
         </div>
       </div>
     </div>
 
     <!-- 文字输入对话框 -->
-    <n-modal v-model:show="showTextInput" preset="dialog" title="输入文字">
+    <n-modal
+      v-model:show="showTextInput"
+      preset="dialog"
+      title="输入文字"
+    >
       <n-input
         v-model:value="textInput"
         type="textarea"
@@ -87,7 +158,12 @@
       />
       <template #action>
         <n-button @click="showTextInput = false">取消</n-button>
-        <n-button type="primary" @click="confirmText">确定</n-button>
+        <n-button
+          type="primary"
+          @click="confirmText"
+        >
+          确定
+        </n-button>
       </template>
     </n-modal>
   </div>
@@ -102,16 +178,19 @@ import {
   type AnnotationTool,
 } from '@/services/screenAnnotationState';
 
-const props = withDefaults(defineProps<{
-  width?: number;
-  height?: number;
-  showToolbar?: boolean;
-  editable: boolean;
-  actions: AnnotationAction[];
-  drafts: AnnotationDraft[];
-}>(), {
-  showToolbar: false,
-});
+const props = withDefaults(
+  defineProps<{
+    width?: number;
+    height?: number;
+    showToolbar?: boolean;
+    editable: boolean;
+    actions: AnnotationAction[];
+    drafts: AnnotationDraft[];
+  }>(),
+  {
+    showToolbar: false,
+  },
+);
 
 const emit = defineEmits<{
   close: [];
@@ -126,9 +205,16 @@ const containerRef = ref<HTMLDivElement>();
 const canvasRef = ref<HTMLCanvasElement>();
 const toolbarRef = ref<HTMLDivElement>();
 const toolbarPosition = ref<{ left: number; top: number } | null>(null);
-const toolbarPositionStyle = computed(() => toolbarPosition.value
-  ? { left: `${toolbarPosition.value.left}px`, top: `${toolbarPosition.value.top}px`, bottom: 'auto', transform: 'none' }
-  : undefined);
+const toolbarPositionStyle = computed(() =>
+  toolbarPosition.value
+    ? {
+        left: `${toolbarPosition.value.left}px`,
+        top: `${toolbarPosition.value.top}px`,
+        bottom: 'auto',
+        transform: 'none',
+      }
+    : undefined,
+);
 let dragOffset: { x: number; y: number } | null = null;
 
 function clampToolbarPosition(left: number, top: number) {
@@ -144,7 +230,10 @@ function clampToolbarPosition(left: number, top: number) {
 
 function moveToolbar(event: PointerEvent) {
   if (!dragOffset) return;
-  toolbarPosition.value = clampToolbarPosition(event.clientX - dragOffset.x, event.clientY - dragOffset.y);
+  toolbarPosition.value = clampToolbarPosition(
+    event.clientX - dragOffset.x,
+    event.clientY - dragOffset.y,
+  );
 }
 
 function stopToolbarDrag() {
@@ -167,12 +256,22 @@ function startToolbarDrag(event: PointerEvent) {
 
 function handleViewportResize() {
   initCanvas();
-  if (toolbarPosition.value) toolbarPosition.value = clampToolbarPosition(toolbarPosition.value.left, toolbarPosition.value.top);
+  if (toolbarPosition.value)
+    toolbarPosition.value = clampToolbarPosition(
+      toolbarPosition.value.left,
+      toolbarPosition.value.top,
+    );
 }
 
-watch(() => props.showToolbar, show => {
-  if (!show) { stopToolbarDrag(); toolbarPosition.value = null; }
-});
+watch(
+  () => props.showToolbar,
+  (show) => {
+    if (!show) {
+      stopToolbarDrag();
+      toolbarPosition.value = null;
+    }
+  },
+);
 
 // 绘图状态
 const isDrawing = ref(false);
@@ -199,8 +298,14 @@ const toolOptions: { value: AnnotationTool; label: string; icon: string }[] = [
 ];
 
 const colorSwatches = [
-  '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
-  '#FF00FF', '#00FFFF', '#FFFFFF', '#000000',
+  '#FF0000',
+  '#00FF00',
+  '#0000FF',
+  '#FFFF00',
+  '#FF00FF',
+  '#00FFFF',
+  '#FFFFFF',
+  '#000000',
 ];
 
 let ctx: CanvasRenderingContext2D | null = null;
@@ -239,11 +344,15 @@ function initCanvas() {
   redraw();
 }
 
-function handleResize() { handleViewportResize(); }
+function handleResize() {
+  handleViewportResize();
+}
 
 function createActionId() {
-  return globalThis.crypto?.randomUUID?.()
-    ?? `annotation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `annotation-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 // 坐标按画布显示区域归一化，保证不同屏幕尺寸绘制在相同位置。
@@ -291,7 +400,8 @@ function draw(event: PointerEvent) {
   if (!props.editable || !isDrawing.value || !ctx) return;
   event.preventDefault();
   const point = getRelativePoint(event);
-  if (['line', 'circle', 'rect', 'arrow'].includes(currentTool.value)) currentPoints.value = [currentPoints.value[0]!, point];
+  if (['line', 'circle', 'rect', 'arrow'].includes(currentTool.value))
+    currentPoints.value = [currentPoints.value[0]!, point];
   else currentPoints.value.push(point);
   redraw();
   drawAction(getCurrentDraft());
@@ -381,12 +491,7 @@ function drawRect(start: AnnotationPoint, end: AnnotationPoint) {
   const canvasStart = toCanvasPoint(start);
   const canvasEnd = toCanvasPoint(end);
   ctx.beginPath();
-  ctx.rect(
-    canvasStart.x,
-    canvasStart.y,
-    canvasEnd.x - canvasStart.x,
-    canvasEnd.y - canvasStart.y,
-  );
+  ctx.rect(canvasStart.x, canvasStart.y, canvasEnd.x - canvasStart.x, canvasEnd.y - canvasStart.y);
   ctx.stroke();
 }
 
@@ -402,10 +507,8 @@ function drawText(point: AnnotationPoint, text: string, color: string, width: nu
 
 function drawAction(action: AnnotationDraft | AnnotationAction) {
   if (!ctx || action.points.length === 0) return;
-  const pixelLineWidth = action.lineWidth * Math.max(
-    canvasRef.value?.width || 1,
-    canvasRef.value?.height || 1,
-  );
+  const pixelLineWidth =
+    action.lineWidth * Math.max(canvasRef.value?.width || 1, canvasRef.value?.height || 1);
   ctx.save();
   ctx.strokeStyle = action.color;
   ctx.lineWidth = pixelLineWidth;
@@ -423,7 +526,15 @@ function drawAction(action: AnnotationDraft | AnnotationAction) {
       const a = toCanvasPoint(start);
       const b = toCanvasPoint(end);
       ctx.beginPath();
-      ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(
+        (a.x + b.x) / 2,
+        (a.y + b.y) / 2,
+        Math.abs(b.x - a.x) / 2,
+        Math.abs(b.y - a.y) / 2,
+        0,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
       break;
     }
@@ -530,36 +641,138 @@ watch(
   align-items: center;
 }
 
-.toolbar-header { justify-content: space-between; gap: 12px; margin-bottom: 10px; cursor: grab; touch-action: none; user-select: none; }
-.toolbar-header:active { cursor: grabbing; }
-.toolbar-title { min-width: 0; gap: 8px; font-size: 13px; white-space: nowrap; }
-.toolbar-title-mark { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; }
-.toolbar-hint { color: #94a3b8; font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
-.toolbar-close { flex: none; }
-.toolbar-tools { display: flex; gap: 6px; overflow-x: auto; padding: 1px 0 8px; scrollbar-width: thin; }
-.toolbar-tool { flex: none; }
-.tool-glyph { margin-right: 6px; font-size: var(--icon-size-inline); }
-.toolbar-footer { flex-wrap: wrap; gap: 10px 16px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
-.toolbar-setting { gap: 8px; min-width: 0; }
-.toolbar-setting--color { flex: none; }
-.color-trigger :deep(.n-button__content) { display: flex; align-items: center; gap: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
-.color-swatch { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 4px; }
-.color-panel { width: 220px; }
-.toolbar-setting--width { flex: 1; min-width: 160px; }
-.toolbar-setting--width :deep(.n-slider) { flex: 1; min-width: 75px; }
-.setting-label, .width-value { color: #cbd5e1; font-size: 12px; white-space: nowrap; }
-.width-value { width: 33px; text-align: right; font-variant-numeric: tabular-nums; }
-.toolbar-actions { gap: 6px; margin-left: auto; }
-.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)) { color: #e2e8f0; background: rgba(255, 255, 255, 0.07); }
-.annotation-toolbar :deep(.n-button:not(.n-button--primary-type):hover) { background: rgba(255, 255, 255, 0.16); }
-.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)::before) { border-color: rgba(255, 255, 255, 0.14); }
-.annotation-toolbar :deep(.n-button--primary-type) { color: #fff; }
+.toolbar-header {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.toolbar-header:active {
+  cursor: grabbing;
+}
+.toolbar-title {
+  min-width: 0;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.toolbar-title-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+.toolbar-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toolbar-close {
+  flex: none;
+}
+.toolbar-tools {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 1px 0 8px;
+  scrollbar-width: thin;
+}
+.toolbar-tool {
+  flex: none;
+}
+.tool-glyph {
+  margin-right: 6px;
+  font-size: var(--icon-size-inline);
+}
+.toolbar-footer {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.toolbar-setting {
+  gap: 8px;
+  min-width: 0;
+}
+.toolbar-setting--color {
+  flex: none;
+}
+.color-trigger :deep(.n-button__content) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+}
+.color-panel {
+  width: 220px;
+}
+.toolbar-setting--width {
+  flex: 1;
+  min-width: 160px;
+}
+.toolbar-setting--width :deep(.n-slider) {
+  flex: 1;
+  min-width: 75px;
+}
+.setting-label,
+.width-value {
+  color: #cbd5e1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.width-value {
+  width: 33px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.toolbar-actions {
+  gap: 6px;
+  margin-left: auto;
+}
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)) {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.07);
+}
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type):hover) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.annotation-toolbar :deep(.n-button:not(.n-button--primary-type)::before) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.annotation-toolbar :deep(.n-button--primary-type) {
+  color: #fff;
+}
 
 @media (max-width: 640px) {
-  .annotation-toolbar { bottom: max(8px, env(safe-area-inset-bottom)); padding: 9px; border-radius: 12px; }
-  .toolbar-hint { display: none; }
-  .toolbar-footer { gap: 8px; }
-  .toolbar-setting--width { order: 2; flex-basis: 100%; }
-  .toolbar-actions { margin-left: auto; }
+  .annotation-toolbar {
+    bottom: max(8px, env(safe-area-inset-bottom));
+    padding: 9px;
+    border-radius: 12px;
+  }
+  .toolbar-hint {
+    display: none;
+  }
+  .toolbar-footer {
+    gap: 8px;
+  }
+  .toolbar-setting--width {
+    order: 2;
+    flex-basis: 100%;
+  }
+  .toolbar-actions {
+    margin-left: auto;
+  }
 }
 </style>

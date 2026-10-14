@@ -9,64 +9,192 @@
     :aria-modal="isFullscreen"
     :aria-label="callTitle"
   >
-    <header v-if="connectionType === DEVICE_TYPE.SCREEN" class="private-call__header" @pointerdown="beginFloatingDrag">
+    <header
+      v-if="connectionType === DEVICE_TYPE.SCREEN"
+      class="private-call__header"
+      @pointerdown="beginFloatingDrag"
+    >
       <div class="private-call__title">
         <strong>{{ callTitle }} · {{ contactUserName }}</strong>
-        <span class="private-call__status">{{ connectionStatus === 'connected' ? '已连接' : '连接中' }}</span>
+        <span class="private-call__status">
+          {{ connectionStatus === 'connected' ? '已连接' : '连接中' }}
+        </span>
       </div>
       <div class="private-call__actions">
-        <n-button size="small" type="error" @click="hangup">挂断</n-button>
+        <n-button
+          size="small"
+          type="error"
+          @click="hangup"
+        >
+          挂断
+        </n-button>
       </div>
     </header>
     <div class="private-call__stage">
-      <div v-if="connectionType === DEVICE_TYPE.AUDIO" class="private-call__audio">
-        <n-avatar :size="96" :src="activePeer?.avatar || undefined">
+      <div
+        v-if="connectionType === DEVICE_TYPE.AUDIO"
+        class="private-call__audio"
+      >
+        <n-avatar
+          :size="96"
+          :src="activePeer?.avatar || undefined"
+        >
           {{ contactUserName.charAt(0) }}
         </n-avatar>
         <strong>{{ contactUserName }}</strong>
         <span>{{ isConnected ? '语音通话中' : '等待对方接听…' }}</span>
-        <audio ref="audioRef" autoplay />
+        <audio
+          ref="audioRef"
+          autoplay
+        />
         <div class="private-call__audio-actions">
-          <button class="audio-action audio-action--hangup" type="button" aria-label="挂断" title="挂断" @click="hangup">
-            <i class="iconfont icon-hangup" aria-hidden="true"></i>
+          <button
+            class="audio-action audio-action--hangup"
+            type="button"
+            aria-label="挂断"
+            title="挂断"
+            @click="hangup"
+          >
+            <i
+              class="iconfont icon-hangup"
+              aria-hidden="true"
+            ></i>
           </button>
-          <button class="audio-action audio-action--mute" type="button" :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
-            :title="isMicrophoneMuted ? '开启麦克风' : '静音'" :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
-            <i class="iconfont" :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i>
+          <button
+            class="audio-action audio-action--mute"
+            type="button"
+            :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :title="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :aria-pressed="isMicrophoneMuted"
+            @click="toggleMicrophone"
+          >
+            <i
+              class="iconfont"
+              :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'"
+              aria-hidden="true"
+            ></i>
           </button>
         </div>
       </div>
-      <div v-else class="private-call__remote" :class="{ 'private-call__video--local': isLocalMain }" @pointerdown="beginFloatingDrag">
-        <div v-if="!mainStreamReady && !isLocalMain" class="private-call__waiting">
+      <div
+        v-else
+        class="private-call__remote"
+        :class="{ 'private-call__video--local': isLocalMain }"
+        @pointerdown="beginFloatingDrag"
+      >
+        <div
+          v-if="!mainStreamReady && !isLocalMain"
+          class="private-call__waiting"
+        >
           {{ isConnected ? '对方已连接，等待画面…' : '等待对方连接…' }}
         </div>
-        <video ref="videoRef" autoplay playsinline :muted="isLocalMain" />
-        <div v-if="isLocalMain && isCameraOff" class="private-call__waiting">摄像头已关闭</div>
-        <span class="private-call__caption">{{ isLocalMain ? (connectionType === DEVICE_TYPE.SCREEN ? '我的共享画面' : '我') : '对方画面' }}</span>
+        <video
+          ref="videoRef"
+          autoplay
+          playsinline
+          :muted="isLocalMain"
+        />
+        <div
+          v-if="isLocalMain && isCameraOff"
+          class="private-call__waiting"
+        >
+          摄像头已关闭
+        </div>
+        <span class="private-call__caption">
+          {{
+            isLocalMain
+              ? connectionType === DEVICE_TYPE.SCREEN
+                ? '我的共享画面'
+                : '我'
+              : '对方画面'
+          }}
+        </span>
       </div>
-      <div v-if="connectionType === DEVICE_TYPE.CAMERA" class="private-call__self" :class="{ 'private-call__video--local': !isLocalMain }"
-        role="button" tabindex="0" aria-label="交换大小画面" @click="swapVideos" @keydown.enter="swapVideos" @keydown.space.prevent="swapVideos">
-        <video ref="videoSelfRef" autoplay playsinline :muted="!isLocalMain" />
-        <div v-if="!smallStreamReady" class="private-call__waiting">{{ isLocalMain ? '等待对方画面…' : '等待摄像头…' }}</div>
-        <div v-if="!isLocalMain && isCameraOff" class="private-call__waiting">摄像头已关闭</div>
+      <div
+        v-if="connectionType === DEVICE_TYPE.CAMERA"
+        class="private-call__self"
+        :class="{ 'private-call__video--local': !isLocalMain }"
+        role="button"
+        tabindex="0"
+        aria-label="交换大小画面"
+        @click="swapVideos"
+        @keydown.enter="swapVideos"
+        @keydown.space.prevent="swapVideos"
+      >
+        <video
+          ref="videoSelfRef"
+          autoplay
+          playsinline
+          :muted="!isLocalMain"
+        />
+        <div
+          v-if="!smallStreamReady"
+          class="private-call__waiting"
+        >
+          {{ isLocalMain ? '等待对方画面…' : '等待摄像头…' }}
+        </div>
+        <div
+          v-if="!isLocalMain && isCameraOff"
+          class="private-call__waiting"
+        >
+          摄像头已关闭
+        </div>
         <span class="private-call__caption">{{ isLocalMain ? '对方' : '我' }}</span>
       </div>
       <template v-if="connectionType === DEVICE_TYPE.CAMERA">
-        <button class="video-action private-call__fullscreen" type="button"
-          :aria-label="isFullscreen ? '取消全屏' : '全屏'" :title="isFullscreen ? '取消全屏' : '全屏'" @click="toggleFullscreen">
-          <i class="iconfont icon-arrow" :class="{ 'is-collapsed': isFullscreen }" aria-hidden="true"></i>
+        <button
+          class="video-action private-call__fullscreen"
+          type="button"
+          :aria-label="isFullscreen ? '取消全屏' : '全屏'"
+          :title="isFullscreen ? '取消全屏' : '全屏'"
+          @click="toggleFullscreen"
+        >
+          <i
+            class="iconfont"
+            :class="isFullscreen ? 'icon-full-screen-play' : 'icon-full-screen-play-filled'"
+            aria-hidden="true"
+          ></i>
         </button>
         <div class="private-call__video-actions">
-          <button class="video-action" type="button" :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
-            :title="isMicrophoneMuted ? '开启麦克风' : '静音'" :aria-pressed="isMicrophoneMuted" @click="toggleMicrophone">
-            <i class="iconfont" :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i>
+          <button
+            class="video-action"
+            type="button"
+            :aria-label="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :title="isMicrophoneMuted ? '开启麦克风' : '静音'"
+            :aria-pressed="isMicrophoneMuted"
+            @click="toggleMicrophone"
+          >
+            <i
+              class="iconfont"
+              :class="isMicrophoneMuted ? 'icon-microphone-off' : 'icon-microphone'"
+              aria-hidden="true"
+            ></i>
           </button>
-          <button class="video-action video-action--hangup" type="button" aria-label="挂断" title="挂断" @click="hangup">
-            <i class="iconfont icon-hangup" aria-hidden="true"></i>
+          <button
+            class="video-action video-action--hangup"
+            type="button"
+            aria-label="挂断"
+            title="挂断"
+            @click="hangup"
+          >
+            <i
+              class="iconfont icon-hangup"
+              aria-hidden="true"
+            ></i>
           </button>
-          <button class="video-action" type="button" :aria-label="isCameraOff ? '开启摄像头' : '关闭摄像头'"
-            :title="isCameraOff ? '开启摄像头' : '关闭摄像头'" :aria-pressed="isCameraOff" @click="toggleCamera">
-            <i class="iconfont" :class="isCameraOff ? 'icon-video-off' : 'icon-video'" aria-hidden="true"></i>
+          <button
+            class="video-action"
+            type="button"
+            :aria-label="isCameraOff ? '开启摄像头' : '关闭摄像头'"
+            :title="isCameraOff ? '开启摄像头' : '关闭摄像头'"
+            :aria-pressed="isCameraOff"
+            @click="toggleCamera"
+          >
+            <i
+              class="iconfont"
+              :class="isCameraOff ? 'icon-video-off' : 'icon-video'"
+              aria-hidden="true"
+            ></i>
           </button>
         </div>
       </template>
@@ -80,7 +208,13 @@
     :close-on-esc="false"
     preset="dialog"
     class="private-invite"
-    :style="{ background: '#172033', color: '#f8fafc', width: 'min(340px, calc(100vw - 24px))', borderRadius: '18px', boxShadow: '0 18px 48px #02061766' }"
+    :style="{
+      background: '#172033',
+      color: '#f8fafc',
+      width: 'min(340px, calc(100vw - 24px))',
+      borderRadius: '18px',
+      boxShadow: '0 18px 48px #02061766',
+    }"
     title="来电提示"
     @close="rejectCall"
     positive-text="接听"
@@ -89,8 +223,15 @@
     @negative-click="rejectCall"
   >
     <div class="text-center py-4">
-      <n-icon size="60" color="#18a058" class="mb-4">
-        <i class="iconfont icon-video" aria-hidden="true"></i>
+      <n-icon
+        size="60"
+        color="#18a058"
+        class="mb-4"
+      >
+        <i
+          class="iconfont icon-video"
+          aria-hidden="true"
+        ></i>
       </n-icon>
       <p class="text-lg">
         <span class="font-bold">{{ incomingCallFrom }}</span>
@@ -112,7 +253,6 @@ import { cameraConstraints, screenRecordConstraints } from '@/views/remoteShare/
 import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useMessage, NModal, NButton, NIcon, NAvatar } from 'naive-ui';
 
-
 enum DEVICE_TYPE {
   CAMERA = 0,
   SCREEN = 1,
@@ -121,7 +261,7 @@ enum DEVICE_TYPE {
 
 enum RTC_TYPE {
   CALLER = 0, // 主动呼叫
-  CALLEE = 1 // 被呼叫
+  CALLEE = 1, // 被呼叫
 }
 
 type User = {
@@ -130,7 +270,7 @@ type User = {
   username?: string;
   nickname?: string;
   avatar?: string;
-}
+};
 
 const socketStore = useSocketStore();
 const callStore = usePrivateCallStore();
@@ -145,8 +285,6 @@ let pendingIce: RTCIceCandidateInit[] = [];
 
 const message = useMessage();
 
-
-
 // 连接状态
 const connectionType = ref<DEVICE_TYPE | null>(null);
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected');
@@ -160,15 +298,24 @@ const isMicrophoneMuted = ref(false);
 const isCameraOff = ref(false);
 const mainStreamReady = ref(false);
 const smallStreamReady = ref(false);
-const isLocalMain = computed(() => connectionType.value === DEVICE_TYPE.SCREEN ? isScreenSender.value : showLocalMain.value);
+const isLocalMain = computed(() =>
+  connectionType.value === DEVICE_TYPE.SCREEN ? isScreenSender.value : showLocalMain.value,
+);
 const callTitle = computed(() => {
   if (connectionType.value === DEVICE_TYPE.SCREEN) return '屏幕共享';
   return connectionType.value === DEVICE_TYPE.AUDIO ? '语音通话' : '视频通话';
 });
 const floatingPosition = ref<{ left: number; top: number } | null>(null);
-const floatingStyle = computed(() => !isFullscreen.value && floatingPosition.value
-  ? { left: `${floatingPosition.value.left}px`, top: `${floatingPosition.value.top}px`, right: 'auto', bottom: 'auto' }
-  : undefined);
+const floatingStyle = computed(() =>
+  !isFullscreen.value && floatingPosition.value
+    ? {
+        left: `${floatingPosition.value.left}px`,
+        top: `${floatingPosition.value.top}px`,
+        right: 'auto',
+        bottom: 'auto',
+      }
+    : undefined,
+);
 const callWindowRef = ref<HTMLElement | null>(null);
 let dragOffset: { x: number; y: number } | null = null;
 
@@ -180,9 +327,9 @@ const incomingCallFromSocketId = ref('');
 
 let currentStream: MediaStream | null = null;
 let remoteStream: MediaStream | null = null;
-const videoRef = ref<HTMLVideoElement | null>(null)
-const videoSelfRef = ref<HTMLVideoElement | null>(null)
-const audioRef = ref<HTMLAudioElement | null>(null)
+const videoRef = ref<HTMLVideoElement | null>(null);
+const videoSelfRef = ref<HTMLVideoElement | null>(null);
+const audioRef = ref<HTMLAudioElement | null>(null);
 
 const contactUserName = computed(() => {
   return activePeer.value?.nickname || activePeer.value?.username || '对方';
@@ -197,7 +344,11 @@ function attachVideo(element: HTMLMediaElement | null, stream: MediaStream | nul
   if (element.srcObject !== stream) element.srcObject = stream;
   element.muted = muted;
   if (stream) {
-    try { void element.play()?.catch(() => {}); } catch { /* 浏览器自动播放策略会拒绝，原生 controls 仍可继续显示画面。 */ }
+    try {
+      void element.play()?.catch(() => {});
+    } catch {
+      /* 浏览器自动播放策略会拒绝，原生 controls 仍可继续显示画面。 */
+    }
   }
 }
 
@@ -210,7 +361,11 @@ function syncVideos() {
   const main = isLocalMain.value ? currentStream : remoteStream;
   const small = isLocalMain.value ? remoteStream : currentStream;
   attachVideo(videoRef.value, main, isLocalMain.value);
-  attachVideo(videoSelfRef.value, connectionType.value === DEVICE_TYPE.CAMERA ? small : null, !isLocalMain.value);
+  attachVideo(
+    videoSelfRef.value,
+    connectionType.value === DEVICE_TYPE.CAMERA ? small : null,
+    !isLocalMain.value,
+  );
   mainStreamReady.value = !!main?.getVideoTracks().length;
   smallStreamReady.value = !!small?.getVideoTracks().length;
 }
@@ -228,21 +383,31 @@ function toggleFullscreen() {
 function toggleMicrophone() {
   if (!currentStream) return;
   isMicrophoneMuted.value = !isMicrophoneMuted.value;
-  currentStream.getAudioTracks().forEach(track => { track.enabled = !isMicrophoneMuted.value; });
+  currentStream.getAudioTracks().forEach((track) => {
+    track.enabled = !isMicrophoneMuted.value;
+  });
 }
 
 function toggleCamera() {
   if (!currentStream) return;
   isCameraOff.value = !isCameraOff.value;
-  currentStream.getVideoTracks().forEach(track => { track.enabled = !isCameraOff.value; });
+  currentStream.getVideoTracks().forEach((track) => {
+    track.enabled = !isCameraOff.value;
+  });
 }
 
 function moveFloatingWindow(event: PointerEvent) {
   if (!dragOffset || !callWindowRef.value) return;
   const rect = callWindowRef.value.getBoundingClientRect();
   floatingPosition.value = {
-    left: Math.min(Math.max(8, event.clientX - dragOffset.x), Math.max(8, window.innerWidth - rect.width - 8)),
-    top: Math.min(Math.max(8, event.clientY - dragOffset.y), Math.max(8, window.innerHeight - rect.height - 8)),
+    left: Math.min(
+      Math.max(8, event.clientX - dragOffset.x),
+      Math.max(8, window.innerWidth - rect.width - 8),
+    ),
+    top: Math.min(
+      Math.max(8, event.clientY - dragOffset.y),
+      Math.max(8, window.innerHeight - rect.height - 8),
+    ),
   };
 }
 
@@ -263,8 +428,15 @@ function stopFloatingDrag() {
 }
 
 function beginFloatingDrag(event: PointerEvent) {
-  if (isFullscreen.value || connectionType.value !== DEVICE_TYPE.CAMERA || (event.target as HTMLElement).closest('button')) return;
-  const element = (event.currentTarget as HTMLElement).closest('.private-call') as HTMLElement | null;
+  if (
+    isFullscreen.value ||
+    connectionType.value !== DEVICE_TYPE.CAMERA ||
+    (event.target as HTMLElement).closest('button')
+  )
+    return;
+  const element = (event.currentTarget as HTMLElement).closest(
+    '.private-call',
+  ) as HTMLElement | null;
   if (!element) return;
   callWindowRef.value = element;
   const rect = element.getBoundingClientRect();
@@ -288,7 +460,11 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
   }
 
   mediaClaim = mediaOccupancy.acquire('private-call', mediaOwner, cleanup);
-  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); activePeer.value = null; return; }
+  if (!mediaClaim) {
+    message.warning('请先结束当前通话或远程控制');
+    activePeer.value = null;
+    return;
+  }
   try {
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
@@ -309,7 +485,7 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     socket.value?.emit('webrtc_call_request', {
       callId: outgoingCallId,
       to: activePeer.value,
-      deviceType: type
+      deviceType: type,
     });
 
     message.info('正在呼叫...');
@@ -331,14 +507,21 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
   const owner = mediaClaim;
 
   try {
-    const stream = type === DEVICE_TYPE.CAMERA ? await mediaDevices.getUserMedia(cameraConstraints)
-      : type === DEVICE_TYPE.AUDIO ? await mediaDevices.getUserMedia({ audio: true, video: false })
-      : await mediaDevices.getDisplayMedia(screenRecordConstraints);
-    if (attempt !== generation || !owner?.isCurrent()) { stream.getTracks().forEach(track => track.stop()); return; }
+    const stream =
+      type === DEVICE_TYPE.CAMERA
+        ? await mediaDevices.getUserMedia(cameraConstraints)
+        : type === DEVICE_TYPE.AUDIO
+          ? await mediaDevices.getUserMedia({ audio: true, video: false })
+          : await mediaDevices.getDisplayMedia(screenRecordConstraints);
+    if (attempt !== generation || !owner?.isCurrent()) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     currentStream = stream;
-    if (type === DEVICE_TYPE.SCREEN) stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-      if (attempt === generation && owner.isCurrent()) hangup();
-    });
+    if (type === DEVICE_TYPE.SCREEN)
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        if (attempt === generation && owner.isCurrent()) hangup();
+      });
 
     await nextTick();
     syncVideos();
@@ -374,24 +557,28 @@ async function initRTC(type = RTC_TYPE.CALLER) {
     peer = new RTCPeerConnection({
       iceServers: [
         {
-          urls: 'stun:turn.sycsq.top:3478'
+          urls: 'stun:turn.sycsq.top:3478',
         },
         {
           urls: [
             'turn:turn.sycsq.top:3478?transport=udp',
-            'turn:turn.sycsq.top:3478?transport=tcp'
+            'turn:turn.sycsq.top:3478?transport=tcp',
           ],
           username: 'todesk',
-          credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe'
-        }
-      ]
+          credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe',
+        },
+      ],
     });
 
     // 添加本地媒体流
     if (currentStream) {
-      currentStream.getTracks().forEach(track => {
+      currentStream.getTracks().forEach((track) => {
         const sender = peer?.addTrack(track, currentStream!);
-        if (sender && track.kind === 'video') void limitVideoBitrate(sender, connectionType.value === DEVICE_TYPE.CAMERA ? 900_000 : 1_800_000);
+        if (sender && track.kind === 'video')
+          void limitVideoBitrate(
+            sender,
+            connectionType.value === DEVICE_TYPE.CAMERA ? 900_000 : 1_800_000,
+          );
       });
     }
 
@@ -411,7 +598,7 @@ async function initRTC(type = RTC_TYPE.CALLER) {
       if (e.candidate && activePeer.value) {
         socket.value?.emit('webrtc_ice', {
           to: activePeer.value,
-          candidate: e.candidate
+          candidate: e.candidate,
         });
       }
     };
@@ -442,7 +629,7 @@ async function initRTC(type = RTC_TYPE.CALLER) {
       socket.value?.emit('webrtc_offer', {
         to: activePeer.value,
         offer,
-        deviceType: connectionType.value
+        deviceType: connectionType.value,
       });
     }
   } catch (error) {
@@ -462,7 +649,7 @@ async function createAnswer() {
 
     socket.value?.emit('webrtc_answer', {
       to: activePeer.value,
-      answer
+      answer,
     });
   } catch (error) {
     console.error('创建应答失败:', error);
@@ -500,7 +687,10 @@ async function handleAnswer(answer: RTCSessionDescriptionInit) {
 // 处理收到的ICE候选
 async function handleIceCandidate(candidate: RTCIceCandidate) {
   try {
-    if (!peer?.remoteDescription) { pendingIce.push(candidate); return; }
+    if (!peer?.remoteDescription) {
+      pendingIce.push(candidate);
+      return;
+    }
     await peer.addIceCandidate(new RTCIceCandidate(candidate));
   } catch (error) {
     console.error('添加ICE候选失败:', error);
@@ -514,8 +704,14 @@ async function flushIce() {
 }
 
 // 全局接收来电；回复始终发送给来电方，而不是聊天页选中的联系人。
-function handleIncomingCall(data: { from: string; callId?: string; deviceType: DEVICE_TYPE; user?: User }) {
-  if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.SCREEN, DEVICE_TYPE.AUDIO].includes(data.deviceType)) return;
+function handleIncomingCall(data: {
+  from: string;
+  callId?: string;
+  deviceType: DEVICE_TYPE;
+  user?: User;
+}) {
+  if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.SCREEN, DEVICE_TYPE.AUDIO].includes(data.deviceType))
+    return;
   if (activePeer.value || incomingCallShow.value) {
     if (activePeer.value?.socketId !== data.from) {
       socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
@@ -523,8 +719,15 @@ function handleIncomingCall(data: { from: string; callId?: string; deviceType: D
     return;
   }
   mediaClaim = mediaOccupancy.acquire('private-call', mediaOwner, cleanup);
-  if (!mediaClaim) { socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false }); return; }
-  activePeer.value = { ...(data.user || socketStore.userList.find(user => user.socketId === data.from)), socketId: data.from, id: data.user?.id || 0 };
+  if (!mediaClaim) {
+    socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
+    return;
+  }
+  activePeer.value = {
+    ...(data.user || socketStore.userList.find((user) => user.socketId === data.from)),
+    socketId: data.from,
+    id: data.user?.id || 0,
+  };
   incomingCallFromSocketId.value = data.from;
   incomingCallFrom.value = contactUserName.value;
   incomingCallType.value = data.deviceType;
@@ -532,13 +735,21 @@ function handleIncomingCall(data: { from: string; callId?: string; deviceType: D
   notificationService.startCallRingtone(`private:${data.from}`);
   if (data.callId) {
     socket.value?.emit('webrtc_call_ringing', {
-      to: { socketId: data.from }, callId: data.callId,
+      to: { socketId: data.from },
+      callId: data.callId,
       tone: notificationService.getSoundPreferences().callTone,
     });
   }
   if (isAppInBackground()) {
-    const type = data.deviceType === DEVICE_TYPE.SCREEN ? 'screen' : data.deviceType === DEVICE_TYPE.AUDIO ? 'audio' : 'video';
-    void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () => window.focus());
+    const type =
+      data.deviceType === DEVICE_TYPE.SCREEN
+        ? 'screen'
+        : data.deviceType === DEVICE_TYPE.AUDIO
+          ? 'audio'
+          : 'video';
+    void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () =>
+      window.focus(),
+    );
   }
 }
 
@@ -556,7 +767,8 @@ async function acceptCall() {
 
     const attempt = generation;
     // 共享接收方只观看对方屏幕，无需选择自己的屏幕。
-    if (incomingCallType.value !== DEVICE_TYPE.SCREEN) await initDeviceMedia(incomingCallType.value);
+    if (incomingCallType.value !== DEVICE_TYPE.SCREEN)
+      await initDeviceMedia(incomingCallType.value);
     if (attempt !== generation) return;
     await nextTick();
     syncVideos();
@@ -566,10 +778,8 @@ async function acceptCall() {
     // 发送接听响应
     socket.value?.emit('webrtc_call_response', {
       to: { socketId: incomingCallFromSocketId.value },
-      accepted: true
+      accepted: true,
     });
-
-
   } catch (error: any) {
     console.error('接听失败:', error);
     message.error('无法访问设备: ' + error.message);
@@ -583,7 +793,7 @@ function rejectCall() {
   incomingCallShow.value = false;
   socket.value?.emit('webrtc_call_response', {
     to: { socketId: incomingCallFromSocketId.value },
-    accepted: false
+    accepted: false,
   });
   cleanup();
   message.info('已拒绝来电');
@@ -611,7 +821,7 @@ function hangup() {
   // 通知对方挂断
   if (activePeer.value) {
     socket.value?.emit('webrtc_hangup', {
-      to: activePeer.value
+      to: activePeer.value,
     });
   }
 
@@ -625,7 +835,8 @@ function cleanup() {
   outgoingCallId = null;
   outgoingRinging = false;
   notificationService.stopOutgoingRingtone();
-  if (incomingCallFromSocketId.value) notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
+  if (incomingCallFromSocketId.value)
+    notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
   incomingCallFromSocketId.value = '';
   stopFloatingDrag();
   pendingIce = [];
@@ -653,8 +864,6 @@ function cleanup() {
   isConnected.value = false;
   connectionStatus.value = 'disconnected';
   connectionType.value = null;
-
-
 }
 
 // 处理对方挂断
@@ -663,38 +872,70 @@ function handleHangup() {
   cleanup();
 }
 
-watch([isConnecting, isConnected, incomingCallShow], values => {
-  callStore.busy = values.some(Boolean);
-}, { flush: 'sync' });
+watch(
+  [isConnecting, isConnected, incomingCallShow],
+  (values) => {
+    callStore.busy = values.some(Boolean);
+  },
+  { flush: 'sync' },
+);
 
-watch(() => callStore.request, request => {
-  if (!request) return;
-  callStore.request = null;
-  if (activePeer.value) { message.warning('已有进行中的通话'); return; }
-  activePeer.value = request.user;
-  void handleMedia(request.type);
-}, { flush: 'sync' });
+watch(
+  () => callStore.request,
+  (request) => {
+    if (!request) return;
+    callStore.request = null;
+    if (activePeer.value) {
+      message.warning('已有进行中的通话');
+      return;
+    }
+    activePeer.value = request.user;
+    void handleMedia(request.type);
+  },
+  { flush: 'sync' },
+);
 
 const handlers: Record<string, (data: any) => void> = {
-  webrtc_call_ringing: data => {
-    if (!outgoingCallId || outgoingRinging || data.callId !== outgoingCallId || data.from !== activePeer.value?.socketId) return;
+  webrtc_call_ringing: (data) => {
+    if (
+      !outgoingCallId ||
+      outgoingRinging ||
+      data.callId !== outgoingCallId ||
+      data.from !== activePeer.value?.socketId
+    )
+      return;
     if (data.tone !== 'default' && data.tone !== 'classic') return;
     outgoingRinging = true;
     notificationService.startOutgoingRingtone(data.tone);
   },
   webrtc_call_request: handleIncomingCall,
-  webrtc_offer: data => { if (data.from === activePeer.value?.socketId && !incomingCallShow.value) void handleOffer(data.offer); },
-  webrtc_answer: data => { if (data.from === activePeer.value?.socketId) void handleAnswer(data.answer); },
-  webrtc_ice: data => { if (data.from === activePeer.value?.socketId) void handleIceCandidate(data.candidate); },
-  webrtc_call_response: data => { if (data.from === activePeer.value?.socketId) void handleCallResponse(data); },
-  webrtc_hangup: data => { if (data.from === activePeer.value?.socketId) handleHangup(); },
+  webrtc_offer: (data) => {
+    if (data.from === activePeer.value?.socketId && !incomingCallShow.value)
+      void handleOffer(data.offer);
+  },
+  webrtc_answer: (data) => {
+    if (data.from === activePeer.value?.socketId) void handleAnswer(data.answer);
+  },
+  webrtc_ice: (data) => {
+    if (data.from === activePeer.value?.socketId) void handleIceCandidate(data.candidate);
+  },
+  webrtc_call_response: (data) => {
+    if (data.from === activePeer.value?.socketId) void handleCallResponse(data);
+  },
+  webrtc_hangup: (data) => {
+    if (data.from === activePeer.value?.socketId) handleHangup();
+  },
   disconnect: cleanup,
 };
-watch(socket, (target, previous) => {
-  Object.entries(handlers).forEach(([event, handler]) => previous?.off(event, handler));
-  cleanup();
-  Object.entries(handlers).forEach(([event, handler]) => target?.on(event, handler));
-}, { immediate: true, flush: 'sync' });
+watch(
+  socket,
+  (target, previous) => {
+    Object.entries(handlers).forEach(([event, handler]) => previous?.off(event, handler));
+    cleanup();
+    Object.entries(handlers).forEach(([event, handler]) => target?.on(event, handler));
+  },
+  { immediate: true, flush: 'sync' },
+);
 onBeforeUnmount(() => {
   window.removeEventListener('resize', clampFloatingPosition);
   Object.entries(handlers).forEach(([event, handler]) => socket.value?.off(event, handler));
@@ -704,62 +945,310 @@ window.addEventListener('resize', clampFloatingPosition);
 </script>
 
 <style scoped>
-.private-call { position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column; background: #0b1220; color: #f8fafc; }
-.private-call__header { min-height: 64px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px clamp(12px, 3vw, 32px); background: #151f30; border-bottom: 1px solid #334155; }
-.private-call__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.private-call__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.private-call__status { color: #86efac; font-size: 12px; }
-.private-call__actions { display: flex; gap: 8px; flex: none; }
-.private-call__stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: clamp(8px, 2vw, 24px); }
-.private-call__remote { position: relative; width: 100%; height: 100%; min-height: 0; background: #020617; border-radius: 14px; overflow: hidden; }
-.private-call__remote video { width: 100%; height: 100%; object-fit: contain; }
-.private-call__audio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; width: 100%; height: 100%; color: #f8fafc; background: radial-gradient(circle at top, #253553, #0b1220 58%); }
-.private-call__audio strong { font-size: 22px; }
-.private-call__audio span { color: #94a3b8; }
-.private-call__audio-actions { position: absolute; left: 0; right: 0; bottom: max(7vh, calc(env(safe-area-inset-bottom) + 20px)); display: flex; align-items: center; justify-content: center; height: 64px; }
-.audio-action { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; color: #fff; cursor: pointer; }
-.audio-action .iconfont { font-size: var(--icon-size-call); }
-.audio-action--hangup { width: 64px; height: 64px; background: #ef4444; }
-.audio-action--hangup:hover { background: #dc2626; }
-.audio-action--mute { position: absolute; right: clamp(24px, 6vw, 64px); width: 48px; height: 48px; background: #334155; }
-.audio-action--mute[aria-pressed="true"] { background: #2563eb; }
-.audio-action:focus-visible { outline: 3px solid #93c5fd; outline-offset: 4px; }
-.private-call__self { position: absolute; right: clamp(16px, 3vw, 40px); bottom: calc(112px + env(safe-area-inset-bottom)); width: clamp(130px, 20vw, 270px); aspect-ratio: 4 / 3; border: 2px solid #64748b; border-radius: 12px; overflow: hidden; background: #111827; box-shadow: 0 10px 30px #0008; cursor: pointer; }
-.private-call__self:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
-.private-call__self video { width: 100%; height: 100%; object-fit: cover; }
-.private-call__video--local video { transform: scaleX(-1); }
-.private-call__caption { position: absolute; left: 10px; bottom: 10px; padding: 4px 8px; border-radius: 6px; background: #0009; font-size: 12px; }
-.private-call__waiting { position: absolute; inset: 0; display: grid; place-items: center; color: #cbd5e1; }
-.private-call--compact { inset: auto 16px 16px auto; width: min(360px, calc(100vw - 24px)); height: 280px; border: 1px solid #475569; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px #0008; }
-.private-call--compact .private-call__header { min-height: 44px; padding: 6px 10px; font-size: 12px; cursor: grab; touch-action: none; user-select: none; }
-.private-call--compact .private-call__header:active { cursor: grabbing; }
-.private-call--compact .private-call__stage { padding: 0; }
-.private-call--compact .private-call__remote { border-radius: 0; cursor: grab; touch-action: none; }
-.private-call--compact .private-call__remote:active { cursor: grabbing; }
-.private-call--compact .private-call__self { right: 8px; bottom: 72px; width: 84px; border-radius: 7px; }
-.private-call--compact .private-call__status, .private-call--compact .private-call__caption { display: none; }
-.private-call__video-actions { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; gap: 24px; }
-.video-action { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border: 1px solid #ffffff30; border-radius: 50%; background: #1e293bcc; color: #fff; cursor: pointer; backdrop-filter: blur(12px); }
-.video-action .iconfont { font-size: var(--icon-size-call); }
-.video-action:hover { background: #475569; }
-.video-action[aria-pressed="true"] { background: #2563eb; }
-.video-action--hangup { width: 64px; height: 64px; background: #ef4444; border: 0; }
-.video-action--hangup:hover { background: #dc2626; }
-.video-action:focus-visible { outline: 3px solid #93c5fd; outline-offset: 4px; }
-.private-call__fullscreen { position: absolute; right: 16px; top: calc(16px + env(safe-area-inset-top)); width: 44px; height: 44px; }
-.private-call__fullscreen .is-collapsed { transform: rotate(180deg); }
-.private-call--compact .private-call__video-actions { bottom: 12px; gap: 16px; }
-.private-call--compact .video-action { width: 40px; height: 40px; }
-.private-call--compact .video-action .iconfont { font-size: var(--icon-size-control); }
-.private-call--compact .private-call__fullscreen { top: 8px; right: 8px; }
-:global(.private-invite .n-dialog__title), :global(.private-invite .n-dialog__content) { color: #f8fafc; }
+.private-call {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  background: #0b1220;
+  color: #f8fafc;
+}
+.private-call__header {
+  min-height: 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px clamp(12px, 3vw, 32px);
+  background: #151f30;
+  border-bottom: 1px solid #334155;
+}
+.private-call__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.private-call__title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.private-call__status {
+  color: #86efac;
+  font-size: 12px;
+}
+.private-call__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.private-call__stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(8px, 2vw, 24px);
+}
+.private-call__remote {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #020617;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.private-call__remote video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.private-call__audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  color: #f8fafc;
+  background: radial-gradient(circle at top, #253553, #0b1220 58%);
+}
+.private-call__audio strong {
+  font-size: 22px;
+}
+.private-call__audio span {
+  color: #94a3b8;
+}
+.private-call__audio-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(7vh, calc(env(safe-area-inset-bottom) + 20px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+.audio-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+.audio-action .iconfont {
+  font-size: var(--icon-size-call);
+}
+.audio-action--hangup {
+  width: 64px;
+  height: 64px;
+  background: #ef4444;
+}
+.audio-action--hangup:hover {
+  background: #dc2626;
+}
+.audio-action--mute {
+  position: absolute;
+  right: clamp(24px, 6vw, 64px);
+  width: 48px;
+  height: 48px;
+  background: #334155;
+}
+.audio-action--mute[aria-pressed='true'] {
+  background: #2563eb;
+}
+.audio-action:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 4px;
+}
+.private-call__self {
+  position: absolute;
+  right: clamp(16px, 3vw, 40px);
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  width: clamp(130px, 20vw, 270px);
+  aspect-ratio: 4 / 3;
+  border: 2px solid #64748b;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111827;
+  box-shadow: 0 10px 30px #0008;
+  cursor: pointer;
+}
+.private-call__self:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 3px;
+}
+.private-call__self video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.private-call__video--local video {
+  transform: scaleX(-1);
+}
+.private-call__caption {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #0009;
+  font-size: 12px;
+}
+.private-call__waiting {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #cbd5e1;
+}
+.private-call--compact {
+  inset: auto 16px 16px auto;
+  width: min(360px, calc(100vw - 24px));
+  height: 280px;
+  border: 1px solid #475569;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px #0008;
+}
+.private-call--compact .private-call__header {
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.private-call--compact .private-call__header:active {
+  cursor: grabbing;
+}
+.private-call--compact .private-call__stage {
+  padding: 0;
+}
+.private-call--compact .private-call__remote {
+  border-radius: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.private-call--compact .private-call__remote:active {
+  cursor: grabbing;
+}
+.private-call--compact .private-call__self {
+  right: 8px;
+  bottom: 72px;
+  width: 84px;
+  border-radius: 7px;
+}
+.private-call--compact .private-call__status,
+.private-call--compact .private-call__caption {
+  display: none;
+}
+.private-call__video-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+.video-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid #ffffff30;
+  border-radius: 50%;
+  background: #1e293bcc;
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+.video-action .iconfont {
+  font-size: var(--icon-size-call);
+}
+.video-action:hover {
+  background: #475569;
+}
+.video-action[aria-pressed='true'] {
+  background: #2563eb;
+}
+.video-action--hangup {
+  width: 64px;
+  height: 64px;
+  background: #ef4444;
+  border: 0;
+}
+.video-action--hangup:hover {
+  background: #dc2626;
+}
+.video-action:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 4px;
+}
+.private-call__fullscreen {
+  position: absolute;
+  right: 16px;
+  top: calc(16px + env(safe-area-inset-top));
+  width: 44px;
+  height: 44px;
+}
+.private-call--compact .private-call__video-actions {
+  bottom: 12px;
+  gap: 16px;
+}
+.private-call--compact .video-action {
+  width: 40px;
+  height: 40px;
+}
+.private-call--compact .video-action .iconfont {
+  font-size: var(--icon-size-control);
+}
+.private-call--compact .private-call__fullscreen {
+  top: 8px;
+  right: 8px;
+}
+:global(.private-invite .n-dialog__title),
+:global(.private-invite .n-dialog__content) {
+  color: #f8fafc;
+}
 @media (max-width: 600px) {
-  .private-call__header { min-height: 56px; padding: 8px 12px; }
-  .private-call__title strong { max-width: 40vw; font-size: 13px; }
-  .private-call__stage { padding: 0; }
-  .private-call__remote { border-radius: 0; }
-  .private-call__self { right: 10px; bottom: calc(112px + env(safe-area-inset-bottom)); width: 32vw; }
-  .private-call--compact .private-call__self { bottom: 72px; width: 84px; }
-  .private-call--compact { right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); height: 250px; }
+  .private-call__header {
+    min-height: 56px;
+    padding: 8px 12px;
+  }
+  .private-call__title strong {
+    max-width: 40vw;
+    font-size: 13px;
+  }
+  .private-call__stage {
+    padding: 0;
+  }
+  .private-call__remote {
+    border-radius: 0;
+  }
+  .private-call__self {
+    right: 10px;
+    bottom: calc(112px + env(safe-area-inset-bottom));
+    width: 32vw;
+  }
+  .private-call--compact .private-call__self {
+    bottom: 72px;
+    width: 84px;
+  }
+  .private-call--compact {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    height: 250px;
+  }
 }
 </style>

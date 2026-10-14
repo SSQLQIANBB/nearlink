@@ -1,0 +1,220 @@
+/* Project layout and business aliases for Iconfont project 5242382. */
+/* Sizes describe the control role, independent of surrounding text size. */
+:root {
+  --icon-size-inline: 18px;
+  --icon-size-control: 22px;
+  --icon-size-composer: 28px;
+  --icon-size-call: 28px;
+}
+.iconfont {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  line-height: 1;
+  text-transform: none;
+  vertical-align: -0.125em;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+/* Center the glyph box as well as the button slot; do not inherit text baselines. */
+.iconfont::before {
+  display: block;
+  line-height: 1;
+}
+.n-icon:has(> .iconfont),
+.n-button__icon:has(.iconfont) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.n-button__icon:has(.iconfont) {
+  width: var(--icon-size-control);
+  height: var(--icon-size-control);
+  font-size: var(--icon-size-control);
+}
+.n-input__prefix > .iconfont {
+  font-size: var(--icon-size-inline);
+}
+
+/* Keep exported class names intact; only map application aliases to the selected glyphs. */
+/* computer */
+.icon-desktop::before {
+  content: '\e84f';
+}
+
+/* cc-mic */
+.icon-microphone::before {
+  content: '\e675';
+}
+
+/* cc-mic-close */
+.icon-microphone-off::before {
+  content: '\e676';
+}
+
+/* dianhua */
+.icon-phone::before {
+  content: '\e65f';
+}
+
+/* tongxin-guaduandianhua */
+.icon-hangup::before {
+  content: '\e711';
+}
+
+/* category */
+.icon-bars::before {
+  content: '\e84d';
+}
+
+/* contacts-line */
+.icon-id-card::before {
+  content: '\e83d';
+}
+
+/* liaotian */
+.icon-comments::before {
+  content: '\e61f';
+}
+
+/* tongxunlu01-F */
+.icon-address-book::before {
+  content: '\e62f';
+}
+
+/* xiaoxi */
+.icon-message::before {
+  content: '\e677';
+}
+
+/* settings */
+.icon-gear::before {
+  content: '\e844';
+}
+
+/* user--line */
+.icon-user::before {
+  content: '\e841';
+}
+
+/* user-add-line */
+.icon-user-plus::before {
+  content: '\e842';
+}
+
+/* group-line */
+.icon-users::before {
+  content: '\e843';
+}
+
+/* left-arrow */
+.icon-arrow-left::before {
+  content: '\e83e';
+}
+
+/* add */
+.icon-plus::before {
+  content: '\e835';
+}
+
+/* send */
+.icon-paper-plane::before {
+  content: '\e62d';
+}
+
+/* quxiaogongxiangpingmu */
+.icon-screen-stop::before {
+  content: '\e8ae';
+}
+
+/* conditions */
+.icon-tune::before {
+  content: '\e850';
+}
+
+/* pencil */
+.icon-pen::before {
+  content: '\e6d9';
+}
+
+/* slash-lined */
+.icon-line::before {
+  content: '\e915';
+}
+
+/* bottom */
+.icon-arrow::before {
+  content: '\e600';
+}
+
+/* juxing */
+.icon-rectangle::before {
+  content: '\e620';
+}
+
+/* rubber-full */
+.icon-eraser::before {
+  content: '\ea15';
+}
+
+/* luzhi */
+.icon-record::before {
+  content: '\e609';
+}
+
+/* zanting */
+.icon-pause::before {
+  content: '\e629';
+}
+
+/* xiazai */
+.icon-download::before {
+  content: '\e619';
+}
+
+/* wubeijing */
+.icon-none::before {
+  content: '\e691';
+}
+
+/* shangchuantupian */
+.icon-image::before {
+  content: '\e6e9';
+}
+
+/* shangchuantupian */
+.icon-image1::before {
+  content: '\e6e9';
+}
+
+/* jianpanshuru */
+.icon-keyboard::before {
+  content: '\e690';
+}
+
+/* yuyinshuru */
+.icon-yuyin::before {
+  content: '\e6a9';
+}
+
+/* Call entry icons share dimensions across private chats, group sidebars and drawers. */
+.n-button:has(.call-action-icon) {
+  --icon-size-control: 18px;
+}
+.iconfont.call-action-icon {
+  font-size: 16px;
+  width: 18px;
+  height: 18px;
+}
+/* The filled screen has less internal whitespace than the outlined call icons. */
+.call-action-icon.icon-gongxiangpingmu {
+  font-size: 14px;
+}

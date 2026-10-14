@@ -1,15 +1,22 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+    <header
+      class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg"
+    >
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
-        <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
+        <n-avatar
+          :size="40"
+          :src="groupInfo?.avatar || undefined"
+          class="ring-2 ring-white"
+        >
           <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
         </n-avatar>
         <div class="text-white min-w-0">
           <div class="font-bold truncate">{{ groupInfo?.name }} - 屏幕共享</div>
           <div class="text-xs text-gray-400">
-            {{ isSharing ? '正在共享屏幕' : '观看屏幕共享' }} · {{ participantUserIds.length }} 人参与
+            {{ isSharing ? '正在共享屏幕' : '观看屏幕共享' }} ·
+            {{ participantUserIds.length }} 人参与
           </div>
         </div>
       </div>
@@ -25,7 +32,13 @@
               :disabled="!canSpeak"
             >
               <template #icon>
-                <n-icon><i class="iconfont" :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i></n-icon>
+                <n-icon>
+                  <i
+                    class="iconfont"
+                    :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
               </template>
             </n-button>
           </template>
@@ -43,7 +56,10 @@
             >
               <template #icon>
                 <n-icon>
-                  <i class="iconfont icon-pen" aria-hidden="true"></i>
+                  <i
+                    class="iconfont icon-pen"
+                    aria-hidden="true"
+                  ></i>
                 </n-icon>
               </template>
             </n-button>
@@ -60,39 +76,82 @@
         />
 
         <!-- 视频质量设置 -->
-        <n-dropdown :options="qualityOptions" @select="handleQualityChange">
+        <n-dropdown
+          :options="qualityOptions"
+          @select="handleQualityChange"
+        >
           <n-button circle>
             <template #icon>
-              <n-icon><i class="iconfont icon-tune" aria-hidden="true"></i></n-icon>
+              <n-icon>
+                <i
+                  class="iconfont icon-tune"
+                  aria-hidden="true"
+                ></i>
+              </n-icon>
             </template>
           </n-button>
         </n-dropdown>
 
         <!-- 群成员列表；麦克风控制仍仅群主可用 -->
-        <n-button circle aria-label="群成员" @click="showMemberControl = true">
+        <n-button
+          circle
+          aria-label="群成员"
+          @click="showMemberControl = true"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-users" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-users"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
         </n-button>
 
         <!-- 开始/停止共享 -->
-        <n-button v-if="!isSharing && !sharer" type="primary" @click="startScreenShare">
+        <n-button
+          v-if="!isSharing && !sharer"
+          type="primary"
+          @click="startScreenShare"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-screen-share" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-gongxiangpingmu"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
           开始共享
         </n-button>
-        <n-button v-if="isSharing" type="warning" @click="stopScreenShare">
+        <n-button
+          v-if="isSharing"
+          type="warning"
+          @click="stopScreenShare"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-screen-stop" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-screen-stop"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
           停止共享
         </n-button>
 
         <!-- 退出 -->
-        <n-button type="error" @click="handleExit">
+        <n-button
+          type="error"
+          @click="handleExit"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-hangup" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-hangup"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
           <span class="hidden sm:inline">退出</span>
         </n-button>
@@ -100,12 +159,20 @@
     </header>
 
     <!-- 其他成员的音频；共享者音频由主视频播放，避免重复。 -->
-    <MediaVideo v-for="peer in peerRegistry.values().filter(item => item.id !== sharer?.id)" :key="peer.id" :stream="peer.stream" style="display: none" />
+    <MediaVideo
+      v-for="peer in peerRegistry.values().filter((item) => item.id !== sharer?.id)"
+      :key="peer.id"
+      :stream="peer.stream"
+      style="display: none"
+    />
     <!-- 主内容区 -->
     <div class="flex-1 flex overflow-hidden">
       <!-- 屏幕共享主区域 -->
       <div class="flex-1 min-w-0 p-2 sm:p-4 flex items-center justify-center">
-        <div ref="screenViewport" class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl">
+        <div
+          ref="screenViewport"
+          class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl"
+        >
           <!-- 共享屏幕视频 -->
           <MediaVideo
             v-if="isSharing || sharer"
@@ -118,7 +185,9 @@
 
           <!-- 标注层：共享者可编辑，其他参与者只读 -->
           <ScreenAnnotation
-            v-if="isSharing || (screenSession && (annotationActions.length || annotationDrafts.length))"
+            v-if="
+              isSharing || (screenSession && (annotationActions.length || annotationDrafts.length))
+            "
             :style="annotationBounds"
             :actions="annotationActions"
             :drafts="annotationDrafts"
@@ -132,21 +201,38 @@
           />
 
           <!-- 无共享提示 -->
-          <div v-if="!isSharing && !sharer" class="absolute inset-0 flex flex-col items-center justify-center text-white">
-            <n-icon :size="80" class="text-gray-600 mb-4"><i class="iconfont icon-screen-share" aria-hidden="true"></i></n-icon>
+          <div
+            v-if="!isSharing && !sharer"
+            class="absolute inset-0 flex flex-col items-center justify-center text-white"
+          >
+            <n-icon
+              :size="80"
+              class="text-gray-600 mb-4"
+            >
+              <i
+                class="iconfont icon-gongxiangpingmu"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
             <h3 class="text-xl font-bold mb-2">等待屏幕共享</h3>
             <p class="text-gray-400">暂无成员共享屏幕</p>
           </div>
 
           <!-- 共享者信息 -->
-          <div v-if="sharer" class="absolute top-4 left-4 bg-black bg-opacity-70 px-4 py-2 rounded-lg">
+          <div
+            v-if="sharer"
+            class="absolute top-4 left-4 bg-black bg-opacity-70 px-4 py-2 rounded-lg"
+          >
             <div class="flex items-center gap-2 text-white">
-              <n-avatar :size="30" :src="sharer.avatar || undefined">
-                <span v-if="!sharer.avatar">{{ sharer.nickname?.charAt(0) || sharer.username?.charAt(0) }}</span>
+              <n-avatar
+                :size="30"
+                :src="sharer.avatar || undefined"
+              >
+                <span v-if="!sharer.avatar">
+                  {{ sharer.nickname?.charAt(0) || sharer.username?.charAt(0) }}
+                </span>
               </n-avatar>
-              <span class="font-semibold">
-                {{ sharer.nickname || sharer.username }} 正在共享
-              </span>
+              <span class="font-semibold">{{ sharer.nickname || sharer.username }} 正在共享</span>
             </div>
           </div>
 
@@ -156,7 +242,10 @@
           </div>
 
           <!-- 控制覆盖层 (鼠标悬停显示) -->
-          <div v-if="isSharing" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 px-4 py-2 rounded-lg">
+          <div
+            v-if="isSharing"
+            class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 px-4 py-2 rounded-lg"
+          >
             <span class="text-white text-sm">正在共享您的屏幕</span>
           </div>
         </div>
@@ -171,24 +260,51 @@
             :key="member.id"
             class="flex items-center gap-3 p-2 bg-gray-700 rounded-lg"
           >
-            <n-avatar :size="36" :src="member.avatar || undefined">
-              <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
+            <n-avatar
+              :size="36"
+              :src="member.avatar || undefined"
+            >
+              <span v-if="!member.avatar">
+                {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
+              </span>
             </n-avatar>
             <div class="flex-1 min-w-0">
               <div class="text-white text-sm font-medium truncate">
                 {{ member.nickname || member.username }}
-                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" />
+                <SpeakingIndicator
+                  :stream="
+                    member.id === currentUser?.id
+                      ? localStream
+                      : peerRegistry.get(member.id)?.stream
+                  "
+                  :muted="member.id === currentUser?.id && isMicMuted"
+                />
                 {{ member.id === currentUser?.id ? ' (我)' : '' }}
               </div>
               <div class="flex items-center gap-1">
-                <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
+                <n-tag
+                  v-if="member.role === 'owner'"
+                  type="warning"
+                  size="tiny"
+                >
+                  群主
+                </n-tag>
                 <n-tag
                   :type="isMemberParticipating(member.id) ? 'success' : 'default'"
                   size="tiny"
                 >
                   {{ isMemberParticipating(member.id) ? '参与中' : '未参与' }}
                 </n-tag>
-                <n-icon v-if="member.isMicMuted"  :size="14" color="#ef4444"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
+                <n-icon
+                  v-if="member.isMicMuted"
+                  :size="14"
+                  color="#ef4444"
+                >
+                  <i
+                    class="iconfont icon-microphone-off"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
               </div>
             </div>
           </div>
@@ -197,7 +313,11 @@
     </div>
 
     <!-- 群成员抽屉 -->
-    <n-drawer v-model:show="showMemberControl" width="min(350px, calc(100vw - 24px))" placement="right">
+    <n-drawer
+      v-model:show="showMemberControl"
+      width="min(350px, calc(100vw - 24px))"
+      placement="right"
+    >
       <n-drawer-content title="群成员">
         <div class="space-y-3">
           <div
@@ -206,15 +326,41 @@
             class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
           >
             <div class="flex items-center gap-3">
-              <n-avatar :size="40" :src="member.avatar || undefined">
-                <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
+              <n-avatar
+                :size="40"
+                :src="member.avatar || undefined"
+              >
+                <span v-if="!member.avatar">
+                  {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
+                </span>
               </n-avatar>
               <div>
-                <div class="font-semibold">{{ member.nickname || member.username }}
-                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" /></div>
+                <div class="font-semibold">
+                  {{ member.nickname || member.username }}
+                  <SpeakingIndicator
+                    :stream="
+                      member.id === currentUser?.id
+                        ? localStream
+                        : peerRegistry.get(member.id)?.stream
+                    "
+                    :muted="member.id === currentUser?.id && isMicMuted"
+                  />
+                </div>
                 <div class="text-xs text-gray-500">
-                  <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
-                  <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
+                  <n-tag
+                    v-if="member.role === 'owner'"
+                    type="warning"
+                    size="tiny"
+                  >
+                    群主
+                  </n-tag>
+                  <n-tag
+                    v-else-if="member.role === 'admin'"
+                    type="info"
+                    size="tiny"
+                  >
+                    管理员
+                  </n-tag>
                   <n-tag
                     :type="isMemberParticipating(member.id) ? 'success' : 'default'"
                     size="tiny"
@@ -224,7 +370,10 @@
                 </div>
               </div>
             </div>
-            <div v-if="member.id !== currentUser?.id && isOwner" class="flex flex-col gap-2">
+            <div
+              v-if="member.id !== currentUser?.id && isOwner"
+              class="flex flex-col gap-2"
+            >
               <n-switch
                 :value="member.canSpeak"
                 @update:value="(val: boolean) => handleControlMemberMic(member.socketId || '', val)"
@@ -263,10 +412,7 @@ import {
   createMediaParticipantState,
   type ParticipantSnapshot,
 } from '@/services/mediaParticipantState';
-import {
-  RemotePeerRegistry,
-  type RemoteMember,
-} from '@/services/remotePeerRegistry';
+import { RemotePeerRegistry, type RemoteMember } from '@/services/remotePeerRegistry';
 import {
   createScreenAnnotationState,
   type AnnotationAction,
@@ -299,15 +445,20 @@ const peerRegistry = new RemotePeerRegistry(createPeerConnection);
 const annotationState = createScreenAnnotationState();
 const participantState = createMediaParticipantState();
 const currentQuality = ref('high'); // 当前视频质量
-const screenStream = computed(() => isSharing.value ? localStream.value : remoteStream.value); // 用于录制
-const displayStream = computed(() => isSharing.value ? localStream.value : remoteStream.value);
+const screenStream = computed(() => (isSharing.value ? localStream.value : remoteStream.value)); // 用于录制
+const displayStream = computed(() => (isSharing.value ? localStream.value : remoteStream.value));
 const screenSession = computed(() => groupSessionState.getSession(groupId.value, 'screen'));
 const screenViewport = ref<HTMLElement | null>(null);
 const viewportSize = ref({ width: 0, height: 0 });
 const videoSize = ref({ width: 0, height: 0 });
 const annotationBounds = computed(() => {
   const { width, height } = containedVideoRect(viewportSize.value, videoSize.value);
-  return { width: `${width}px`, height: `${height}px`, left: `${(viewportSize.value.width - width) / 2}px`, top: `${(viewportSize.value.height - height) / 2}px` };
+  return {
+    width: `${width}px`,
+    height: `${height}px`,
+    left: `${(viewportSize.value.width - width) / 2}px`,
+    top: `${(viewportSize.value.height - height) / 2}px`,
+  };
 });
 function updateVideoDimensions(event: Event) {
   const video = event.target as HTMLVideoElement;
@@ -316,7 +467,12 @@ function updateVideoDimensions(event: Event) {
 let viewportObserver: ResizeObserver | null = null;
 onMounted(() => {
   if (!screenViewport.value) return;
-  const resize = () => { viewportSize.value = { width: screenViewport.value!.clientWidth, height: screenViewport.value!.clientHeight }; };
+  const resize = () => {
+    viewportSize.value = {
+      width: screenViewport.value!.clientWidth,
+      height: screenViewport.value!.clientHeight,
+    };
+  };
   resize();
   viewportObserver = new ResizeObserver(resize);
   viewportObserver.observe(screenViewport.value);
@@ -343,13 +499,13 @@ const qualityPresets = {
 
 // 是否是群主
 const isOwner = computed(() => {
-  const myMember = members.value.find(m => m.id === currentUser.value?.id);
+  const myMember = members.value.find((m) => m.id === currentUser.value?.id);
   return myMember?.role === 'owner';
 });
 
 // 是否可以发言
 const canSpeak = computed(() => {
-  const myMember = members.value.find(m => m.id === currentUser.value?.id);
+  const myMember = members.value.find((m) => m.id === currentUser.value?.id);
   return myMember?.canSpeak !== false;
 });
 
@@ -392,7 +548,7 @@ function initSocket() {
 
   stopAuthenticatedWatch = watch(
     authenticated,
-    ready => {
+    (ready) => {
       if (!ready) return;
       if (isSharing.value) {
         // 初次授权时 Socket 可能仍在认证；认证完成后补发邀请。
@@ -447,21 +603,32 @@ async function startScreenShare() {
     const preset = qualityPresets[currentQuality.value as keyof typeof qualityPresets];
 
     // 获取屏幕共享流
-    const screenStream = pendingInitialScreen.value || await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        width: { ideal: preset.width },
-        height: { ideal: preset.height },
-        frameRate: { ideal: preset.frameRate },
-      },
-      audio: false,
-    });
+    const screenStream =
+      pendingInitialScreen.value ||
+      (await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: preset.width },
+          height: { ideal: preset.height },
+          frameRate: { ideal: preset.frameRate },
+        },
+        audio: false,
+      }));
 
     pendingInitialScreen.value = null;
-    if (cleanedUp || !mediaClaim?.isCurrent()) { screenStream.getTracks().forEach(track => track.stop()); return; }
+    if (cleanedUp || !mediaClaim?.isCurrent()) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     // 获取音频流 (如果需要语音)
-    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null);
+    const audioStream = await navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
+      .catch(() => null);
 
-    if (cleanedUp || !mediaClaim?.isCurrent()) { screenStream.getTracks().forEach(track => track.stop()); audioStream?.getTracks().forEach(track => track.stop()); return; }
+    if (cleanedUp || !mediaClaim?.isCurrent()) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      audioStream?.getTracks().forEach((track) => track.stop());
+      return;
+    }
     // 合并流
     localStream.value = new MediaStream([
       ...screenStream.getVideoTracks(),
@@ -494,7 +661,7 @@ async function startScreenShare() {
 
 // 停止屏幕共享
 function stopScreenShare() {
-  localStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value?.getTracks().forEach((track) => track.stop());
   localStream.value = null;
   isSharing.value = false;
   showAnnotation.value = false;
@@ -511,8 +678,8 @@ function stopScreenShare() {
 
 // 广播流到所有成员
 async function broadcastStream() {
-  const targets = peerRegistry.values().filter(peer => peer.id !== currentUser.value?.id);
-  await Promise.all(targets.map(member => createAndSendOffer(member)));
+  const targets = peerRegistry.values().filter((peer) => peer.id !== currentUser.value?.id);
+  await Promise.all(targets.map((member) => createAndSendOffer(member)));
   // 这里简化处理，实际应该为每个成员创建独立的连接
   // 在实际应用中，应该使用 SFU (Selective Forwarding Unit) 服务器
 }
@@ -523,29 +690,27 @@ function createPeerConnection(member: RemoteMember) {
   const pc = new RTCPeerConnection({
     iceServers: [
       {
-        urls: 'stun:turn.sycsq.top:3478'
+        urls: 'stun:turn.sycsq.top:3478',
       },
       {
-        urls: [
-          'turn:turn.sycsq.top:3478?transport=udp',
-          'turn:turn.sycsq.top:3478?transport=tcp'
-        ],
+        urls: ['turn:turn.sycsq.top:3478?transport=udp', 'turn:turn.sycsq.top:3478?transport=tcp'],
         username: 'todesk',
-        credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe'
-      }
+        credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe',
+      },
     ],
   });
 
   // 添加本地流
   if (localStream.value) {
-    localStream.value.getTracks().forEach(track => {
+    localStream.value.getTracks().forEach((track) => {
       const sender = pc.addTrack(track, localStream.value!);
       if (track.kind === 'video') void limitVideoBitrate(sender, 1_800_000);
     });
   }
 
   if (!isSharing.value) pc.addTransceiver('video', { direction: 'recvonly' });
-  if (!localStream.value?.getAudioTracks().length) pc.addTransceiver('audio', { direction: 'recvonly' });
+  if (!localStream.value?.getAudioTracks().length)
+    pc.addTransceiver('audio', { direction: 'recvonly' });
 
   // 处理远程流
   pc.ontrack = (event) => {
@@ -623,7 +788,7 @@ async function handleIceCandidate(data: any) {
 }
 
 function findPeerBySocket(socketId: string) {
-  return peerRegistry.values().find(peer => peer.socketId === socketId);
+  return peerRegistry.values().find((peer) => peer.socketId === socketId);
 }
 
 function handleCallState(data: any) {
@@ -640,7 +805,7 @@ function handleCallState(data: any) {
 
 async function joinScreenCall(ownerUserId: number) {
   if (!mediaClaim?.isCurrent() || cleanedUp) return;
-  const owner = members.value.find(member => member.id === ownerUserId);
+  const owner = members.value.find((member) => member.id === ownerUserId);
   sharer.value = owner || { id: ownerUserId, username: '共享者' };
   const session = groupSessionState.getSession(groupId.value, 'screen');
   if (session) startScreenSession(session.startedAt, session.channelId);
@@ -649,12 +814,24 @@ async function joinScreenCall(ownerUserId: number) {
   if (!localStream.value) {
     try {
       const audio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      if (!joinedCall || cleanedUp) { audio.getTracks().forEach(track => track.stop()); return; }
-      audio.getAudioTracks().forEach(track => { track.enabled = !isMicMuted.value && canSpeak.value; });
+      if (!joinedCall || cleanedUp) {
+        audio.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      audio.getAudioTracks().forEach((track) => {
+        track.enabled = !isMicMuted.value && canSpeak.value;
+      });
       localStream.value = audio;
-    } catch { isMicMuted.value = true; message.warning('麦克风不可用，仍可观看屏幕共享'); }
+    } catch {
+      isMicMuted.value = true;
+      message.warning('麦克风不可用，仍可观看屏幕共享');
+    }
   }
-  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: 2, startedAt: currentSessionStartedAt });
+  socket.value?.emit('join_group_call', {
+    groupId: groupId.value,
+    deviceType: 2,
+    startedAt: currentSessionStartedAt,
+  });
 }
 
 function handleCallStarted(data: any) {
@@ -676,7 +853,7 @@ function handleCallEnded(data: any) {
   joinedCall = false;
   isSharing.value = false;
   currentSessionStartedAt = null;
-  localStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value?.getTracks().forEach((track) => track.stop());
   localStream.value = null;
   showAnnotation.value = false;
   annotationState.clear();
@@ -693,7 +870,7 @@ function handleCallMembers(data: any) {
     peerRegistry.upsert(member);
     mergeMemberSocket(member);
   });
-  peerRegistry.values().forEach(member => {
+  peerRegistry.values().forEach((member) => {
     if ((currentUser.value?.id || 0) < member.id) void createAndSendOffer(member);
   });
 }
@@ -748,8 +925,7 @@ function isMemberParticipating(userId: number) {
 }
 
 function isCurrentAnnotationEvent(data: { groupId: number; startedAt: string }) {
-  return data.groupId === groupId.value
-    && data.startedAt === screenSession.value?.startedAt;
+  return data.groupId === groupId.value && data.startedAt === screenSession.value?.startedAt;
 }
 
 function handleAnnotationSnapshot(data: {
@@ -831,12 +1007,12 @@ function sendAnnotationClear() {
 }
 
 function mergeMemberSocket(member: RemoteMember) {
-  const groupMember = members.value.find(item => item.id === member.id);
+  const groupMember = members.value.find((item) => item.id === member.id);
   if (groupMember) groupMember.socketId = member.socketId;
 }
 
 function handleMemberMicChanged(data: any) {
-  const member = members.value.find(item => item.socketId === data.socketId);
+  const member = members.value.find((item) => item.socketId === data.socketId);
   if (member) member.isMicMuted = data.muted;
 }
 
@@ -844,7 +1020,9 @@ function handleMicPermissionChanged(data: any) {
   if (data.groupId !== groupId.value) return;
   if (!data.canSpeak) {
     isMicMuted.value = true;
-    localStream.value?.getAudioTracks().forEach(track => { track.enabled = false; });
+    localStream.value?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
     message.warning('您已被群主禁言');
   } else {
     message.success('您已被允许发言');
@@ -859,7 +1037,7 @@ function toggleMic() {
   }
 
   isMicMuted.value = !isMicMuted.value;
-  localStream.value?.getAudioTracks().forEach(track => {
+  localStream.value?.getAudioTracks().forEach((track) => {
     track.enabled = !isMicMuted.value;
   });
 
@@ -878,7 +1056,7 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
   });
 
   // 更新本地数据
-  const member = members.value.find(m => m.socketId === socketId);
+  const member = members.value.find((m) => m.socketId === socketId);
   if (member) {
     member.canSpeak = canSpeak;
   }
@@ -914,13 +1092,16 @@ function cleanupScreenCall(endOwnedSession: boolean) {
   mediaClaim = null;
   if (!ownedMedia) return;
 
-  pendingInitialScreen.value?.getTracks().forEach(track => track.stop());
+  pendingInitialScreen.value?.getTracks().forEach((track) => track.stop());
   pendingInitialScreen.value = null;
-  localStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value?.getTracks().forEach((track) => track.stop());
   peerRegistry.clear();
   annotationState.clear();
   participantState.clear(groupId.value, 'screen');
-  if (endOwnedSession && groupSessionState.getSession(groupId.value, 'screen')?.ownerUserId === currentUser.value?.id) {
+  if (
+    endOwnedSession &&
+    groupSessionState.getSession(groupId.value, 'screen')?.ownerUserId === currentUser.value?.id
+  ) {
     socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 2 });
   }
   socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: 2 });
@@ -965,8 +1146,14 @@ function handleRecordingStop(blob: Blob) {
 }
 
 onMounted(async () => {
-  mediaClaim = mediaOccupancy.acquire('group-screen', `group-screen:${groupId.value}`, () => cleanupScreenCall(true));
-  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); await router.replace(`/group-chat/${groupId.value}`); return; }
+  mediaClaim = mediaOccupancy.acquire('group-screen', `group-screen:${groupId.value}`, () =>
+    cleanupScreenCall(true),
+  );
+  if (!mediaClaim) {
+    message.warning('请先结束当前通话或远程控制');
+    await router.replace(`/group-chat/${groupId.value}`);
+    return;
+  }
   const captured = takeCapturedGroupScreen(groupId.value);
   if (captured) {
     // 回填给 startScreenShare，避免切换路由后再次请求共享权限。

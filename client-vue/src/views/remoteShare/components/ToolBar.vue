@@ -1,9 +1,54 @@
 <template>
-  <div class="flex gap-2 border-t p-3">
-    <n-button :disabled="!contactUser || calls.busy || mediaBusy" @click="start(1)"><template #icon><i class="iconfont icon-desktop" aria-hidden="true"></i></template>屏幕共享</n-button>
-    <n-button v-if="remote.showControllerEntry" :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl" @click="openRemoteControl"><template #icon><i class="iconfont icon-desktop" aria-hidden="true"></i></template>远程控制</n-button>
-    <n-button :disabled="!contactUser || calls.busy || mediaBusy" @click="start(0)"><template #icon><i class="iconfont icon-video" aria-hidden="true"></i></template>视频通话</n-button>
-    <n-button :disabled="!contactUser || calls.busy || mediaBusy" @click="start(2)"><template #icon><i class="iconfont icon-microphone" aria-hidden="true"></i></template>语音通话</n-button>
+  <div class="call-toolbar flex gap-2 border-t p-3">
+    <n-button
+      :disabled="!contactUser || calls.busy || mediaBusy"
+      @click="start(1)"
+    >
+      <template #icon>
+        <i
+          class="iconfont call-action-icon icon-gongxiangpingmu"
+          aria-hidden="true"
+        ></i>
+      </template>
+      屏幕共享
+    </n-button>
+    <n-button
+      v-if="remote.showControllerEntry"
+      :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl"
+      @click="openRemoteControl"
+    >
+      <template #icon>
+        <i
+          class="iconfont call-action-icon icon-desktop"
+          aria-hidden="true"
+        ></i>
+      </template>
+      远程控制
+    </n-button>
+    <n-button
+      :disabled="!contactUser || calls.busy || mediaBusy"
+      @click="start(0)"
+    >
+      <template #icon>
+        <i
+          class="iconfont call-action-icon icon-video"
+          aria-hidden="true"
+        ></i>
+      </template>
+      视频通话
+    </n-button>
+    <n-button
+      :disabled="!contactUser || calls.busy || mediaBusy"
+      @click="start(2)"
+    >
+      <template #icon>
+        <i
+          class="iconfont call-action-icon icon-dianhua"
+          aria-hidden="true"
+        ></i>
+      </template>
+      语音通话
+    </n-button>
   </div>
 </template>
 <script setup lang="ts">
@@ -27,7 +72,3 @@ function start(type: 0 | 1 | 2) {
   if (props.contactUser && !mediaBusy.value) calls.request = { user: props.contactUser, type };
 }
 </script>
-
-<style scoped>
-.iconfont { font-size: var(--icon-size-control); }
-</style>

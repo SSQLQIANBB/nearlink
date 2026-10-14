@@ -1,214 +1,431 @@
 <template>
-  <div class="im-page"><n-layout
-    has-sider
-    class="remote-shell h-full w-full"
-    :class="{ 'sidebar-open': mobileSidebarOpen }"
-  >
-    <button v-if="mobileSidebarOpen" class="sidebar-backdrop" aria-label="关闭联系人列表" @click="mobileSidebarOpen = false"></button>
-    <n-layout-sider
-      class="remote-sidebar"
-      :class="{ 'mobile-open': mobileSidebarOpen }"
-      bordered
-      :width="320"
-      :collapsed-width="0"
-      collapse-mode="transform"
-      :show-trigger="false"
-      content-class="remote-sidebar-content flex flex-col"
+  <div class="im-page">
+    <n-layout
+      has-sider
+      class="remote-shell h-full w-full"
+      :class="{ 'sidebar-open': mobileSidebarOpen }"
     >
-      <n-button class="mobile-sidebar-close" secondary @click="mobileSidebarOpen = false">关闭列表</n-button>
-      <!-- 用户信息卡片 -->
-      <div class="sidebar-profile p-4 text-white">
-        <div class="sidebar-profile-main flex items-center gap-3 mb-3">
-          <n-avatar
-            :size="40"
-            :src="authUser?.avatar || undefined"
-            class="profile-avatar cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
-            @click="goToProfile"
-          >
-            <span v-if="!authUser?.avatar">{{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}</span>
-          </n-avatar>
-          <div class="flex-1">
-            <div class="font-bold text-sm">{{ authUser?.nickname || authUser?.username || '未登录' }}</div>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="w-2 h-2 rounded-full animate-pulse" :class="getStatusColor(userStatus)"></span>
-              <span class="text-xs opacity-90">{{ getStatusText(userStatus) }}</span>
+      <button
+        v-if="mobileSidebarOpen"
+        class="sidebar-backdrop"
+        aria-label="关闭联系人列表"
+        @click="mobileSidebarOpen = false"
+      ></button>
+      <n-layout-sider
+        class="remote-sidebar"
+        :class="{ 'mobile-open': mobileSidebarOpen }"
+        bordered
+        :width="320"
+        :collapsed-width="0"
+        collapse-mode="transform"
+        :show-trigger="false"
+        content-class="remote-sidebar-content flex flex-col"
+      >
+        <n-button
+          class="mobile-sidebar-close"
+          secondary
+          @click="mobileSidebarOpen = false"
+        >
+          关闭列表
+        </n-button>
+        <!-- 用户信息卡片 -->
+        <div class="sidebar-profile p-4 text-white">
+          <div class="sidebar-profile-main flex items-center gap-3 mb-3">
+            <n-avatar
+              :size="40"
+              :src="authUser?.avatar || undefined"
+              class="profile-avatar cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
+              @click="goToProfile"
+            >
+              <span v-if="!authUser?.avatar">
+                {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
+              </span>
+              <template #fallback>
+                <span class="flex h-full w-full items-center justify-center">
+                  {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
+                </span>
+              </template>
+            </n-avatar>
+            <div class="flex-1">
+              <div class="font-bold text-sm">
+                {{ authUser?.nickname || authUser?.username || '未登录' }}
+              </div>
+              <div class="flex items-center gap-2 mt-1">
+                <span
+                  class="w-2 h-2 rounded-full animate-pulse"
+                  :class="getStatusColor(userStatus)"
+                ></span>
+                <span class="text-xs opacity-90">{{ getStatusText(userStatus) }}</span>
+              </div>
             </div>
+            <n-button
+              class="sidebar-logout"
+              title="退出登录"
+              aria-label="退出登录"
+              type="error"
+              size="small"
+              strong
+              secondary
+              @click="handleLogout"
+            >
+              <i
+                class="iconfont icon-logout"
+                aria-hidden="true"
+              ></i>
+            </n-button>
           </div>
-          <n-button
-            class="sidebar-logout" title="退出登录" aria-label="退出登录"
-            type="error"
-            size="small"
-            strong
-            secondary
-            @click="handleLogout"
+          <!-- 快捷操作 -->
+          <div class="flex gap-2">
+            <n-button
+              class="profile-button"
+              size="small"
+              secondary
+              block
+              @click="goToProfile"
+            >
+              <template #icon>
+                <i
+                  class="iconfont icon-id-card"
+                  aria-hidden="true"
+                ></i>
+              </template>
+              个人中心
+            </n-button>
+          </div>
+        </div>
+
+        <!-- Tab 切换 -->
+        <n-tabs
+          v-model:value="activeTab"
+          type="line"
+          animated
+          justify-content="space-evenly"
+          class="sidebar-tabs flex-1 min-h-0 flex flex-col"
+          pane-class="flex-1"
+          style="overflow: hidden"
+        >
+          <!-- 联系人 -->
+          <n-tab-pane
+            name="users"
+            :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'"
+            display-directive="show:lazy"
+            class="flex flex-col h-full min-h-0 pt-0"
           >
-            <i class="iconfont icon-logout" aria-hidden="true"></i>
-          </n-button>
-        </div>
-        <!-- 快捷操作 -->
-        <div class="flex gap-2">
-          <n-button class="profile-button" size="small" secondary block @click="goToProfile">
-            <template #icon><i class="iconfont icon-id-card" aria-hidden="true"></i></template>
-            个人中心
-          </n-button>
-        </div>
-      </div>
-
-      <!-- Tab 切换 -->
-      <n-tabs v-model:value="activeTab" type="line" animated justify-content="space-evenly" class="sidebar-tabs flex-1 min-h-0 flex flex-col" pane-class="flex-1" style="overflow: hidden;">
-        <!-- 联系人 -->
-        <n-tab-pane name="users" :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
-          <div class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between gap-2">
-            <span>联系人 ({{ displayUsers.length }})</span>
-            <span v-if="unread.privateTotal > 0" class="contact-unread-badge" aria-label="未读消息">{{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}</span>
-          </div>
-          <n-scrollbar class="flex-1 min-h-0">
-            <ul class="contact-list p-2 space-y-1">
-              <n-badge
-                :offset="[-8, 8]"
-                class="w-full"
-                :value="unReadMessageCount[user.id] || 0"
-                :max="99"
-                :show="!!unReadMessageCount[user.id]"
-                v-for="user in displayUsers"
-                :key="user.id"
+            <div
+              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between gap-2"
+            >
+              <span>联系人 ({{ displayUsers.length }})</span>
+              <span
+                v-if="unread.privateTotal > 0"
+                class="contact-unread-badge"
+                aria-label="未读消息"
               >
-                <li
-                  class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
-                  :class="contactUser?.id === user.id ? 'bg-blue-100 border-blue-300 shadow-md' : 'bg-white border-gray-200'"
-                  @click="selectContact(user)"
+                {{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}
+              </span>
+            </div>
+            <n-scrollbar class="flex-1 min-h-0">
+              <ul class="contact-list p-2 space-y-1">
+                <n-badge
+                  :offset="[-8, 8]"
+                  class="w-full"
+                  :value="unReadMessageCount[user.id] || 0"
+                  :max="99"
+                  :show="!!unReadMessageCount[user.id]"
+                  v-for="user in displayUsers"
+                  :key="user.id"
                 >
-                  <n-avatar :size="40" :src="user.avatar || undefined" class="flex-shrink-0">
-                    <span v-if="!user.avatar">{{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}</span>
-                  </n-avatar>
-                  <div class="flex-1 w-0">
-                    <div class="font-semibold text-sm">{{ user.nickname || user.username || `用户-${user.id}` }}</div>
-                    <div class="text-xs text-gray-500 truncate">{{ user.bio || '人很懒，无简介~' }}</div>
-                  </div>
-                  <div class="w-2 h-2 rounded-full" :class="getStatusColor(user?.status || 'online')" ></div>
-                </li>
-              </n-badge>
+                  <li
+                    class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
+                    :class="
+                      contactUser?.id === user.id
+                        ? 'bg-blue-100 border-blue-300 shadow-md'
+                        : 'bg-white border-gray-200'
+                    "
+                    @click="selectContact(user)"
+                  >
+                    <n-avatar
+                      :size="40"
+                      :src="user.avatar || undefined"
+                      class="flex-shrink-0"
+                    >
+                      <span v-if="!user.avatar">
+                        {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                      </span>
+                      <template #fallback>
+                        <span class="flex h-full w-full items-center justify-center">
+                          {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                        </span>
+                      </template>
+                    </n-avatar>
+                    <div class="flex-1 w-0">
+                      <div class="font-semibold text-sm">
+                        {{ user.nickname || user.username || `用户-${user.id}` }}
+                      </div>
+                      <div class="text-xs text-gray-500 truncate">
+                        {{ user.bio || '人很懒，无简介~' }}
+                      </div>
+                    </div>
+                    <div
+                      class="w-2 h-2 rounded-full"
+                      :class="getStatusColor(user?.status || 'online')"
+                    ></div>
+                  </li>
+                </n-badge>
 
-              <n-empty
-                v-if="!displayUsers.length"
-                class="h-full flex items-center justify-center py-12"
-                description="暂无联系人"
-                size="small"
+                <n-empty
+                  v-if="!displayUsers.length"
+                  class="h-full flex items-center justify-center py-12"
+                  description="暂无联系人"
+                  size="small"
+                >
+                  <template #icon>
+                    <n-icon
+                      size="32"
+                      color="#d0d0d0"
+                    >
+                      <i
+                        class="iconfont icon-user"
+                        aria-hidden="true"
+                      ></i>
+                    </n-icon>
+                  </template>
+                </n-empty>
+              </ul>
+            </n-scrollbar>
+          </n-tab-pane>
+
+          <!-- 我的群组 -->
+          <n-tab-pane
+            name="groups"
+            :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'"
+            display-directive="show:lazy"
+            class="flex flex-col h-full min-h-0 pt-0"
+          >
+            <div
+              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between"
+            >
+              <span>我的群组 ({{ myGroups.length }})</span>
+              <n-button
+                size="tiny"
+                @click="goToGroups"
               >
-                <template #icon>
-                  <n-icon size="32" color="#d0d0d0"><i class="iconfont icon-user" aria-hidden="true"></i></n-icon>
-                </template>
-              </n-empty>
-            </ul>
-          </n-scrollbar>
-        </n-tab-pane>
-
-        <!-- 我的群组 -->
-        <n-tab-pane name="groups" :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'" display-directive="show:lazy" class="flex flex-col h-full min-h-0 pt-0">
-          <div class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between">
-            <span>我的群组 ({{ myGroups.length }})</span>
-            <n-button size="tiny" @click="goToGroups">管理</n-button>
-          </div>
-          <n-scrollbar class="flex-1 min-h-0">
-            <div class="p-3">
-              <n-button block secondary @click="goToGroups" class="mb-3">
-                + 创建/管理群组
+                管理
               </n-button>
-
-              <div v-if="myGroups.length > 0" class="space-y-2 mt-3">
-                <div
-                  v-for="group in myGroups"
-                  :key="group.id"
-                  class="group-item flex items-center gap-3 cursor-pointer transition-all"
-                  @click="goToGroupChat(group.id)"
+            </div>
+            <n-scrollbar class="flex-1 min-h-0">
+              <div class="p-3">
+                <n-button
+                  block
+                  secondary
+                  @click="goToGroups"
+                  class="mb-3"
                 >
-                  <n-avatar :size="40" :src="group.avatar || undefined">
-                    <span v-if="!group.avatar">{{ group.name?.charAt(0) || 'G' }}</span>
-                  </n-avatar>
-                  <div class="flex-1 min-w-0">
-                    <div class="font-semibold text-sm truncate">{{ group.name }}</div>
-                    <div class="text-xs text-gray-500">成员: {{ group.memberCount || 0 }}</div>
+                  + 创建/管理群组
+                </n-button>
+
+                <div
+                  v-if="myGroups.length > 0"
+                  class="space-y-2 mt-3"
+                >
+                  <div
+                    v-for="group in myGroups"
+                    :key="group.id"
+                    class="group-item flex items-center gap-3 cursor-pointer transition-all"
+                    @click="goToGroupChat(group.id)"
+                  >
+                    <n-avatar
+                      :size="40"
+                      :src="group.avatar || undefined"
+                    >
+                      <span v-if="!group.avatar">{{ group.name?.charAt(0) || 'G' }}</span>
+                      <template #fallback>
+                        <span class="flex h-full w-full items-center justify-center">
+                          {{ group.name?.charAt(0) || 'G' }}
+                        </span>
+                      </template>
+                    </n-avatar>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-semibold text-sm truncate">{{ group.name }}</div>
+                      <div class="text-xs text-gray-500">成员: {{ group.memberCount || 0 }}</div>
+                    </div>
+                    <n-badge
+                      :value="unread.groupCounts[group.id] || 0"
+                      :max="99"
+                      :show="!!unread.groupCounts[group.id]"
+                    />
                   </div>
-                  <n-badge :value="unread.groupCounts[group.id] || 0" :max="99" :show="!!unread.groupCounts[group.id]" />
+                </div>
+
+                <n-empty
+                  v-else
+                  description="暂无群组"
+                  size="small"
+                  class="py-8"
+                >
+                  <template #extra>
+                    <n-button
+                      size="small"
+                      @click="goToGroups"
+                    >
+                      创建群组
+                    </n-button>
+                  </template>
+                </n-empty>
+              </div>
+            </n-scrollbar>
+          </n-tab-pane>
+        </n-tabs>
+      </n-layout-sider>
+
+      <n-layout-content content-class="w-full flex flex-col">
+        <div
+          v-if="contactUser"
+          class="chat-panel h-full w-full flex flex-col"
+        >
+          <!-- 聊天头部 -->
+          <header class="chat-header min-h-16 flex items-center px-3 sm:px-6 py-2">
+            <n-button
+              class="mobile-sidebar-toggle"
+              secondary
+              aria-label="打开联系人列表"
+              @click="mobileSidebarOpen = true"
+            >
+              <i
+                class="iconfont icon-bars"
+                aria-hidden="true"
+              ></i>
+            </n-button>
+            <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
+              <n-avatar
+                :size="36"
+                :src="contactUser.avatar || undefined"
+                class="flex-shrink-0"
+              >
+                <span v-if="!contactUser.avatar">
+                  {{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}
+                </span>
+                <template #fallback>
+                  <span class="flex h-full w-full items-center justify-center">
+                    {{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}
+                  </span>
+                </template>
+              </n-avatar>
+              <div class="flex-grow-1 w-auto overflow-hidden">
+                <div class="font-bold text-sm">
+                  {{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}
+                </div>
+                <div class="text-xs text-nowrap text-gray-500 truncate">
+                  {{ contactUser.bio || '人很懒，无简介~' }}
                 </div>
               </div>
-
-              <n-empty
-                v-else
-                description="暂无群组"
-                size="small"
-                class="py-8"
-              >
-                <template #extra>
-                  <n-button size="small" @click="goToGroups">
-                    创建群组
-                  </n-button>
-                </template>
-              </n-empty>
             </div>
+          </header>
+          <n-scrollbar
+            class="message-scrollbar grow"
+            ref="scrollbarRef"
+          >
+            <ul class="message-list space-y-4">
+              <li
+                class="message-item flex flex-col w-full relative"
+                :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'"
+                v-for="(msg, index) in currentMessageList"
+                :key="msg.id || msg.clientMessageId || index"
+              >
+                <n-avatar
+                  v-if="msg.fromUserId !== authUser?.id"
+                  class="incoming-avatar"
+                  :size="32"
+                  :src="contactUser.avatar || undefined"
+                >
+                  <span v-if="!contactUser.avatar">
+                    {{ (contactUser.nickname || contactUser.username).charAt(0) }}
+                  </span>
+                  <template #fallback>
+                    <span class="flex h-full w-full items-center justify-center">
+                      {{ (contactUser.nickname || contactUser.username).charAt(0) }}
+                    </span>
+                  </template>
+                </n-avatar>
+                <div
+                  class="message-entry"
+                  :title="msg.time"
+                  :class="[
+                    msg.fromUserId === authUser?.id
+                      ? 'message-entry--mine'
+                      : 'message-entry--theirs',
+                    { 'message-entry--call': msg.messageType === 'call' },
+                  ]"
+                >
+                  <ChatMessageContent
+                    :message="msg.message"
+                    :message-type="msg.messageType"
+                    :media="msg.media"
+                    :call="msg.call"
+                    :is-mine="msg.fromUserId === authUser?.id"
+                  />
+                </div>
+                <button
+                  v-if="msg.sendStatus && msg.sendStatus !== 'sent'"
+                  type="button"
+                  class="message-status text-xs mt-1"
+                  @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)"
+                >
+                  {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
+                </button>
+              </li>
+            </ul>
           </n-scrollbar>
-        </n-tab-pane>
-      </n-tabs>
-    </n-layout-sider>
 
-    <n-layout-content content-class="w-full flex flex-col">
-      <div v-if="contactUser" class="chat-panel h-full w-full flex flex-col">
-        <!-- 聊天头部 -->
-        <header class="chat-header min-h-16 flex items-center px-3 sm:px-6 py-2">
-          <n-button class="mobile-sidebar-toggle" secondary aria-label="打开联系人列表" @click="mobileSidebarOpen = true"><i class="iconfont icon-bars" aria-hidden="true"></i></n-button>
-          <div class="flex items-center gap-3 w-0 flex-grow overflow-hidden">
-            <n-avatar :size="36" :src="contactUser.avatar || undefined" class="flex-shrink-0">
-              <span v-if="!contactUser.avatar">{{ contactUser.nickname?.charAt(0) || contactUser.username?.charAt(0) || '?' }}</span>
-            </n-avatar>
-            <div class="flex-grow-1 w-auto overflow-hidden">
-              <div class="font-bold text-sm">{{ contactUser.nickname || contactUser.username || `用户-${contactUser.id}` }}</div>
-              <div class="text-xs text-nowrap text-gray-500 truncate">{{ contactUser.bio || '人很懒，无简介~' }}</div>
-            </div>
+          <div class="message-composer-shell">
+            <ToolBar
+              class="chat-toolbar"
+              :contact-user="contactUser"
+            />
+            <ChatMediaComposer
+              compact
+              class="message-editor"
+              @send="sendMedia"
+            >
+              <TextMsg
+                placeholder="请输入消息..."
+                @send="sendMsg"
+              />
+            </ChatMediaComposer>
           </div>
-
-        </header>
-        <n-scrollbar class="message-scrollbar grow" ref="scrollbarRef">
-          <ul class="message-list space-y-4">
-            <li class="message-item flex flex-col w-full relative" :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'" v-for="(msg, index) in currentMessageList" :key="msg.id || msg.clientMessageId || index">
-              <n-avatar v-if="msg.fromUserId !== authUser?.id" class="incoming-avatar" :size="32" :src="contactUser.avatar || undefined">{{ (contactUser.nickname || contactUser.username).charAt(0) }}</n-avatar>
-              <div
-                class="message-entry"
-                :title="msg.time"
-                :class="[
-                  msg.fromUserId === authUser?.id ? 'message-entry--mine' : 'message-entry--theirs',
-                  { 'message-entry--call': msg.messageType === 'call' },
-                ]"
-              >
-                <ChatMessageContent
-                  :message="msg.message"
-                  :message-type="msg.messageType"
-                  :media="msg.media"
-                  :call="msg.call"
-                  :is-mine="msg.fromUserId === authUser?.id"
-                />
-              </div>
-              <button v-if="msg.sendStatus && msg.sendStatus !== 'sent'" type="button" class="message-status text-xs mt-1" @click="msg.sendStatus === 'failed' && retryPrivateMessage(msg)">
-                {{ msg.sendStatus === 'pending' ? '发送中…' : '发送失败，点击重试' }}
-              </button>
-            </li>
-          </ul>
-        </n-scrollbar>
-
-        <div class="message-composer-shell">
-          <ToolBar class="chat-toolbar" :contact-user="contactUser" />
-          <ChatMediaComposer compact class="message-editor" @send="sendMedia">
-            <TextMsg placeholder="请输入消息..." @send="sendMsg" />
-          </ChatMediaComposer>
         </div>
-      </div>
-      <div class="chat-empty-state h-full w-full flex flex-col items-center justify-center" v-else>
-        <div class="empty-icon"><i class="iconfont regular icon-comments" aria-hidden="true"></i></div>
-        <h3>开启高效远程协作</h3>
-        <p>请从左侧列表选择一个联系人开始聊天。您可以发送文字、语音片段、图片，或者发起高清音视频通话与屏幕共享。</p>
-        <n-button type="primary" @click="activeTab = 'users'; mobileSidebarOpen = true"><template #icon><i class="iconfont icon-address-book" aria-hidden="true"></i></template>打开联系人列表</n-button>
-      </div>
-    </n-layout-content>
-    </n-layout></div>
+        <div
+          class="chat-empty-state h-full w-full flex flex-col items-center justify-center"
+          v-else
+        >
+          <div class="empty-icon">
+            <i
+              class="iconfont regular icon-comments"
+              aria-hidden="true"
+            ></i>
+          </div>
+          <h3>开启高效远程协作</h3>
+          <p>
+            请从左侧列表选择一个联系人开始聊天。您可以发送文字、语音片段、图片，或者发起高清音视频通话与屏幕共享。
+          </p>
+          <n-button
+            type="primary"
+            @click="
+              activeTab = 'users';
+              mobileSidebarOpen = true;
+            "
+          >
+            <template #icon>
+              <i
+                class="iconfont icon-address-book"
+                aria-hidden="true"
+              ></i>
+            </template>
+            打开联系人列表
+          </n-button>
+        </div>
+      </n-layout-content>
+    </n-layout>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -223,21 +440,28 @@ import { getUserList, type User as BasicUser } from '@/api/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { getMyGroups, type Group } from '@/api/group';
-import { getOfflineMessages, getPrivateMessages, markMessagesAsRead, type CallHistoryRecord, type ChatMediaPayload } from '@/api/message';
+import {
+  getOfflineMessages,
+  getPrivateMessages,
+  markMessagesAsRead,
+  type CallHistoryRecord,
+  type ChatMediaPayload,
+} from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
 import { applyMessageAck } from '@/services/messageDeliveryState';
-import { getPendingInvitations, acceptInvitation, rejectInvitation, type GroupInvitation } from '@/api/invitation';
+import {
+  getPendingInvitations,
+  acceptInvitation,
+  rejectInvitation,
+  type GroupInvitation,
+} from '@/api/invitation';
 import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import { mergeContactPresence } from '@/services/contactPresence';
-import {
-  getRemoteTabQuery,
-  parseRemoteTab,
-  type RemoteTab,
-} from '@/services/remoteTabState';
+import { getRemoteTabQuery, parseRemoteTab, type RemoteTab } from '@/services/remoteTabState';
 
 const router = useRouter();
 const route = useRoute();
@@ -263,7 +487,7 @@ type MessageInfo = {
   messageType?: 'text' | 'call' | 'image' | 'voice';
   call?: CallHistoryRecord;
   media?: ChatMediaPayload;
-}
+};
 
 const message = useMessage();
 const dialog = useDialog();
@@ -301,14 +525,16 @@ function getStatusText(status: string) {
 }
 
 // 私信本地存储
-const privateMessageMap = new Map<
-  User['id'],
-  MessageInfo[]
->();
+const privateMessageMap = new Map<User['id'], MessageInfo[]>();
 
 const unReadMessageCount = computed(() => unread.privateCounts);
 const displayUsers = computed<User[]>(() => {
-  return mergeContactPresence(knownContacts.value, Object.values(unread.privateContacts), userList.value, authUser.value?.id);
+  return mergeContactPresence(
+    knownContacts.value,
+    Object.values(unread.privateContacts),
+    userList.value,
+    authUser.value?.id,
+  );
 });
 
 async function loadContacts() {
@@ -347,23 +573,21 @@ function handlePrivateMessage(data: any) {
     message: data.message,
     messageType: data.messageType,
     media: data.media,
-    time: data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    time:
+      data.time ||
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   });
-
 
   if (senderId === contactUser.value?.id) {
     currentMessageList.value = privateMessageMap.get(senderId) || [];
     scrollToBottom();
   }
-
-
 }
 
 function handlePrivateCallHistory(data: any) {
   if (!authUser.value) return;
-  const contactId = data.fromUserId === authUser.value.id
-    ? Number(data.toUserId)
-    : Number(data.fromUserId);
+  const contactId =
+    data.fromUserId === authUser.value.id ? Number(data.toUserId) : Number(data.fromUserId);
   if (!contactId) return;
 
   setMessage(contactId, {
@@ -373,7 +597,13 @@ function handlePrivateCallHistory(data: any) {
     message: data.message,
     messageType: data.messageType,
     call: data.call,
-    time: data.time || new Date(data.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    time:
+      data.time ||
+      new Date(data.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
   });
 
   if (contactId === contactUser.value?.id) {
@@ -384,9 +614,9 @@ function handlePrivateCallHistory(data: any) {
 
 function setMessage(id: number, data: MessageInfo) {
   const list = privateMessageMap.get(id) || [];
-  if (data.id && list.some(message => message.id === data.id)) return;
+  if (data.id && list.some((message) => message.id === data.id)) return;
 
-  privateMessageMap.set(id, [...list, data])
+  privateMessageMap.set(id, [...list, data]);
 }
 
 function bindPageSocketEvents(target: Socket) {
@@ -398,7 +628,6 @@ function unbindPageSocketEvents(target: Socket | null | undefined) {
   target?.off('private_message', handlePrivateMessage);
   target?.off('private_call_history', handlePrivateCallHistory);
 }
-
 
 async function selectContact(user: User) {
   mobileSidebarOpen.value = false;
@@ -415,24 +644,30 @@ async function selectContact(user: User) {
       call: msg.call,
       media: msg.media,
       id: msg.id,
-      time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: new Date(msg.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
     }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
     scrollToBottom('auto');
     if (!isAppInBackground()) {
-      const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
+      const ids = res.messages
+        .filter((msg) => msg.fromUserId === user.id && !msg.isRead)
+        .map((msg) => msg.id);
       if (ids.length) await markMessagesAsRead(ids);
       unread.readPrivate(user.id);
     }
   } catch (error: any) {
     message.error('加载聊天记录失败: ' + error.message);
-    currentMessageList.value = privateMessageMap.get(user.id) || []
+    currentMessageList.value = privateMessageMap.get(user.id) || [];
     scrollToBottom('auto');
   }
 }
 function sendMsg(v: string) {
-  console.log(v)
+  console.log(v);
   if (!contactUser.value || !authUser.value) return;
 
   // 私信
@@ -443,12 +678,12 @@ function sendMsg(v: string) {
     fromUserId: authUser.value.id,
     toUserId: contactUser.value.id,
     message: v,
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   };
-  setMessage(contactUser.value.id, msg)
+  setMessage(contactUser.value.id, msg);
   void retryPrivateMessage(msg);
 
-  currentMessageList.value = privateMessageMap.get(contactUser.value.id) || []
+  currentMessageList.value = privateMessageMap.get(contactUser.value.id) || [];
   scrollToBottom();
 }
 
@@ -501,7 +736,7 @@ async function loadMyGroups() {
   try {
     const res = await getMyGroups();
     myGroups.value = res.groups || [];
-    socketStore.setSubscribedGroups(myGroups.value.map(group => group.id));
+    socketStore.setSubscribedGroups(myGroups.value.map((group) => group.id));
   } catch (error: any) {
     console.error('加载群组列表失败:', error);
   }
@@ -511,7 +746,7 @@ async function loadMyGroups() {
 async function loadOfflineMessages() {
   try {
     const res = await getOfflineMessages();
-    res.messages?.forEach(item => {
+    res.messages?.forEach((item) => {
       unread.rememberSender(item.sender);
       unread.receivePrivate(item.id, item.fromUserId, false);
     });
@@ -528,12 +763,15 @@ async function loadPendingInvitations() {
 
     if (pendingInvitations.value.length > 0) {
       if (isAppInBackground()) {
-        pendingInvitations.value.forEach(inv => {
+        pendingInvitations.value.forEach((inv) => {
           void notificationService.showInvitation(
             inv.group.name,
             inv.inviter.nickname || inv.inviter.username,
             inv.inviter.avatar,
-            () => { window.focus(); showInvitationsDialog(); },
+            () => {
+              window.focus();
+              showInvitationsDialog();
+            },
           );
         });
       } else {
@@ -565,7 +803,9 @@ function showInvitationsDialog() {
         if (!invitation?.id) return;
         await acceptInvitation(invitation.id);
         message.success('已加入群组');
-        pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
+        pendingInvitations.value = pendingInvitations.value.filter(
+          (inv) => inv.id !== invitation.id,
+        );
         loadMyGroups(); // 重新加载群组列表
 
         // 如果还有其他邀请，继续显示
@@ -581,7 +821,9 @@ function showInvitationsDialog() {
         if (!invitation?.id) return;
         await rejectInvitation(invitation.id);
         message.info('已拒绝邀请');
-        pendingInvitations.value = pendingInvitations.value.filter(inv => inv.id !== invitation.id);
+        pendingInvitations.value = pendingInvitations.value.filter(
+          (inv) => inv.id !== invitation.id,
+        );
 
         // 如果还有其他邀请，继续显示
         if (pendingInvitations.value.length > 0) {
@@ -590,7 +832,7 @@ function showInvitationsDialog() {
       } catch (error: any) {
         message.error('拒绝邀请失败: ' + error.message);
       }
-    }
+    },
   });
 }
 
@@ -610,9 +852,12 @@ const goToGroupChat = (groupId: number) => {
 };
 
 // 监听消息列表变化，自动滚动到底部
-watch(() => currentMessageList.value.length, () => {
-  scrollToBottom();
-});
+watch(
+  () => currentMessageList.value.length,
+  () => {
+    scrollToBottom();
+  },
+);
 
 watch(activeTab, (tab) => {
   if (route.query.tab === tab) return;
@@ -622,21 +867,32 @@ watch(activeTab, (tab) => {
   });
 });
 
-watch([displayUsers, () => route.query.contact], ([users, contact]) => {
-  const selected = users.find(item => item.id === contactUser.value?.id);
-  if (selected && contactUser.value !== selected) contactUser.value = selected;
-  const user = users.find(item => item.id === Number(contact));
-  if (user && contactUser.value?.id !== user.id) void selectContact(user);
-}, { immediate: true });
+watch(
+  [displayUsers, () => route.query.contact],
+  ([users, contact]) => {
+    const selected = users.find((item) => item.id === contactUser.value?.id);
+    if (selected && contactUser.value !== selected) contactUser.value = selected;
+    const user = users.find((item) => item.id === Number(contact));
+    if (user && contactUser.value?.id !== user.id) void selectContact(user);
+  },
+  { immediate: true },
+);
 
-watch(() => route.query.tab, (tab) => {
-  activeTab.value = parseRemoteTab(tab);
-});
+watch(
+  () => route.query.tab,
+  (tab) => {
+    activeTab.value = parseRemoteTab(tab);
+  },
+);
 
-watch(socket, (nextSocket, previousSocket) => {
-  unbindPageSocketEvents(previousSocket);
-  if (nextSocket) bindPageSocketEvents(nextSocket);
-}, { immediate: true });
+watch(
+  socket,
+  (nextSocket, previousSocket) => {
+    unbindPageSocketEvents(previousSocket);
+    if (nextSocket) bindPageSocketEvents(nextSocket);
+  },
+  { immediate: true },
+);
 
 const handleVisible = () => {
   if (!isAppInBackground()) {
@@ -644,7 +900,7 @@ const handleVisible = () => {
       void selectContact(contactUser.value);
     }
   }
-}
+};
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisible);
   window.addEventListener('focus', handleVisible);
@@ -668,12 +924,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.mobile-sidebar-toggle .iconfont { font-size: var(--icon-size-control); }
+.mobile-sidebar-toggle .iconfont {
+  font-size: var(--icon-size-control);
+}
 .remote-shell {
   position: relative;
   background: #f1f5f9;
   color: #1e293b;
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 :deep(.remote-sidebar) {
@@ -857,7 +1115,10 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.message-editor { padding: 20px 16px; border-top: 1px solid #e2e8f0; }
+.message-editor {
+  padding: 12px 16px;
+  border-top: 1px solid #e2e8f0;
+}
 
 .mobile-sidebar-toggle,
 .mobile-sidebar-close {
@@ -892,8 +1153,12 @@ onUnmounted(() => {
     border-radius: 0 18px 18px 0;
   }
 
-  .sidebar-profile { order: 1; }
-  .sidebar-tabs { order: 2; }
+  .sidebar-profile {
+    order: 1;
+  }
+  .sidebar-tabs {
+    order: 2;
+  }
 
   .mobile-sidebar-close {
     display: inline-flex;
@@ -933,12 +1198,13 @@ onUnmounted(() => {
     padding-inline: 10px;
   }
 
-  .message-editor { padding: 14px 10px; }
+  .message-editor {
+    padding: 14px 10px;
+  }
 
   .chat-empty-state {
     padding: 20px;
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -947,19 +1213,102 @@ onUnmounted(() => {
   }
 }
 
-.im-page { height: 100dvh; display:flex; align-items:center; justify-content:center; padding:16px; background:#f1f5f9; }
-.remote-shell { max-width:1152px; height:90dvh; border-radius:16px; box-shadow:0 25px 50px -12px #0004; }
-.sidebar-backdrop { position:absolute; inset:0; z-index:15; background:#0f172a80; backdrop-filter:blur(4px); display:none; }
-.sidebar-section-header { border:0; color:#94a3b8; }
-:deep(.sidebar-logout) { --n-color:transparent !important; --n-border:0 !important; }
-.message-item.items-start { padding-left:44px; }
-.incoming-avatar { position:absolute; left:0; top:0; }
-.sidebar-logout .iconfont { font-size: var(--icon-size-control); }
-.profile-button .iconfont { font-size: var(--icon-size-control); }
-.chat-empty-state { background:#fff; padding:32px; }
-.empty-icon { width:80px; height:80px; display:grid; place-items:center; color:#2563eb; background:#eff6ff; border-radius:24px; font-size:30px; margin-bottom:24px; box-shadow:inset 0 2px 4px #0000000d; }
-.chat-empty-state h3 { font-size:18px; font-weight:700; margin-bottom:8px; }
-.chat-empty-state p { max-width:384px; font-size:12px; color:#94a3b8; line-height:1.625; text-align:center; margin-bottom:24px; }
-.chat-empty-state .n-button { height:40px; padding:0 24px; font-size:12px; box-shadow:0 10px 15px -3px #3b82f633; }
-@media (max-width:767px) { .im-page { padding:0; } .remote-shell { height:100dvh; border-radius:0; } .sidebar-backdrop { display:block; } :deep(.remote-sidebar), :deep(.remote-sidebar-content) { border-radius:0; } }
+.im-page {
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #f1f5f9;
+}
+.remote-shell {
+  max-width: 1152px;
+  height: 90dvh;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px #0004;
+}
+.sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: #0f172a80;
+  backdrop-filter: blur(4px);
+  display: none;
+}
+.sidebar-section-header {
+  border: 0;
+  color: #94a3b8;
+}
+:deep(.sidebar-logout) {
+  --n-color: transparent !important;
+  --n-border: 0 !important;
+}
+.message-item.items-start {
+  padding-left: 44px;
+}
+.incoming-avatar {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.sidebar-logout .iconfont {
+  font-size: var(--icon-size-control);
+}
+.profile-button {
+  --icon-size-control: 16px;
+}
+.profile-button .iconfont {
+  font-size: var(--icon-size-control);
+}
+.chat-empty-state {
+  background: #fff;
+  padding: 32px;
+}
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 24px;
+  font-size: 30px;
+  margin-bottom: 24px;
+  box-shadow: inset 0 2px 4px #0000000d;
+}
+.chat-empty-state h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.chat-empty-state p {
+  max-width: 384px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.625;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.chat-empty-state .n-button {
+  height: 40px;
+  padding: 0 24px;
+  font-size: 12px;
+  box-shadow: 0 10px 15px -3px #3b82f633;
+}
+@media (max-width: 767px) {
+  .im-page {
+    padding: 0;
+  }
+  .remote-shell {
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .sidebar-backdrop {
+    display: block;
+  }
+  :deep(.remote-sidebar),
+  :deep(.remote-sidebar-content) {
+    border-radius: 0;
+  }
+}
 </style>

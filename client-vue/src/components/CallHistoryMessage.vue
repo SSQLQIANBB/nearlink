@@ -1,6 +1,19 @@
 <template>
-  <div class="call-history-message" :class="{ 'call-history-message--mine': isMine }">
-    <i class="iconfont text-blue-600" :class="record.type === 'screen' ? 'icon-desktop' : record.type === 'audio' ? 'icon-phone' : 'icon-video'" aria-hidden="true"></i>
+  <div
+    class="call-history-message"
+    :class="{ 'call-history-message--mine': isMine }"
+  >
+    <i
+      class="iconfont text-blue-600"
+      :class="
+        record.type === 'screen'
+          ? 'icon-gongxiangpingmu'
+          : record.type === 'audio'
+            ? 'icon-phone'
+            : 'icon-video'
+      "
+      aria-hidden="true"
+    ></i>
     <div class="call-history-message__content">
       <strong>{{ presentation.title }}</strong>
       <span>{{ presentation.detail }}</span>
@@ -48,7 +61,9 @@ const presentation = computed(() => getCallHistoryPresentation(props.record, pro
   min-width: 0;
 }
 
-.call-history-message > .iconfont { font-size: var(--icon-size-control); }
+.call-history-message > .iconfont {
+  font-size: var(--icon-size-control);
+}
 
 .call-history-message__content strong {
   font-size: 12px;

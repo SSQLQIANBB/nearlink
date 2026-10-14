@@ -1,20 +1,61 @@
 <template>
-  <div class="chat-media-composer" :class="{ compact }">
-    <input ref="imageInput" class="sr-only" type="file" accept="image/*" @change="handleImageSelected" />
-    <n-button aria-label="发送图片" title="发送图片" size="small" secondary :loading="uploadingType === 'image'" :disabled="disabled || uploading || recording" @click="imageInput?.click()">
-      <template #icon><i class="iconfont icon-image" aria-hidden="true"></i></template>
+  <div
+    class="chat-media-composer"
+    :class="{ compact }"
+  >
+    <input
+      ref="imageInput"
+      class="sr-only"
+      type="file"
+      accept="image/*"
+      @change="handleImageSelected"
+    />
+    <n-button
+      aria-label="发送图片"
+      title="发送图片"
+      size="small"
+      secondary
+      :loading="uploadingType === 'image'"
+      :disabled="disabled || uploading || recording"
+      @click="imageInput?.click()"
+    >
+      <template #icon>
+        <i
+          class="iconfont icon-image1"
+          aria-hidden="true"
+        ></i>
+      </template>
       <span v-if="!compact">发送图片</span>
     </n-button>
-    <button v-if="compact" type="button" class="voice-mode-toggle" :class="{ 'voice-mode-toggle--active': voiceMode }"
-      :aria-label="voiceMode ? '切换文字输入' : '切换语音输入'" :title="voiceMode ? '切换文字输入' : '切换语音输入'"
-      :disabled="disabled || uploading || recording" @click="toggleVoiceMode">
-      <i class="iconfont" :class="voiceMode ? 'icon-keyboard' : 'icon-microphone'" aria-hidden="true"></i>
+    <button
+      v-if="compact"
+      type="button"
+      class="voice-mode-toggle"
+      :class="{ 'voice-mode-toggle--active': voiceMode }"
+      :aria-label="voiceMode ? '切换文字输入' : '切换语音输入'"
+      :title="voiceMode ? '切换文字输入' : '切换语音输入'"
+      :disabled="disabled || uploading || recording"
+      @click="toggleVoiceMode"
+    >
+      <i
+        class="iconfont"
+        :class="voiceMode ? 'icon-keyboard' : 'icon-yuyin'"
+        aria-hidden="true"
+      ></i>
     </button>
-    <div v-if="compact" v-show="!voiceMode" class="text-mode"><slot /></div>
-    <button v-if="!compact || voiceMode"
+    <div
+      v-if="compact"
+      v-show="!voiceMode"
+      class="text-mode"
+    >
+      <slot />
+    </div>
+    <button
+      v-if="!compact || voiceMode"
       type="button"
       class="hold-to-talk"
-      aria-label="按住说话，松开发送" title="按住说话，松开发送"
+      aria-label="按住说话，松开发送"
+      title="按住说话，松开发送"
       :class="{ 'hold-to-talk--active': recording, 'hold-to-talk--cancel': cancelIntent }"
       :disabled="disabled || uploading"
       @pointerdown.prevent="startRecording"
@@ -28,8 +69,12 @@
       @keyup.space.prevent="finishRecording"
       @contextmenu.prevent
     >
-      <AudioWaveform v-if="recording && recordingStream" :stream="recordingStream">
-        <span>{{ cancelIntent ? '松开取消' : '松开 发送' }}</span><small>{{ elapsedSeconds || 1 }}s</small>
+      <AudioWaveform
+        v-if="recording && recordingStream"
+        :stream="recordingStream"
+      >
+        <span>{{ cancelIntent ? '松开取消' : '松开 发送' }}</span>
+        <small>{{ elapsedSeconds || 1 }}s</small>
       </AudioWaveform>
       <span v-else>{{ uploadingType === 'voice' ? '发送中…' : '按住 说话' }}</span>
     </button>
@@ -98,8 +143,14 @@ async function handleImageSelected(event: Event) {
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
-  if (!file.type.startsWith('image/')) { message.warning('请选择图片文件'); return; }
-  if (file.size > 10 * 1024 * 1024) { message.warning('图片不能超过 10MB'); return; }
+  if (!file.type.startsWith('image/')) {
+    message.warning('请选择图片文件');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    message.warning('图片不能超过 10MB');
+    return;
+  }
   await uploadMedia(file, 'image');
 }
 
@@ -124,24 +175,27 @@ async function startRecording(event?: PointerEvent | KeyboardEvent) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     if (!isPressing || attempt !== recordingAttempt) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
     recordingStream.value = stream;
     const mimeType = selectAudioMimeType();
-    recorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+    recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     chunks = [];
     discardRecording = false;
     recordingStartedAt = Date.now();
     elapsedSeconds.value = 0;
-    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+    recorder.ondataavailable = (event) => {
+      if (event.data.size) chunks.push(event.data);
+    };
     recorder.onstop = handleRecordingStopped;
     recorder.start();
     recording.value = true;
     recordingTimer = window.setInterval(() => {
-      elapsedSeconds.value = Math.min(60, Math.max(1, Math.floor((Date.now() - recordingStartedAt) / 1000)));
+      elapsedSeconds.value = Math.min(
+        60,
+        Math.max(1, Math.floor((Date.now() - recordingStartedAt) / 1000)),
+      );
       if (elapsedSeconds.value >= 60) finishRecording();
     }, 250);
   } catch (error: any) {
@@ -173,13 +227,18 @@ function cancelRecording() {
 }
 
 function handleRecordingStopped() {
-  const durationSeconds = Math.min(60, Math.max(1, Math.round((Date.now() - recordingStartedAt) / 1000)));
+  const durationSeconds = Math.min(
+    60,
+    Math.max(1, Math.round((Date.now() - recordingStartedAt) / 1000)),
+  );
   const mimeType = recorder?.mimeType || 'audio/webm';
   const audio = new Blob(chunks, { type: mimeType });
   const shouldUpload = !discardRecording && audio.size > 0;
   releaseRecordingResources();
   if (!shouldUpload) return;
-  const file = new File([audio], `voice-${Date.now()}.${getAudioFileExtension(mimeType)}`, { type: mimeType });
+  const file = new File([audio], `voice-${Date.now()}.${getAudioFileExtension(mimeType)}`, {
+    type: mimeType,
+  });
   void uploadMedia(file, 'voice', durationSeconds);
 }
 
@@ -188,7 +247,7 @@ function releaseRecordingResources() {
   isPressing = false;
   if (recordingTimer !== null) window.clearInterval(recordingTimer);
   recordingTimer = null;
-  recordingStream.value?.getTracks().forEach(track => track.stop());
+  recordingStream.value?.getTracks().forEach((track) => track.stop());
   recordingStream.value = null;
   recorder = null;
   chunks = [];
@@ -201,21 +260,122 @@ onBeforeUnmount(cancelRecording);
 </script>
 
 <style scoped>
-.chat-media-composer { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
-.hold-to-talk { flex: 1; min-width: 0; min-height: 48px; padding: 10px 16px; border: 1px solid #e2e8f0; border-radius: 24px; color: #334155; background: #f3f4f6; font-size: 16px; font-weight: 500; user-select: none; touch-action: none; cursor: pointer; transition: background .15s, border-color .15s; }
-.hold-to-talk--active { background: #dbeafe; border-color: #60a5fa; color: #2563eb; box-shadow: 0 2px 4px #2563eb12; }
-.hold-to-talk--cancel { background: #fee2e2; border-color: #f87171; color: #dc2626; }
-.hold-to-talk:disabled { color: #94a3b8; cursor: not-allowed; }
-.hold-to-talk small { font-size: 12px; font-variant-numeric: tabular-nums; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.compact { --icon-size-composer: 24px; flex-wrap: nowrap; gap: 8px; }
-.text-mode { flex: 1; min-width: 0; }
-.compact :deep(.n-button), .voice-mode-toggle { flex: none; width: 44px; min-width: 0; height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: #94a3b8; font-size: 24px; }
-.voice-mode-toggle--active { color: #2563eb; }
-.voice-mode-toggle:disabled { cursor: not-allowed; }
-.compact :deep(.n-button__icon) { margin: 0; width: var(--icon-size-composer); height: var(--icon-size-composer); font-size: var(--icon-size-composer); }
-.compact :deep(.iconfont), .voice-mode-toggle .iconfont { font-size: var(--icon-size-composer); }
-.voice-mode-toggle { display: inline-flex; align-items: center; justify-content: center; }
-.compact :deep(.n-button__border), .compact :deep(.n-button__state-border) { display: none; }
-@media (max-width: 767px) { .compact { gap: 4px; } }
+.chat-media-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.hold-to-talk {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  color: #334155;
+  background: #f3f4f6;
+  font-size: 16px;
+  font-weight: 500;
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.hold-to-talk--active {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #2563eb;
+  box-shadow: 0 2px 4px #2563eb12;
+}
+
+.hold-to-talk--cancel {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #dc2626;
+}
+
+.hold-to-talk:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.hold-to-talk small {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.compact {
+  --icon-size-composer: 24px;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.text-mode {
+  flex: 1;
+  min-width: 0;
+}
+
+.compact :deep(.n-button),
+.voice-mode-toggle {
+  flex: none;
+  width: 24px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 24px;
+}
+
+.voice-mode-toggle--active {
+  color: #2563eb;
+}
+
+.voice-mode-toggle:disabled {
+  cursor: not-allowed;
+}
+
+.compact :deep(.n-button__icon) {
+  margin: 0;
+}
+
+.compact :deep(.iconfont),
+.voice-mode-toggle .iconfont {
+  font-size: 22px;
+}
+
+.voice-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compact :deep(.n-button__border),
+.compact :deep(.n-button__state-border) {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .compact {
+    gap: 4px;
+  }
+}
 </style>
