@@ -63,6 +63,7 @@ function handleStarted(
   pending.set(
     key,
     dialog.info({
+      positiveButtonProps: { type: 'primary' },
       title: `群组${label}邀请`,
       content: `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
       positiveText: '接受邀请',
@@ -75,6 +76,7 @@ function handleStarted(
             })
             .catch((error) => {
               dialog.warning({
+                positiveButtonProps: { type: 'primary' },
                 title: '无法加入通话',
                 content: error.message,
                 positiveText: '知道了',
@@ -84,6 +86,7 @@ function handleStarted(
         }
         if (mediaOccupancy.current.value) {
           dialog.warning({
+            positiveButtonProps: { type: 'primary' },
             title: '当前媒体会话进行中',
             content: '请先结束当前通话或远程控制，再加入群组通话。',
             positiveText: '知道了',

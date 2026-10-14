@@ -23,14 +23,14 @@
       </n-button>
 
       <n-button
-        type="success"
+        type="primary"
         :disabled="!isSharing || isRecording"
         @click="startRecord"
       >
         开始录制
       </n-button>
       <n-button
-        type="warning"
+        type="primary"
         v-if="isRecording"
         @click="stopRecord"
       >
@@ -80,7 +80,7 @@
       />
       <div style="margin-top: 8px">
         <n-button
-          type="info"
+          type="primary"
           :loading="saving"
           @click="downloadRecord"
         >

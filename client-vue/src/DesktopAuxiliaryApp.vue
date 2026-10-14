@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider>
+  <n-config-provider :theme-overrides="appTheme">
     <n-message-provider>
       <n-notification-provider>
         <n-dialog-provider>
@@ -37,6 +37,7 @@
   </n-config-provider>
 </template>
 <script setup lang="ts">
+import { appTheme } from '@/theme';
 import { onBeforeUnmount, watch } from 'vue';
 import {
   NConfigProvider,

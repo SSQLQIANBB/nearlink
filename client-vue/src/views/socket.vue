@@ -17,19 +17,19 @@
           <n-button @click="disconnect">disconnect</n-button>
         </n-space>
         <n-button
-          type="info"
+          type="primary"
           @click="getMedia"
         >
           启用摄像头
         </n-button>
         <n-button
-          type="success"
+          type="primary"
           @click="getPicture"
         >
           拍照
         </n-button>
         <n-button
-          type="warning"
+          type="primary"
           @click="shareScreenMedia"
         >
           屏幕共享

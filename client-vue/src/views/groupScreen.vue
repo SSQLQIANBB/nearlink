@@ -126,7 +126,7 @@
         </n-button>
         <n-button
           v-if="isSharing"
-          type="warning"
+          type="primary"
           @click="stopScreenShare"
         >
           <template #icon>

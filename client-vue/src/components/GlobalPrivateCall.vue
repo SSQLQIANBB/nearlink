@@ -226,7 +226,7 @@
     <div class="text-center py-4">
       <n-icon
         size="60"
-        color="#18a058"
+        color="#2563eb"
         class="mb-4"
       >
         <i

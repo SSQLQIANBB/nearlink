@@ -1,6 +1,6 @@
 <template>
   <n-config-provider
-    :theme-overrides="designTheme"
+    :theme-overrides="appTheme"
     :style="{ height: '100%', overflow: showDesktopTitlebar ? 'hidden' : 'auto' }"
   >
     <n-message-provider>
@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue';
+import { onMounted, onUnmounted, watch } from 'vue';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
 import DesktopAuxiliaryHost from '@/components/DesktopAuxiliaryHost.vue';
 import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
@@ -38,26 +38,7 @@ import { useUnreadStore } from '@/stores/unread';
 import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useRemoteControlStore } from '@/stores/remoteControl';
 
-import { useRoute } from 'vue-router';
-import type { GlobalThemeOverrides } from 'naive-ui';
-const route = useRoute();
-const designTheme = computed<GlobalThemeOverrides>(() =>
-  ['/remote', '/remote-control', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/')
-    ? {
-        common: {
-          primaryColor: '#2563eb',
-          primaryColorHover: '#1d4ed8',
-          primaryColorPressed: '#1e40af',
-          errorColor: '#dc2626',
-          errorColorHover: '#b91c1c',
-          errorColorPressed: '#991b1b',
-          borderRadius: '12px',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        },
-        Avatar: { borderRadius: '50%' },
-      }
-    : {},
-);
+import { appTheme } from '@/theme';
 
 const authStore = useAuthStore();
 const { token, currentUser } = storeToRefs(authStore);

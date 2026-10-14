@@ -565,7 +565,8 @@ const scrollbarRef = ref();
 
 // 退出登录
 function handleLogout() {
-  dialog.warning({
+  dialog.info({
+    positiveButtonProps: { type: 'primary' },
     title: '退出登录？',
     content: '确认退出当前账号吗？',
     positiveText: '退出登录',
@@ -809,6 +810,7 @@ function showInvitationsDialog() {
   if (!invitation) return;
 
   dialog.warning({
+    positiveButtonProps: { type: 'primary' },
     title: '群组邀请',
     content: `${invitation.inviter?.nickname || invitation.inviter?.username || '某用户'} 邀请您加入群组 "${invitation.group?.name || '未知群组'}"`,
     positiveText: '接受',

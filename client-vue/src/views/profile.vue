@@ -408,7 +408,7 @@
                     <p class="text-sm text-blue-600 mt-1">发送一条测试通知，检查设置是否生效</p>
                   </div>
                   <n-button
-                    type="info"
+                    type="primary"
                     @click="sendTestNotification"
                     :disabled="!notificationEnabled || notificationPermission !== 'granted'"
                   >

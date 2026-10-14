@@ -296,11 +296,11 @@ defineExpose({
 }
 
 .background-option:hover {
-  border-color: #18a058;
+  border-color: #2563eb;
 }
 
 .background-option.selected {
-  border-color: #18a058;
+  border-color: #2563eb;
   background: rgba(24, 160, 88, 0.1);
 }
 

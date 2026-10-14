@@ -42,7 +42,7 @@
       <!-- 暂停/继续 -->
       <n-button
         @click="togglePause"
-        type="warning"
+        type="primary"
         circle
       >
         <template #icon>
