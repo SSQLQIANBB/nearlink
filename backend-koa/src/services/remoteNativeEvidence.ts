@@ -36,7 +36,7 @@ const presenceSchema = z
     ...base,
     purpose: z.literal('native-presence'),
     challenge: nonce,
-    platform: z.literal('macos'),
+    platform: z.enum(['macos', 'windows']),
     engineDigest: z.string().regex(/^[a-f0-9]{64}$/),
     canCapture: z.boolean(),
     canControl: z.boolean(),

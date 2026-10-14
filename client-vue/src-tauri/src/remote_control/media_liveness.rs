@@ -117,7 +117,21 @@ pub(super) fn clock_sample() -> ProgressResult<(u64, Instant)> {
         .ok_or("REMOTE_MEDIA_CLOCK_UNAVAILABLE")?;
     Ok((ns, at))
 }
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
+pub(super) fn clock_sample() -> ProgressResult<(u64, Instant)> {
+    use windows_sys::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+    let at = Instant::now();
+    let (mut counter, mut frequency) = (0, 0);
+    if unsafe { QueryPerformanceCounter(&mut counter) } == 0
+        || unsafe { QueryPerformanceFrequency(&mut frequency) } == 0
+        || counter < 0 || frequency <= 0 {
+        return Err("REMOTE_MEDIA_CLOCK_UNAVAILABLE");
+    }
+    let ns = (counter as u128 * 1_000_000_000 / frequency as u128)
+        .try_into().map_err(|_| "REMOTE_MEDIA_CLOCK_UNAVAILABLE")?;
+    Ok((ns, at))
+}
+#[cfg(not(any(unix, target_os = "windows")))]
 pub(super) fn clock_sample() -> ProgressResult<(u64, Instant)> {
     Err("REMOTE_MEDIA_CLOCK_UNAVAILABLE")
 }

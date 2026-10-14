@@ -108,3 +108,12 @@ html.desktop-fullscreen .desktop-window-controls,
 html.desktop-fullscreen .desktop-windows-drag-region {
   display: none;
 }
+
+/* 通话独立窗口从加载阶段开始使用通话页底色，避免空白区域露白。 */
+html.desktop-media-window,
+html.desktop-media-window body,
+html.desktop-media-window #app {
+  background: #0b1220;
+  color: #f8fafc;
+  color-scheme: dark;
+}

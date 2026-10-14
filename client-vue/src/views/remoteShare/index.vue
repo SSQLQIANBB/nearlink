@@ -75,12 +75,11 @@
             </n-button>
           </div>
           <!-- 快捷操作 -->
-          <div class="flex gap-2">
+          <div class="sidebar-profile-actions">
             <n-button
               class="profile-button"
               size="small"
               secondary
-              block
               @click="goToProfile"
             >
               <template #icon>
@@ -90,6 +89,16 @@
                 ></i>
               </template>
               个人中心
+            </n-button>
+            <n-button
+              v-if="desktop"
+              class="profile-button"
+              size="small"
+              secondary
+              :aria-pressed="showRemoteControl"
+              @click="showRemoteControl = !showRemoteControl"
+            >
+              远程控制
             </n-button>
           </div>
         </div>
@@ -278,8 +287,9 @@
       </n-layout-sider>
 
       <n-layout-content content-class="w-full flex flex-col">
+        <RemoteControlWorkbench v-if="showRemoteControl" />
         <div
-          v-if="contactUser"
+          v-else-if="contactUser"
           class="chat-panel h-full w-full flex flex-col"
         >
           <!-- 聊天头部 -->
@@ -429,6 +439,8 @@
 </template>
 
 <script lang="ts" setup>
+import { isTauri } from '@tauri-apps/api/core';
+import RemoteControlWorkbench from '@/components/RemoteControlWorkbench.vue';
 import { isAppInBackground } from '@/services/appVisibility';
 import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -464,6 +476,8 @@ import { mergeContactPresence } from '@/services/contactPresence';
 import { getRemoteTabQuery, parseRemoteTab, type RemoteTab } from '@/services/remoteTabState';
 
 const router = useRouter();
+const desktop = isTauri();
+const showRemoteControl = ref(false);
 const route = useRoute();
 const authStore = useAuthStore();
 const { currentUser: authUser, token } = storeToRefs(authStore);
@@ -630,6 +644,7 @@ function unbindPageSocketEvents(target: Socket | null | undefined) {
 }
 
 async function selectContact(user: User) {
+  showRemoteControl.value = false;
   mobileSidebarOpen.value = false;
   contactUser.value = user;
   unread.activePrivateUserId = user.id;
@@ -951,6 +966,18 @@ onUnmounted(() => {
 
 .sidebar-profile-main {
   min-height: 48px;
+}
+
+.sidebar-profile-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.sidebar-profile-actions .profile-button {
+  width: 100%;
+  min-width: 0;
 }
 
 .profile-avatar {

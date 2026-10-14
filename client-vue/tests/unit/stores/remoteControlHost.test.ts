@@ -28,7 +28,7 @@ vi.mock('@/api/remoteControl', () => ({
   getRemoteSessionIce: mock.ice,
 }));
 vi.mock('@/services/remoteControlIce', () => ({ validateRemoteIceConfiguration: vi.fn() }));
-vi.mock('@/services/remoteDeviceNative', () => ({ confirmRemoteNativeRequest: mock.consent }));
+vi.mock('@/services/remoteDeviceNative', () => ({ confirmRemoteNativeRequest: mock.consent, probeRemoteDeviceSupport: async () => ({ platform: 'macos' }) }));
 vi.mock('@/services/remoteControlSafety', () => ({
   registerRemoteControlCleanup: (fn: () => void) => mock.cleanups.push(fn),
 }));
@@ -66,7 +66,7 @@ class FakeSocket {
     return this;
   }
   emitWithAck = vi.fn(async (event: string) =>
-    event === 'remote:presence' ? { ok: true } : { ok: true, sessionId: id, revision: 1 },
+    event === 'remote:credentials' ? { ok: true, credentials: { deviceCode: '123456789', temporaryPassword: 'abcdefgh23', expiresAt: Date.now() + 900000 } } : event === 'remote:presence' ? { ok: true } : { ok: true, sessionId: id, revision: 1 },
   );
   receive(event: string, value: unknown) {
     this.handlers.get(event)?.(value);

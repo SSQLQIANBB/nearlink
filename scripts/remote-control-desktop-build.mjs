@@ -11,6 +11,7 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 export function options(argv) {
   let bundle = null;
   let plan = false;
+  let dev = false;
   const tauri = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--bundle') {
@@ -18,6 +19,7 @@ export function options(argv) {
         throw new Error('--bundle requires exactly one path');
       bundle = path.resolve(argv[++i]);
     } else if (argv[i] === '--plan') plan = true;
+    else if (argv[i] === '--dev') dev = true;
     else if (argv[i] === '--') {
       tauri.push(...argv.slice(i + 1));
       break;
@@ -37,7 +39,8 @@ export function options(argv) {
       'The wrapper owns the resource config and cannot build the development harness',
     );
   }
-  return { bundle, plan, tauri };
+  if (dev && !bundle) throw new Error('--dev requires --bundle with a platform engine bundle');
+  return { bundle, plan, dev, tauri };
 }
 function run(command, args, env) {
   return new Promise((resolve, reject) => {
@@ -46,14 +49,13 @@ function run(command, args, env) {
       env,
       stdio: 'inherit',
     });
-    const onSignal = (signal) => {
-      child.kill(signal);
-    };
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
+    const onInterrupt = () => child.kill('SIGINT');
+    const onTerminate = () => child.kill('SIGTERM');
+    process.on('SIGINT', onInterrupt);
+    process.on('SIGTERM', onTerminate);
     const finish = () => {
-      process.off('SIGINT', onSignal);
-      process.off('SIGTERM', onSignal);
+      process.off('SIGINT', onInterrupt);
+      process.off('SIGTERM', onTerminate);
     };
     child.once('error', (error) => {
       finish();
@@ -79,8 +81,9 @@ async function main() {
     const manifest = JSON.parse(bytes);
     if (
       manifest.format !== 'todesk-engine-bundle-v1' ||
-      manifest.target !== 'aarch64-apple-darwin' ||
-      manifest.entrypoint !== 'bin/remote-control-engine'
+      !['aarch64-apple-darwin', 'x86_64-pc-windows-msvc'].includes(manifest.target) ||
+      manifest.entrypoint !== (manifest.target === 'x86_64-pc-windows-msvc'
+        ? 'bin/remote-control-engine.exe' : 'bin/remote-control-engine')
     )
       throw new Error('Unsupported engine manifest');
     digest = createHash('sha256').update(bytes).digest('hex');
@@ -97,6 +100,7 @@ async function main() {
           manifestSha256: digest,
           config,
           tauriArgs: selected.tauri,
+          command: selected.dev ? 'dev' : 'build',
           capabilitiesEnabled: false,
         },
         null,
@@ -112,14 +116,14 @@ async function main() {
       [path.join(repository, 'scripts/product-version.mjs'), 'check'],
       env,
     );
-    const args = ['exec', 'tauri', 'build'];
+    const args = [path.join(repository, 'client-vue/node_modules/@tauri-apps/cli/tauri.js'), selected.dev ? 'dev' : 'build'];
     if (config) {
       const configPath = path.join(temporary, 'engine-resources.json');
       await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
       args.push('--config', configPath);
     }
     args.push(...selected.tauri);
-    await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, env);
+    await run(process.execPath, args, env);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

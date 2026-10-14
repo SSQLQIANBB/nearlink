@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 const require = createRequire(new URL('../client-vue/package.json', import.meta.url));
 const { chromium } = require('@playwright/test');
 const python = process.env.REMOTE_CONTROL_PROBE_PYTHON;
+const bundleEngine = process.env.REMOTE_CONTROL_PROBE_ENGINE;
 if (!python) throw new Error('Set REMOTE_CONTROL_PROBE_PYTHON to the temporary 1.28.7 SDK');
 const stopMode =
   process.argv.find((value) => value.startsWith('--stop-mode='))?.split('=')[1] || 'lease';
@@ -34,9 +35,12 @@ let tx = 0,
   dtls,
   stopped,
   mediaStarted,
+  mediaLayout,
+  mediaProgress,
   page,
   browser,
-  timer;
+  timer,
+  leaseTimer;
 const events = [],
   channelMessages = [],
   channels = new Set();
@@ -68,6 +72,17 @@ const send = (kind, payload = {}) => {
   if (!exited && !native.stdin.destroyed) native.stdin.write(encode(kind, payload));
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function bounded(promise, timeout, message) {
+  let deadline;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error(message)), timeout); }),
+    ]);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
 let exit;
 async function pump() {
   if (processError) throw processError;
@@ -88,27 +103,44 @@ async function pump() {
 async function waitFor(check, timeout = 15000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    await pump();
-    if (await check()) return;
+    const matched = await bounded((async () => {
+      await pump();
+      return check();
+    })(), Math.max(1, deadline - Date.now()), 'Browser/signaling operation exceeded probe deadline');
+    if (matched) return;
     if (exited)
       throw new Error(
-        `Engine stopped before expected condition: ${JSON.stringify({ stopped, exitCode, exitSignal })} ${errors}`,
+        `Engine stopped before expected condition: ${JSON.stringify({ stopped, exitCode, exitSignal, mediaLayout, mediaProgress })} ${errors}`,
       );
     await sleep(25);
   }
+  const mediaStats = page ? await bounded(page.evaluate(async () => {
+    if (!window.probe) return [];
+    const stats = await window.probe.pc.getStats();
+    return [...stats.values()].filter((item) => ['inbound-rtp', 'codec'].includes(item.type)).map((item) => ({
+      type: item.type, mimeType: item.mimeType, sdpFmtpLine: item.sdpFmtpLine,
+      packetsReceived: item.packetsReceived, bytesReceived: item.bytesReceived,
+      framesReceived: item.framesReceived, framesDecoded: item.framesDecoded,
+      keyFramesDecoded: item.keyFramesDecoded, decoderImplementation: item.decoderImplementation,
+    }));
+  }), 3000, 'Browser media statistics unavailable').catch((error) => [{ error: error.message }]) : [];
   throw new Error(
-    `Engine probe timed out: ${JSON.stringify({ ready, dtls, channels: [...channels], stopped, mediaStarted })} ${errors}`,
+    `Engine probe timed out: ${JSON.stringify({ ready, dtls, channels: [...channels], stopped, mediaStarted, mediaLayout, mediaProgress, mediaStats })} ${errors}`,
   );
 }
 try {
   const source = join(directory, 'screen-source');
-  await execute(
+  if (!bundleEngine && process.platform !== 'win32') await execute(
     'xcrun',
     ['swiftc', '-parse-as-library', path('./remote-control-screen-source.swift'), '-o', source],
     { timeout: 60000 },
   );
-  native = spawn(python, [path('./remote-control-host-engine.py'), '--screen-source', source], {
+  const sourceArgs = process.platform === 'win32'
+    ? ['--screen-source', python, '--test-source-faults', '--source-arg', path('./remote-control-windows-screen-source.py')]
+    : ['--screen-source', source];
+  native = spawn(bundleEngine || python, bundleEngine ? [] : [path('./remote-control-host-engine.py'), ...sourceArgs], {
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
   });
   exit = new Promise((resolve) =>
     native.once('close', (code, signal) => {
@@ -137,6 +169,8 @@ try {
       else if (kind === 'channel-open') channels.add(payload.label);
       else if (kind === 'channel-data') channelMessages.push(payload);
       else if (kind === 'media-started') mediaStarted = payload;
+      else if (kind === 'media-layout') mediaLayout = payload;
+      else if (kind === 'media-progress') mediaProgress = payload;
       else if (kind === 'stopped') stopped = payload;
       else events.push(message);
     } catch (error) {
@@ -147,9 +181,11 @@ try {
     `${JSON.stringify({ protocolVersion: 1, sessionId, launchId, key: key.toString('base64url') })}\n`,
   );
   timer = setInterval(() => send('heartbeat'), 400);
-  await waitFor(() => !!ready);
+  await waitFor(() => !!ready, process.platform === 'win32' ? 30000 : 15000);
+  if (bundleEngine && ready.pid !== native.pid) throw new Error('Fixed bundle PID mismatch');
   browser = await chromium.launch({
     headless: true,
+    channel: process.env.REMOTE_CONTROL_PROBE_BROWSER_CHANNEL,
     args: ['--allow-loopback-in-peer-connection', '--disable-features=WebRtcHideLocalIpsWithMdns'],
   });
   page = await browser.newPage();
@@ -208,6 +244,12 @@ try {
   );
   const actual = await page.evaluate(async () => {
     const pc = window.probe.pc;
+    const video = pc.getTransceivers().find((item) => item.receiver.track.kind === 'video');
+    if (!video || !['recvonly', 'sendrecv'].includes(video.currentDirection)) {
+      const media = pc.remoteDescription.sdp.split('\r\n').filter((line) =>
+        /^(m=|a=(?:sendonly|recvonly|sendrecv|inactive|rtpmap:|fmtp:))/.test(line));
+      throw new Error(`Video receiving direction was not negotiated: ${JSON.stringify(media)}`);
+    }
     const certificate = pc.sctp.transport.getRemoteCertificates()[0];
     return {
       hostCertificate: [...new Uint8Array(certificate)],
@@ -245,19 +287,34 @@ try {
     (
       await execute(python, [
         '-c',
-        'import time; print(time.clock_gettime_ns(time.CLOCK_MONOTONIC))',
+        'import os,time; print(time.perf_counter_ns() if os.name == "nt" else time.clock_gettime_ns(time.CLOCK_MONOTONIC))',
       ])
     ).stdout.trim(),
   );
   const startedAt = Date.now(),
-    ttlMs = 6000;
+    ttlMs = process.platform === 'win32' ? 15000 : 6000;
   send('start-media', {
     mediaLeaseSeq: 1,
     ttlMs,
     monotonicDeadlineNs: String(clock + BigInt(ttlMs) * 1000000n),
   });
-  await waitFor(() => page.evaluate(() => window.probe.frames >= 10), 7000);
+  if (process.platform === 'win32') {
+    // Exercise bounded lease renewal while the development Python SDK cold-starts.
+    const monotonicStarted = process.hrtime.bigint();
+    let leaseSeq = 1;
+    leaseTimer = setInterval(() => send('renew-media', {
+      mediaLeaseSeq: ++leaseSeq,
+      ttlMs,
+      monotonicDeadlineNs: String(clock + process.hrtime.bigint() - monotonicStarted + BigInt(ttlMs) * 1000000n),
+    }), 4000);
+  }
+  await waitFor(() => page.evaluate(() => window.probe.frames >= 10), process.platform === 'win32' ? 30000 : ttlMs + 1000);
+  clearInterval(leaseTimer);
   const frames = await page.evaluate(() => window.probe.frames);
+  await waitFor(() => mediaLayout && mediaProgress?.forwardedSeq > 0);
+  const expectedSpace = process.platform === 'win32' ? 'windows-desktop-physical' : 'quartz-global-logical';
+  if (mediaLayout.geometry.coordinateSpace !== expectedSpace)
+    throw new Error('Platform coordinate space changed');
   if (stopMode === 'eof') {
     clearInterval(timer);
     native.stdin.end();
@@ -266,7 +323,7 @@ try {
   if (stopMode === 'stop') send('stop');
   await Promise.race([
     exit,
-    sleep(10000).then(() => {
+    sleep(Math.max(10000, ttlMs + 1000)).then(() => {
       throw new Error('Engine did not stop');
     }),
   ]);
@@ -301,6 +358,7 @@ try {
     preleaseFrames,
     framesAfterAuthorization: frames,
     rawInputForwarded: true,
+    coordinateSpace: mediaLayout.geometry.coordinateSpace,
     screenStored: false,
     elapsedMs: Date.now() - startedAt,
     shutdown: stopped,
@@ -309,13 +367,14 @@ try {
   };
 } finally {
   clearInterval(timer);
+  clearInterval(leaseTimer);
   if (native && !exited) {
     native.kill('SIGTERM');
     const force = setTimeout(() => native.kill('SIGKILL'), 3000);
     await exit;
     clearTimeout(force);
   }
-  if (page) await page.evaluate(() => window.probe?.pc.close()).catch(() => {});
+  if (page) await bounded(page.evaluate(() => window.probe?.pc.close()), 2000, 'Browser peer shutdown timed out').catch(() => {});
   if (browser) await browser.close();
   lines?.close();
   key.fill(0);

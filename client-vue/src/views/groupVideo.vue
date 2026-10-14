@@ -288,6 +288,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { isAuxiliaryWindow, closeAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 import { createRequestId } from '@/utils/requestId';
 const mediaOwner = `group-call:${createRequestId()}`;
@@ -382,7 +383,8 @@ async function loadGroupDetail() {
     members.value = detail.members;
   } catch (error: any) {
     message.error('加载群组详情失败: ' + error.message);
-    router.back();
+    if (isAuxiliaryWindow) closeAuxiliaryWindow();
+    else router.back();
   }
 }
 
@@ -735,7 +737,8 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
 // 挂断
 function handleHangup() {
   cleanupCall(true);
-  router.back();
+  if (isAuxiliaryWindow) closeAuxiliaryWindow();
+  else router.back();
 }
 
 function cleanupCall(endOwnedSession: boolean) {

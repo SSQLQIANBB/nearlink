@@ -37,7 +37,7 @@ vi.mock('@/api/remoteControl', () => ({
 }));
 vi.mock('@/services/remoteControlAdapter', () => ({
   SocketRemoteControllerAdapter: class {
-    request = vi.fn().mockResolvedValue('session');
+    request = vi.fn(async () => { this.event({ type: 'target-resolved', deviceId: 'device', canHostControl: true }); return 'session'; });
     signal = vi.fn().mockResolvedValue(undefined);
     ready = vi.fn().mockResolvedValue(undefined);
     end = vi.fn().mockResolvedValue(undefined);
@@ -107,7 +107,7 @@ beforeEach(() => {
 });
 async function connected() {
   const store = useRemoteControlSessionStore();
-  await store.start(mocks.capabilities.targets[0]!, 'control');
+  await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
   mocks.adapters[0].event({ type: 'connecting', value: bootstrap });
   await flushPromises();
   return store;
@@ -120,11 +120,11 @@ describe('远控主控会话接线', () => {
       native: { platform: 'macos', controllerDeviceBindingReady: false },
     };
     const store = useRemoteControlSessionStore();
-    await expect(store.start(mocks.capabilities.targets[0]!, 'view')).rejects.toThrow('升级');
+    await expect(store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view')).rejects.toThrow('升级');
     expect(mocks.adapters).toHaveLength(0);
     expect(mediaOccupancy.current.value).toBeNull();
     mocks.capabilities.capabilities.native.controllerDeviceBindingReady = true;
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     expect(mocks.adapters[0].binding.deviceId).toBe(mocks.localDeviceId);
     mocks.adapters[0].event({ type: 'device-verified', deviceId: mocks.localDeviceId });
     await flushPromises();
@@ -148,14 +148,14 @@ describe('远控主控会话接线', () => {
   it('连接失败保留错误代码并释放资源，不展示任意异常正文', async () => {
     const store = useRemoteControlSessionStore();
     mocks.ice.mockRejectedValueOnce(new Error('REMOTE_ICE_CONFIGURATION'));
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     mocks.adapters[0].event({ type: 'connecting', value: bootstrap });
     await flushPromises();
     expect(store.phase).toBe('ended');
     expect(store.failureCode).toBe('REMOTE_ICE_CONFIGURATION');
     expect(mediaOccupancy.current.value).toBeNull();
     mocks.ice.mockRejectedValueOnce(new Error('credential=private-value'));
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     expect(store.failureCode).toBe('');
     mocks.adapters[1].event({ type: 'connecting', value: bootstrap });
     await flushPromises();
@@ -171,13 +171,13 @@ describe('远控主控会话接线', () => {
   it('未发布不创建socket；已有群组媒体时拒绝远控且不抢占', async () => {
     const store = useRemoteControlSessionStore();
     mocks.capabilities.canControl = false;
-    await expect(store.start(mocks.capabilities.targets[0]!, 'control')).rejects.toThrow();
+    await expect(store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control')).rejects.toThrow();
     expect(mocks.adapters).toHaveLength(0);
     mocks.localDeviceId = null;
     mocks.capabilities.capabilities = { runtime: 'web' };
     mocks.capabilities.canControl = true;
     const group = mediaOccupancy.acquire('group-call', 'group')!;
-    await expect(store.start(mocks.capabilities.targets[0]!, 'control')).rejects.toThrow(
+    await expect(store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control')).rejects.toThrow(
       '请先结束',
     );
     expect(group.isCurrent()).toBe(true);
@@ -213,7 +213,7 @@ describe('远控主控会话接线', () => {
         }),
     );
     const store = useRemoteControlSessionStore();
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     mocks.adapters[0].event({ type: 'connecting', value: bootstrap });
     await flushPromises();
     store.end('LOGOUT');
@@ -260,12 +260,12 @@ describe('远控主控会话接线', () => {
         controlEpoch: 1,
       },
     };
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     mocks.adapters[0].event({ type: 'connecting', value: bootstrap });
     await flushPromises();
     for (let index = 0; index < 100; index++) mocks.adapters[0].event(state);
     store.end();
-    await store.start(mocks.capabilities.targets[0]!, 'view');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     mocks.adapters[1].event({ type: 'connecting', value: bootstrap });
     await flushPromises();
     const ice = {

@@ -71,7 +71,6 @@ TCP 客户端连接 TURN 并不意味着 relay 端口也只放 TCP；典型 WebR
 | `/opt/shared-services/.env.infrastructure` | MYSQL_ROOT_PASSWORD、INITIAL_DB_NAME/USER/PASSWORD、REDIS_PASSWORD | MySQL root 只管理基础设施；应用使用独立用户；先创建网络再部署应用 |
 | `/opt/todesk/.env.production` | NODE_ENV、PORT、DB_*、REDIS_*、JWT_SECRET、REFRESH_TOKEN_SECRET | 生产关闭 DB_AUTO_CREATE/DB_SYNC_ALTER；JWT 与 refresh 秘钥不同；DB/Redis 地址对应私网别名 |
 | 同上 | DOMAIN、FILES_DOMAIN、PRIVATE_FILES_DOMAIN、QINIU_*、ALIYUN_*、SMTP_* | 公共头像与私有文件分开；证书同步和 SMTP 连通性独立验收 |
-| 同上 | REMOTE_CONTROL_PREVIEW_USER_IDS | 当前最多 20 个逗号分隔用户 ID；空值关闭入口；无空格，不误填用户名 |
 | 同上 | REMOTE_TURN_AUTH_MODE、REMOTE_TURN_SHARED_SECRET、REMOTE_TURN_URLS、REMOTE_STUN_URL、REMOTE_ICE_TRANSPORT_POLICY | 默认 rest；relay 只用于强制中继验收/明确组织策略，通常恢复 all |
 | 同上 | REMOTE_TURN_USERNAME/PASSWORD | 仅 static 兼容路径；不自动从 rest 回落；长期固定密码需退出计划 |
 | 同上 | REMOTE_CONTROL_SIGNING_KEY_ID/PRIVATE_KEY/NOT_BEFORE/NOT_AFTER | Ed25519、毫秒时间窗口；私钥只留服务端；公钥进入客户端可信清单 |
@@ -81,13 +80,11 @@ TCP 客户端连接 TURN 并不意味着 relay 端口也只放 TCP；典型 WebR
 当前可用远控配置示例（非完整生产文件；密钥由服务器受限配置流程填写）：
 
 ```dotenv
-REMOTE_CONTROL_PREVIEW_USER_IDS=
 REMOTE_TURN_AUTH_MODE=rest
 REMOTE_TURN_URLS=turn:turn-rc.example.com:3480?transport=udp,turn:turn-rc.example.com:3480?transport=tcp
 REMOTE_STUN_URL=stun:turn-rc.example.com:3480
 REMOTE_ICE_TRANSPORT_POLICY=all
 # REMOTE_TURN_SHARED_SECRET 和 REMOTE_CONTROL_SIGNING_KEY_* 在服务器注入
-# 留空预览账号，完成平台验收后再加入获准内测账号
 ```
 
 远控配置有独立解析服务 `remoteIce.ts` / `remoteCredentials.ts`；不要因为基础 `env:check` 通过就认定 TURN/签名配置可用。需同时核对后端 capability、签名窗口及真实会话 ICE 接口。
@@ -148,7 +145,7 @@ user-quota=12
 total-quota=128
 ```
 
-quota 数字沿用脚本示例，不是容量保证；S0 初始限流应按少量预览账号控制，压测后按端口、带宽和内存调整。确认 IPv6 启用情况并补齐对应 peer 地址限制，防止 IPv4 限制之外的管理网访问。[coturn 官方配置参考](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf)
+quota 数字沿用脚本示例，不是容量保证；容量参数应在压测后按端口、带宽和内存调整。确认 IPv6 启用情况并补齐对应 peer 地址限制，防止 IPv4 限制之外的管理网访问。[coturn 官方配置参考](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf)
 
 TLS 后续模板差异：移除 `no-tls`，增加 `tls-listening-port=5349`、`cert=/受限路径/fullchain.pem`、`pkey=/受限路径/privkey.pem`，后端添加 `turns:turn-rc.example.com:5349?transport=tcp`。如只支持 TLS-over-TCP，可保留 `no-dtls`。证书域名必须匹配、服务账户能读、续期后重新加载，并用实际客户端验证；3480 明文 TURN 控制连接与加密 WebRTC 媒体是不同层，不混淆两者。
 

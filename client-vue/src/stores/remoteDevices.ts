@@ -260,7 +260,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
             phase.value === 'submitting'
               ? '未能确认登记结果，请先刷新设备列表，再决定是否重试。'
               : phase.value === 'challenge'
-                ? '未能取得登记凭据，请稍后重试。'
+                ? '本机初始化失败，无法取得服务端凭据，请确认后端与 Redis 正常运行。'
                 : '设备登记未完成。请确认系统凭据访问权限后重试。';
       }
       return false;
@@ -270,6 +270,16 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
         actionAbort = null;
       }
     }
+  }
+  async function ensureLocalDevice() {
+    if (localDeviceId.value) return localDeviceId.value;
+    const current = generation;
+    const value = await probeRemoteDeviceSupport();
+    if (generation !== current) return null;
+    support.value = value;
+    // Registration is idempotent by native key fingerprint, including first use.
+    if (!(await register(value.platform === 'macos' ? 'Mac' : 'Windows 电脑'))) return null;
+    return localDeviceId.value;
   }
   async function revoke(deviceId: string) {
     if (busy.value) return false;
@@ -367,6 +377,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
   }
   return {
     devices,
+    ensureLocalDevice,
     localDeviceId,
     identify,
     support,

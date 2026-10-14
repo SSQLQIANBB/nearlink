@@ -420,6 +420,8 @@ import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
 import { sendReliableMessage } from '@/services/reliableMessage';
 import { applyMessageAck } from '@/services/messageDeliveryState';
@@ -610,6 +612,12 @@ function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
 
 // 发起视频通话
 function handleVideoCall() {
+  if (isDesktopWindow) {
+    void openDesktopGroupWindow(`/group-video/${groupId.value}`).catch((error) =>
+      message.warning(error.message),
+    );
+    return;
+  }
   if (mediaOccupancy.current.value) {
     message.warning('请先结束当前通话或远程控制');
     return;
@@ -618,6 +626,12 @@ function handleVideoCall() {
 }
 
 function handleAudioCall() {
+  if (isDesktopWindow) {
+    void openDesktopGroupWindow(`/group-audio/${groupId.value}`).catch((error) =>
+      message.warning(error.message),
+    );
+    return;
+  }
   if (mediaOccupancy.current.value) {
     message.warning('请先结束当前通话或远程控制');
     return;
@@ -627,6 +641,14 @@ function handleAudioCall() {
 
 // 发起屏幕共享
 async function handleScreenShare() {
+  if (isDesktopWindow) {
+    try {
+      await openDesktopGroupWindow(`/group-screen/${groupId.value}`);
+    } catch (error: any) {
+      message.warning(error.message);
+    }
+    return;
+  }
   if (mediaOccupancy.current.value) {
     message.warning('请先结束当前通话或远程控制');
     return;

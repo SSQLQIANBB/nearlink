@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-share-preview"
+description = "Enables the screen_share_preview command without any pre-configured scope."
+commands.allow = ["screen_share_preview"]
+
+[[permission]]
+identifier = "deny-screen-share-preview"
+description = "Denies the screen_share_preview command without any pre-configured scope."
+commands.deny = ["screen_share_preview"]

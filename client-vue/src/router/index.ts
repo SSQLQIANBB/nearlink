@@ -2,10 +2,14 @@ import { createWebHistory, createWebHashHistory, createRouter } from 'vue-router
 import { useAuthStore } from '@/stores/auth';
 import { pinia } from '@/stores';
 import { getAuthRedirect } from '@/services/authNavigation';
+import { closeAuxiliaryWindow, isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
+import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 
 const HOME_ROUTE = { name: 'Remote' };
 
 const routes = [
+  { path: '/desktop-image', component: { render: () => null } },
+  { path: '/desktop-private', component: { render: () => null }, meta: { requiresAuth: true } },
   {
     name: 'RemoteControl',
     path: '/remote-control',
@@ -93,6 +97,14 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
+  if (
+    isAuxiliaryWindow &&
+    !/^\/(desktop-(image|private)|group-(video|audio|screen)\/\d+)$/.test(to.path)
+  ) {
+    closeAuxiliaryWindow();
+    next(false);
+    return;
+  }
   const auth = useAuthStore(pinia);
 
   if (to.path === '/login') {
@@ -148,6 +160,10 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
+  if (to.meta.requiresAuth && (await openDesktopGroupWindow(to.path))) {
+    next(false);
+    return;
+  }
   next();
 });
 

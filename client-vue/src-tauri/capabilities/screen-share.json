@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "screen-share",
+  "description": "通话窗口中由用户选择共享源并采集，独立于远控权限",
+  "windows": ["media-call"],
+  "permissions": [
+    "allow-screen-share-sources",
+    "allow-screen-share-preview",
+    "allow-screen-share-start",
+    "allow-screen-share-frame",
+    "allow-screen-share-present",
+    "allow-screen-share-stop"
+  ]
+}

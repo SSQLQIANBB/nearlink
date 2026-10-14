@@ -7,7 +7,7 @@
     object-fit="contain"
     preview-disabled
     :img-props="{
-      onClick: () => (previewOpen = true),
+      onClick: openPreview,
       onKeydown: openWithKeyboard,
       tabindex: 0,
       role: 'button',
@@ -40,7 +40,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NImage } from 'naive-ui';
+import { NImage, useMessage } from 'naive-ui';
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { openAuxiliaryWindow } from '@/services/desktopAuxiliaryWindows';
 import type { ChatMediaPayload } from '@/api/message';
 import { resolveChatMediaUrl } from '@/services/chatMedia';
 import ChatImagePreview from './ChatImagePreview.vue';
@@ -48,10 +50,26 @@ import ChatImagePreview from './ChatImagePreview.vue';
 const props = defineProps<{ media: ChatMediaPayload; isMine: boolean }>();
 const resolvedUrl = computed(() => resolveChatMediaUrl(props.media.url));
 const previewOpen = ref(false);
+const message = useMessage();
+async function openPreview() {
+  if (!isDesktopWindow) {
+    previewOpen.value = true;
+    return;
+  }
+  try {
+    await openAuxiliaryWindow({
+      kind: 'image',
+      src: resolvedUrl.value,
+      alt: props.media.fileName || '聊天图片',
+    });
+  } catch {
+    message.error('无法打开图片预览窗口，请重试');
+  }
+}
 function openWithKeyboard(event: KeyboardEvent) {
   if (event.key !== 'Enter' && event.key !== ' ') return;
   event.preventDefault();
-  previewOpen.value = true;
+  void openPreview();
 }
 </script>
 

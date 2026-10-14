@@ -1,10 +1,10 @@
+import { RemoteDeviceCodes } from '../../../src/services/remoteDeviceCodes';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'crypto';
-const mocks = vi.hoisted(() => ({ context: null as any, grant: vi.fn(), authenticate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ context: null as any, authenticate: vi.fn() }));
 vi.mock('../../../src/services/remoteControlContext', () => ({
   getRemoteControlContext: () => mocks.context,
 }));
-vi.mock('../../../src/models/RemoteControl', () => ({ AssistanceGrant: { findOne: mocks.grant } }));
 vi.mock('../../../src/services/loginSessionService', () => ({
   validateAuthenticatedSession: mocks.authenticate,
 }));
@@ -138,8 +138,7 @@ async function fixture() {
     signer,
     authority,
   );
-  mocks.context = { authority, coordinator, service, store, history };
-  mocks.grant.mockResolvedValue({ id: randomUUID(), createdBySid: hostAuth.sid });
+  mocks.context = { authority, coordinator, service, store, history, deviceCodes: new RemoteDeviceCodes() };
   let middleware: Function, connected: Function;
   const namespace = {
     use: (fn: Function) => {
@@ -223,14 +222,15 @@ async function fixture() {
       payload,
       ...(id ? { sessionId: id, expectedRevision: rows.get(id)?.revision } : {}),
     });
-  return { host, controller, command, signed, rows, signer, device };
+  const { credentials } = await host.send('remote:credentials', {});
+  return { host, controller, command, signed, rows, signer, device, credentials };
 }
 
 describe('product namespace wiring using real coordinator and signatures', () => {
   it('routes request → native consent → offer/answer → native hello evidence → short lease; disconnect ends both peers', async () => {
     const f = await fixture();
     const requested = await f.command(f.controller, 'remote:request', {
-      targetDeviceId: f.device.id,
+      deviceCode: f.credentials.deviceCode, temporaryPassword: f.credentials.temporaryPassword,
       scope: 'control',
     });
     expect(requested.ok).toBe(true);
@@ -371,17 +371,16 @@ describe('product namespace wiring using real coordinator and signatures', () =>
     expect(f.rows.get(id)?.state).toBe('ended');
     expect(f.host.last('remote:ended').sessionId).toBe(id);
   });
-  it('rejects client consent booleans and target requests without an explicit grant', async () => {
+  it('rejects invalid temporary passwords and client consent booleans', async () => {
     const f = await fixture();
-    mocks.grant.mockResolvedValueOnce(null);
     expect(
       await f.command(f.controller, 'remote:request', {
-        targetDeviceId: f.device.id,
+        deviceCode: f.credentials.deviceCode, temporaryPassword: 'zzzzzzzzzz',
         scope: 'view',
       }),
-    ).toMatchObject({ ok: false, code: 'ASSISTANCE_GRANT_REQUIRED' });
+    ).toMatchObject({ ok: false, code: 'REMOTE_CODE_INVALID' });
     const result = await f.command(f.controller, 'remote:request', {
-      targetDeviceId: f.device.id,
+      deviceCode: f.credentials.deviceCode, temporaryPassword: f.credentials.temporaryPassword,
       scope: 'view',
     });
     expect(

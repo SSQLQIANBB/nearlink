@@ -3,9 +3,7 @@ import { defineStore } from 'pinia';
 import {
   getRemoteControlRelease,
   getRemoteSessions,
-  getRemoteTargets,
   type RemoteSessionRecord,
-  type RemoteTarget,
 } from '@/api/remoteControl';
 import {
   probeRemoteCapabilities,
@@ -15,21 +13,17 @@ import { registerRemoteControlCleanup } from '@/services/remoteControlSafety';
 
 export const useRemoteControlStore = defineStore('remoteControl', () => {
   const capabilities = shallowRef<RemoteCapabilities | null>(null);
-  const targets = ref<RemoteTarget[]>([]);
   const sessions = ref<RemoteSessionRecord[]>([]);
   const loading = ref(false);
   const error = ref('');
   let generation = 0;
-  let discoveryGeneration = 0;
   let inFlight: Promise<void> | null = null;
   const showControllerEntry = computed(() => capabilities.value?.showControllerEntry === true);
   const canControl = computed(() => !loading.value && capabilities.value?.canControl === true);
 
   function reset() {
     generation++;
-    discoveryGeneration++;
     capabilities.value = null;
-    targets.value = [];
     sessions.value = [];
     error.value = '';
     loading.value = false;
@@ -63,22 +57,6 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
     return task;
   }
 
-  async function loadTargets(userId: number) {
-    const current = generation;
-    const discovery = ++discoveryGeneration;
-    targets.value = [];
-    error.value = '';
-    if (!canControl.value || !Number.isSafeInteger(userId) || userId <= 0) return;
-    try {
-      const result = await getRemoteTargets(userId);
-      if (generation === current && discovery === discoveryGeneration && canControl.value)
-        targets.value = result.targets;
-    } catch {
-      if (generation === current && discovery === discoveryGeneration)
-        error.value = '无法获取已获协助许可的设备，请稍后重试。';
-    }
-  }
-
   async function loadSessions() {
     const current = generation;
     if (!canControl.value) return;
@@ -92,14 +70,12 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
 
   return {
     capabilities,
-    targets,
     sessions,
     loading,
     error,
     showControllerEntry,
     canControl,
     refreshCapabilities,
-    loadTargets,
     loadSessions,
     reset,
   };

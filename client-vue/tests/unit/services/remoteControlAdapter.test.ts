@@ -85,7 +85,7 @@ describe('生产远控信令适配器', () => {
       deviceId: target,
       prove,
     });
-    const pending = adapter.request(target, 'view');
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     await flushPromises();
     const socket = sockets.sockets[0];
     expect(socket.options.auth.controllerDeviceId).toBe(target);
@@ -115,7 +115,7 @@ describe('生产远控信令适配器', () => {
     await flushPromises();
     expect(socket.calls[2].event).toBe('remote:request');
     expect(event).toHaveBeenCalledWith({ type: 'device-verified', deviceId: target });
-    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending' });
+    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending', targetDeviceId: target, canHostControl: true });
     await pending;
     adapter.dispose();
   });
@@ -126,7 +126,7 @@ describe('生产远控信令适配器', () => {
       deviceId: target,
       prove,
     });
-    const pending = adapter.request(target, 'control');
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
     const rejected = expect(pending).rejects.toThrow('REMOTE_CONTROLLER_DEVICE_REJECTED');
     await flushPromises();
     const socket = sockets.sockets[0];
@@ -152,7 +152,7 @@ describe('生产远控信令适配器', () => {
       deviceId: target,
       prove,
     });
-    const pending = adapter.request(target, 'view');
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'view');
     const rejected = expect(pending).rejects.toThrow('REMOTE_DISCONNECTED');
     await flushPromises();
     const socket = sockets.sockets[0];
@@ -181,10 +181,10 @@ describe('生产远控信令适配器', () => {
   it('拒绝当前账号下不同实例收到的connecting，不能凭同账号冒充当前主控', async () => {
     const event = vi.fn();
     const adapter = new SocketRemoteControllerAdapter(token, 'web', event);
-    const pending = adapter.request(target, 'control');
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
     await Promise.resolve();
     const socket = sockets.sockets[0];
-    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending' });
+    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending', targetDeviceId: target, canHostControl: true });
     await pending;
     socket.receive('remote:connecting', connecting('66666666-6666-4666-8666-666666666666'));
     expect(event).toHaveBeenCalledWith({ type: 'ended', reason: 'REMOTE_CONNECTING_INVALID' });
@@ -193,10 +193,10 @@ describe('生产远控信令适配器', () => {
   it('只接受匹配目标、sid、实例与socket代次的严格bootstrap', async () => {
     const event = vi.fn();
     const adapter = new SocketRemoteControllerAdapter(token, 'web', event);
-    const pending = adapter.request(target, 'control');
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
     await Promise.resolve();
     const socket = sockets.sockets[0];
-    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending' });
+    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending', targetDeviceId: target, canHostControl: true });
     await pending;
     const payload = connecting(socket.options.auth.controllerInstanceId);
     socket.receive('remote:connecting', payload);

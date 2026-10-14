@@ -5,70 +5,7 @@
   >
     <h2>我的远程设备</h2>
     <p>管理绑定到当前账号的设备身份。远程协助是否可用取决于客户端和系统权限。</p>
-    <p class="note remote-info">
-      设备登记不会开启屏幕观看或键鼠控制，也不代表设备在线。发起远程协助无需先登记本机。
-    </p>
-    <RemoteHostSettings
-      v-if="remote.capabilities?.showHostEntry"
-      :devices="devices.devices"
-      :local-device-id="devices.localDeviceId"
-    />
-    <div
-      v-if="devices.support?.desktop && devices.support.identification"
-      class="actions"
-    >
-      <n-button
-        :disabled="devices.busy"
-        :loading="devices.phase === 'identifying'"
-        @click="devices.identify"
-      >
-        识别本机设备
-      </n-button>
-      <n-button
-        v-if="devices.phase === 'identifying'"
-        @click="devices.cancel"
-      >
-        取消识别
-      </n-button>
-    </div>
-    <n-spin :show="devices.probing">
-      <form
-        v-if="devices.support?.desktop && devices.support.registration"
-        class="registration"
-        @submit.prevent="register"
-      >
-        <label for="remote-device-alias">当前设备名称</label>
-        <n-input
-          id="remote-device-alias"
-          v-model:value="alias"
-          placeholder="例如：办公电脑"
-          :maxlength="80"
-          :disabled="devices.busy"
-        />
-        <div class="actions">
-          <n-button
-            attr-type="submit"
-            type="primary"
-            :disabled="devices.busy || devices.identityUnavailable || !alias.trim()"
-            :loading="['challenge', 'native', 'submitting'].includes(devices.phase)"
-          >
-            登记当前设备
-          </n-button>
-          <n-button
-            v-if="devices.busy && !['revoking', 'renaming', 'identifying'].includes(devices.phase)"
-            @click="devices.cancel"
-          >
-            {{ devices.phase === 'resetting' ? '取消等待' : '取消登记' }}
-          </n-button>
-        </div>
-      </form>
-      <p v-else-if="devices.support?.desktop">
-        当前客户端暂不支持设备登记，请升级桌面客户端后重试。
-      </p>
-      <p v-else-if="devices.support">
-        请使用支持设备登记的桌面客户端登记电脑。你仍可在此管理已有设备。
-      </p>
-    </n-spin>
+    <p class="note remote-info">进入远控页面后自动准备本机身份，无需手动登记。</p>
     <div v-if="devices.identityUnavailable && devices.support?.desktop">
       <p>重建身份需要本机系统确认。原设备记录仍保持原有状态，协助许可不会继承。</p>
       <n-button
@@ -240,12 +177,9 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { NButton, NInput, NPopconfirm, NSpin } from 'naive-ui';
+import { NButton, NInput, NPopconfirm } from 'naive-ui';
 import { useRemoteDevicesStore } from '@/stores/remoteDevices';
-import { useRemoteControlStore } from '@/stores/remoteControl';
 import { useAuthStore } from '@/stores/auth';
-import RemoteHostSettings from './RemoteHostSettings.vue';
-const remote = useRemoteControlStore();
 const devices = useRemoteDevicesStore();
 const auth = useAuthStore();
 const search = ref('');
@@ -263,7 +197,6 @@ const filteredDevices = computed(() => {
       (platform.value === 'all' || device.platform === platform.value),
   );
 });
-const alias = ref('');
 const editingId = ref<string | null>(null);
 const editedName = ref('');
 watch(
@@ -272,15 +205,12 @@ watch(
     search.value = '';
     status.value = platform.value = 'all';
     editingId.value = null;
-    editedName.value = alias.value = '';
+    editedName.value = '';
   },
 );
 async function saveName() {
   if (editingId.value && (await devices.rename(editingId.value, editedName.value)))
     editingId.value = null;
-}
-async function register() {
-  await devices.register(alias.value);
 }
 onMounted(() => {
   void devices.initialize();
@@ -327,12 +257,6 @@ p {
 }
 .rename-form .n-input {
   max-width: 320px;
-}
-.registration {
-  max-width: 420px;
-  display: grid;
-  gap: 10px;
-  margin: 20px 0;
 }
 .actions {
   display: flex;

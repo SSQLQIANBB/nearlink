@@ -14,8 +14,13 @@ const SELECTED: &[u8] = include_bytes!(concat!(
 ));
 const TARGET: &str = env!("TODE_REMOTE_ENGINE_TARGET");
 
+pub(super) fn is_configured() -> bool {
+    SELECTED != b"[]"
+}
+
 pub(super) struct TrustedEngineBundle {
     root: PathBuf,
+    _verified: VerifiedTree,
 }
 impl TrustedEngineBundle {
     pub fn from_app(app: &tauri::AppHandle) -> format::Result<Self> {
@@ -40,7 +45,7 @@ impl TrustedEngineBundle {
         if verified.root != root {
             return Err("REMOTE_ENGINE_RESOURCE_ESCAPE".into());
         }
-        Ok(Self { root })
+        Ok(Self { root, _verified: verified })
     }
     fn verify(&self) -> format::Result<VerifiedTree> {
         format::verify(&self.root, SELECTED, TARGET)
@@ -55,7 +60,8 @@ impl TrustedEngineBundle {
         Ok(command)
     }
     pub fn digest(&self) -> format::Result<String> {
-        Ok(self.verify()?.digest)
+        // from_app already verified the complete tree; command rechecks before spawn.
+        Ok(self._verified.digest.clone())
     }
 }
 

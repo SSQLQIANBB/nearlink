@@ -2,13 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 const mocks = vi.hoisted(() => ({
   release: vi.fn(),
-  targets: vi.fn(),
   sessions: vi.fn(),
   probe: vi.fn(),
 }));
 vi.mock('@/api/remoteControl', () => ({
   getRemoteControlRelease: mocks.release,
-  getRemoteTargets: mocks.targets,
   getRemoteSessions: mocks.sessions,
 }));
 vi.mock('@/services/remoteControlCapabilities', () => ({ probeRemoteCapabilities: mocks.probe }));
@@ -40,8 +38,6 @@ describe('远控会话前端门禁', () => {
     const pending = store.refreshCapabilities();
     expect(store.capabilities?.showHostEntry).toBe(true);
     expect(store.canControl).toBe(false);
-    await store.loadTargets(1);
-    expect(mocks.targets).not.toHaveBeenCalled();
     reject(new Error('offline'));
     await pending;
     expect(store.canControl).toBe(false);
@@ -50,9 +46,7 @@ describe('远控会话前端门禁', () => {
   it('配置未开放时不查询其他用户设备或连接记录', async () => {
     const store = useRemoteControlStore();
     await store.refreshCapabilities();
-    await store.loadTargets(4);
     await store.loadSessions();
-    expect(mocks.targets).not.toHaveBeenCalled();
     expect(mocks.sessions).not.toHaveBeenCalled();
   });
   it('退出后迟到的能力响应不能恢复权限', async () => {
@@ -71,23 +65,5 @@ describe('远控会话前端门禁', () => {
     await pending;
     expect(store.canControl).toBe(false);
     expect(store.capabilities).toBeNull();
-  });
-  it('切换联系人后丢弃前一个联系人的迟到设备响应', async () => {
-    mocks.probe.mockResolvedValue({ canControl: true, showControllerEntry: true });
-    const store = useRemoteControlStore();
-    await store.refreshCapabilities();
-    let resolve!: (value: object) => void;
-    mocks.targets.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
-    const old = store.loadTargets(3);
-    mocks.targets.mockResolvedValueOnce({ targets: [{ deviceId: 'new' }] });
-    await store.loadTargets(4);
-    resolve({ targets: [{ deviceId: 'old' }] });
-    await old;
-    expect(store.targets.map((target) => target.deviceId)).toEqual(['new']);
   });
 });

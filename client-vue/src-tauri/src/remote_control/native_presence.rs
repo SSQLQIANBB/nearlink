@@ -60,7 +60,7 @@ pub(super) fn prove(
         c.host_key_version,
         json!({
             "protocolVersion":1, "purpose":"native-presence", "host":c.host, "challenge":c.challenge,
-            "platform":"macos", "engineDigest":engine_digest, "canCapture":capture, "canControl":capture && input,
+            "platform":std::env::consts::OS, "engineDigest":engine_digest, "canCapture":capture, "canControl":capture && input,
             "issuedAt":now, "expiresAt":c.expires_at
         }),
     )

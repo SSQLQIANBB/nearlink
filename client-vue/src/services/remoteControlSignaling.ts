@@ -11,6 +11,8 @@ export interface RemoteStateSnapshot {
 }
 export interface RemoteSignalAck {
   ok: boolean;
+  targetDeviceId?: string;
+  canHostControl?: boolean;
   code?: string;
   sessionId?: string;
   revision?: number;
@@ -146,7 +148,6 @@ export class RemoteSignalClient {
               'AUTH_REVOKED',
               'LEASE_EXPIRED',
               'SESSION_ENDED',
-              'NATIVE_VALIDATION_PENDING',
               'REVISION_CONFLICT',
             ].includes(code)
           )

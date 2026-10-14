@@ -19,6 +19,7 @@ export interface RemoteConnecting {
   hardDeadline: number;
 }
 export type RemoteControllerEvent =
+  | { type: 'target-resolved'; deviceId: string; canHostControl: boolean }
   | { type: 'device-verified'; deviceId: string }
   | { type: 'connecting'; value: RemoteConnecting }
   | { type: 'signal'; value: RemotePeerSignal }
@@ -26,8 +27,12 @@ export type RemoteControllerEvent =
   | { type: 'state'; value: RemoteStateSnapshot }
   | { type: 'control-approved'; value: RemoteControlApproval }
   | { type: 'ended'; reason: string };
+export interface RemoteCodeConnection {
+  deviceCode: string;
+  temporaryPassword: string;
+}
 export interface RemoteControllerAdapter {
-  request(targetDeviceId: string, scope: 'view' | 'control'): Promise<string>;
+  request(target: RemoteCodeConnection, scope: 'view' | 'control'): Promise<string>;
   signal(signal: RemotePeerSignal): Promise<void>;
   ready(binding: {
     negotiationId: string;
@@ -292,10 +297,10 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
     );
   }
 
-  async request(targetDeviceId: string, scope: 'view' | 'control') {
-    if (this.closed || this.target || !isId(targetDeviceId))
+  async request(target: RemoteCodeConnection, scope: 'view' | 'control') {
+    if (this.closed || this.target || !/^\d{9}$/.test(target.deviceCode) || !/^[a-z2-9]{10}$/.test(target.temporaryPassword))
       throw new Error('REMOTE_REQUEST_INVALID');
-    this.target = targetDeviceId;
+    this.target = target.deviceCode;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         finish();
@@ -350,7 +355,15 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
         throw error;
       }
     }
-    const ack = await this.signaling.command('remote:request', { targetDeviceId, scope });
+    const ack = await this.signaling.command('remote:request', {
+      ...target, scope,
+    });
+    if (!isId(ack.targetDeviceId) || typeof ack.canHostControl !== 'boolean') {
+        this.stop('REMOTE_TARGET_INVALID');
+        throw new Error('REMOTE_TARGET_INVALID');
+    }
+    this.target = ack.targetDeviceId;
+    this.event({ type: 'target-resolved', deviceId: this.target, canHostControl: ack.canHostControl });
     this.sessionId = ack.sessionId!;
     for (const deliver of this.eventQueue.splice(0)) {
       if (!this.closed) deliver();

@@ -31,3 +31,25 @@ pub fn set_taskbar_icon(window: &tauri::WebviewWindow) -> Result<(), Box<dyn Err
     }
     Ok(())
 }
+
+/// Keep the native caption and controls while matching the call surface (#0b1220).
+pub fn set_call_window_colors(window: &tauri::WebviewWindow) -> Result<(), Box<dyn Error>> {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE,
+    };
+    let hwnd = window.hwnd()?.0;
+    // COLORREF uses 0x00BBGGRR, unlike CSS RGB.
+    for (attribute, value) in [
+        (DWMWA_USE_IMMERSIVE_DARK_MODE, 1u32),
+        (DWMWA_CAPTION_COLOR, 0x0020120b),
+        (DWMWA_TEXT_COLOR, 0x00fcfaf8),
+    ] {
+        let result = unsafe {
+            DwmSetWindowAttribute(hwnd, attribute as u32, (&value as *const u32).cast(), 4)
+        };
+        if result < 0 {
+            return Err(format!("设置通话标题栏颜色失败: {result:#x}").into());
+        }
+    }
+    Ok(())
+}

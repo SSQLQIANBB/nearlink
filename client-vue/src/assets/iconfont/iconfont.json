@@ -6,6 +6,34 @@
   "description": "",
   "glyphs": [
     {
+      "icon_id": "7715134",
+      "name": "refresh",
+      "font_class": "refresh",
+      "unicode": "e66d",
+      "unicode_decimal": 58989
+    },
+    {
+      "icon_id": "18442498",
+      "name": "copy",
+      "font_class": "copy1",
+      "unicode": "e604",
+      "unicode_decimal": 58884
+    },
+    {
+      "icon_id": "10031038",
+      "name": "show_password",
+      "font_class": "show_password",
+      "unicode": "e626",
+      "unicode_decimal": 58918
+    },
+    {
+      "icon_id": "10031039",
+      "name": "hide_password",
+      "font_class": "hide_password",
+      "unicode": "e627",
+      "unicode_decimal": 58919
+    },
+    {
       "icon_id": "1818708",
       "name": "最小化",
       "font_class": "minimum",

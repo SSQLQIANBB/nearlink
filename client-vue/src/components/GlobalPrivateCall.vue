@@ -143,6 +143,7 @@
       </div>
       <template v-if="connectionType === DEVICE_TYPE.CAMERA">
         <button
+          v-if="!isAuxiliaryWindow"
           class="video-action private-call__fullscreen"
           type="button"
           :aria-label="isFullscreen ? '取消全屏' : '全屏'"
@@ -243,6 +244,8 @@
 
 <script lang="ts" setup>
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
+import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
+import { captureDesktopScreen } from '@/services/desktopScreenShare';
 import { createRequestId } from '@/utils/requestId';
 import { isAppInBackground } from '@/services/appVisibility';
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
@@ -491,7 +494,7 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     message.info('正在呼叫...');
   } catch (error: any) {
     console.error('发起通话失败:', error);
-    message.error('无法访问设备: ' + error.message);
+    if (error.name !== 'AbortError') message.error('无法访问设备: ' + error.message);
     stopTrack();
     isConnecting.value = false;
     cleanup();
@@ -512,7 +515,9 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
         ? await mediaDevices.getUserMedia(cameraConstraints)
         : type === DEVICE_TYPE.AUDIO
           ? await mediaDevices.getUserMedia({ audio: true, video: false })
-          : await mediaDevices.getDisplayMedia(screenRecordConstraints);
+          : isAuxiliaryWindow
+            ? await captureDesktopScreen()
+            : await mediaDevices.getDisplayMedia(screenRecordConstraints);
     if (attempt !== generation || !owner?.isCurrent()) {
       stream.getTracks().forEach((track) => track.stop());
       return;

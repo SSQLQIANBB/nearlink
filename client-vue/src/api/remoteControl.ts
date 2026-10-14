@@ -1,6 +1,11 @@
 import { http, request } from '@/utils/request';
 
 export type RemotePlatform = 'windows' | 'macos';
+export interface RemoteAssistanceCredentials {
+  deviceCode: string;
+  temporaryPassword: string;
+  expiresAt: number;
+}
 export interface RemoteControlRelease {
   protocolVersion: number;
   desktopControllerEnabled: boolean;
@@ -70,35 +75,8 @@ export const revokeRemoteDevice = (deviceId: string, signal?: AbortSignal) =>
     method: 'DELETE',
     signal,
   });
-export interface AssistanceGrant {
-  id: string;
-  hostDeviceId: string;
-  controllerUserId: number;
-  expiresAt: string | null;
-}
-export const getAssistanceGrants = () =>
-  http.get<{ grants: AssistanceGrant[] }>('/api/remote-control/assistance-grants');
-export type AssistanceDuration = '15m' | '1h' | 'permanent';
-export const createAssistanceGrant = (
-  hostDeviceId: string,
-  controllerUserId: number,
-  duration: AssistanceDuration = '15m',
-) =>
-  request<{ grant: AssistanceGrant }>('/api/remote-control/assistance-grants', {
-    method: 'POST',
-    body: { hostDeviceId, controllerUserId, duration },
-  });
-export const revokeAssistanceGrant = (id: string) =>
-  request<{ ok: true }>(`/api/remote-control/assistance-grants/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
-
 export const getRemoteControlRelease = () =>
   http.get<RemoteControlRelease>('/api/remote-control/capabilities');
-export const getRemoteTargets = (userId: number) =>
-  http.get<{ targets: RemoteTarget[] }>(
-    `/api/remote-control/targets?userId=${encodeURIComponent(userId)}`,
-  );
 export const getRemoteSessions = () =>
   http.get<{ sessions: RemoteSessionRecord[] }>('/api/remote-control/sessions');
 

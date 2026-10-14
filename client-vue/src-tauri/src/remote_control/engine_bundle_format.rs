@@ -36,6 +36,8 @@ pub struct BundleManifest {
     pub files: Vec<BundleFile>,
 }
 pub struct VerifiedTree {
+    #[cfg(windows)]
+    pub locks: Vec<File>,
     pub root: PathBuf,
     pub entrypoint: PathBuf,
     pub manifest: BundleManifest,
@@ -68,8 +70,8 @@ pub fn parse(bytes: &[u8], target: &str) -> Result<BundleManifest> {
         serde_json::from_slice(bytes).map_err(|_| fail("invalid manifest"))?;
     if manifest.format != FORMAT
         || manifest.target != target
-        || !matches!(target, "aarch64-apple-darwin")
-        || manifest.entrypoint != "bin/remote-control-engine"
+        || !matches!(target, "aarch64-apple-darwin" | "x86_64-pc-windows-msvc")
+        || manifest.entrypoint != (if target == "x86_64-pc-windows-msvc" { "bin/remote-control-engine.exe" } else { "bin/remote-control-engine" })
         || manifest.files.is_empty()
         || manifest.files.len() > MAX_FILES
     {
@@ -245,7 +247,7 @@ pub fn read_manifest(root: &Path) -> Result<Vec<u8>> {
     anchored::check_regular(&file, false)?;
     read_bounded(&mut file, MAX_MANIFEST_BYTES)
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub fn read_manifest(_root: &Path) -> Result<Vec<u8>> {
     Err(fail("bundle platform unsupported"))
 }
@@ -349,10 +351,16 @@ pub fn verify(root: &Path, expected: &[u8], target: &str) -> Result<VerifiedTree
         digest: sha256(expected),
     })
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub fn verify(_root: &Path, _expected: &[u8], _target: &str) -> Result<VerifiedTree> {
     Err(fail("bundle platform unsupported"))
 }
+
+#[cfg(windows)]
+#[path = "windows_engine_bundle.rs"]
+mod windows_bundle;
+#[cfg(windows)]
+pub use windows_bundle::{read_manifest, verify};
 
 #[cfg(all(test, unix))]
 mod tests {

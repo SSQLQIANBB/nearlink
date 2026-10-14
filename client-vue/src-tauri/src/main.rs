@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod remote_control;
+mod screen_share;
 #[cfg(target_os = "windows")]
 mod windows_window;
 
@@ -36,7 +37,14 @@ fn main() {
     };
     tauri::Builder::default()
         .manage(remote_control::RemoteControlState::default())
+        .manage(screen_share::ScreenShareState::default())
         .invoke_handler(tauri::generate_handler![
+            screen_share::screen_share_sources,
+            screen_share::screen_share_preview,
+            screen_share::screen_share_start,
+            screen_share::screen_share_frame,
+            screen_share::screen_share_present,
+            screen_share::screen_share_stop,
             remote_control::remote_control_capabilities,
             remote_control::remote_control_open_permission_settings,
             remote_control::remote_control_stop,
@@ -104,7 +112,38 @@ fn main() {
                 .build(app)?;
             Ok(())
         })
+        .on_page_load(|webview, payload| {
+            if webview.label() == "media-call"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                #[cfg(target_os = "windows")]
+                if let Some(window) = webview.app_handle().get_webview_window("media-call") {
+                    if let Err(error) = windows_window::set_call_window_colors(&window) {
+                        eprintln!("{error}");
+                    }
+                }
+                screen_share::stop_on_window_close(webview.app_handle());
+            }
+            // 主页面刷新会重建信令连接，销毁旧媒体窗口，避免遗留采集资源。
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                for label in ["image-preview", "media-call"] {
+                    if let Some(window) = webview.app_handle().get_webview_window(label) {
+                        let _ = window.destroy();
+                    }
+                }
+            }
+        })
         .on_window_event(|window, event| {
+            if matches!(window.label(), "media-call" | "share-toolbar")
+                && matches!(event, WindowEvent::Destroyed)
+            {
+                screen_share::stop_on_window_close(window.app_handle());
+            }
+            if window.label() != "main" {
+                return;
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 // 保留页面与媒体流；只有成功隐藏后才阻止关闭。
                 if window.hide().is_ok() {

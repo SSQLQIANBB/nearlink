@@ -10,7 +10,7 @@ export interface RemoteSize {
 }
 export interface RemoteControlGeometry {
   displayId: number;
-  coordinateSpace: 'quartz-global-logical';
+  coordinateSpace: 'quartz-global-logical' | 'windows-desktop-physical';
   displayBounds: RemoteRectangle;
   displayPixels: RemoteSize;
   rotationDegrees: 0 | 90 | 180 | 270;
@@ -77,7 +77,9 @@ export function parseRemoteControlLayout(value: unknown): RemoteControlLayout | 
     !Number.isInteger(geometry.displayId) ||
     (geometry.displayId as number) <= 0 ||
     (geometry.displayId as number) > 0xffffffff ||
-    geometry.coordinateSpace !== 'quartz-global-logical' ||
+    !['quartz-global-logical', 'windows-desktop-physical'].includes(
+      geometry.coordinateSpace as string,
+    ) ||
     !rectangle(geometry.displayBounds) ||
     geometry.displayBounds.width < 1 ||
     geometry.displayBounds.height < 1 ||
@@ -104,7 +106,7 @@ export function parseRemoteControlLayout(value: unknown): RemoteControlLayout | 
     layoutVersion: value.layoutVersion as number,
     geometry: {
       displayId: geometry.displayId as number,
-      coordinateSpace: 'quartz-global-logical',
+      coordinateSpace: geometry.coordinateSpace as RemoteControlGeometry['coordinateSpace'],
       displayBounds: copyRect(displayBounds),
       displayPixels: copySize(displayPixels),
       rotationDegrees: geometry.rotationDegrees as RemoteControlGeometry['rotationDegrees'],

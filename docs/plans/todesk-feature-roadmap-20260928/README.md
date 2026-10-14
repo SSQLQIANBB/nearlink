@@ -20,14 +20,14 @@
 | 设备与协助 | `backend-koa/src/router/remoteControl.ts`、`models/RemoteControl.ts` | 有签名设备注册/撤销、别名字段、协助许可、目标发现、会话历史；需补设备编辑、分组及策略 |
 | 远控会话 | `services/remoteControlProtocol.ts`、`remoteControlRuntime.ts`、`redisRemoteSessionStore.ts` | 有 pending→connecting→active→ended、45 秒请求/30 秒建连/1 小时会话上限、15 秒租约；扩容前需解决实例所有权 |
 | 原生被控 | `client-vue/src-tauri/src/remote_control/`、`scripts/remote-control-host-engine.py`、`scripts/remote-control-screen-source.swift` | macOS 采屏/输入/监督链路有实现与联调；Windows 安装包不代表 Windows 被控能力 |
-| 开放范围 | `remoteControlPolicy.ts`、`client-vue/src/services/remoteControlCapabilities.ts` | 白名单最多 20 个账号；预览被控平台仅 macOS，网页主控限定桌面 Chrome/Edge 的实际能力探测 |
+| 开放范围 | `remoteControlPolicy.ts`、`client-vue/src/services/remoteControlCapabilities.ts` | 所有已登录账号均可使用；被控支持 Windows x64/macOS ARM64，网页主控检测实际浏览器能力 |
 | 授权记忆 | `consent_memory.rs`、[记忆同意说明](../../remote-control-remembered-consent.md) | 已有本地记忆同意机制；不等同于后台服务、开机登录前可控或固定密码无人值守 |
 | 真实验收 | [跨电脑验收记录](../../remote-control-cross-computer-acceptance.md) | 有同机真实画面与初步输入反馈、前台数分钟运行证据；跨电脑 30 分钟/1 小时等仍待实测，不计完成 |
 | 媒体和协作 | `config/meeting.ts`、`groupScreen.vue`、`ScreenAnnotation.vue`、`MediaRecorder.vue` | 有聊天、通话、群共享、共享者标注、浏览器录制；尚非完整远控内协作/审计录像 |
 | 文件 | `controller/fileController.ts`、`services/qiniuStorageService.ts` | 已有云端文件上传下载；尚非设备文件系统直传、目录传输或断点续传 |
 | 发布和运维 | `docker-compose.prod.yml`、`docker-compose.infrastructure.yml`、`docs/DESKTOP_RELEASE.md` | 有容器部署、MySQL/Redis、Caddy、CDN 证书同步、桌面发布；应用内更新、完整观测及容灾需补 |
 
-本次仅阅读源码及已有记录，未连接生产主机核实配置、未重跑历史真机测试。旧部署记录中的 beta.1/beta.2 等是历史版本，不能当作当前线上版本。`docs/README.md` 的旧“尚未开放”说明应理解为未全量开放，当前另有指定账号预览。
+本次仅阅读源码及已有记录，未连接生产主机核实配置、未重跑历史真机测试。旧部署记录中的 beta.1/beta.2 等是历史版本，不能当作当前线上版本。`docs/README.md` 的旧“尚未开放”说明应理解为未全量开放，当前已移除账号白名单，平台实机验收状态需另行确认。
 
 ## 3. 优先级、状态和阶段定义
 

@@ -144,6 +144,18 @@ for (const width of [1440, 375]) {
   for (const chat of ['private', 'group']) {
     test(`图片加载占位 ${chat} ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
+      await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
+      await page.route('**/api/remote-control/capabilities', (route) =>
+        route.fulfill({
+          json: {
+            protocolVersion: 1,
+            releasedPlatforms: [],
+            webControllerReleaseEnabled: false,
+            desktopControllerEnabled: false,
+            desktopHostEnabled: false,
+          },
+        }),
+      );
       await prepare(page);
       await page.route(/\/api\/messages\/(private\?|group\/7\?)/, (route) =>
         route.fulfill({
@@ -225,8 +237,13 @@ for (const width of [1440, 375]) {
         true,
       );
       await page.screenshot({ path: testInfo.outputPath('image-loaded.png') });
+      const chatUrl = page.url();
       await images.first().locator('img').click();
-      await expect(page.locator('.n-image-preview')).toBeVisible();
+      await expect(page.getByRole('dialog', { name: '图片预览' })).toBeVisible();
+      expect(page.context().pages()).toHaveLength(1);
+      expect(page.url()).toBe(chatUrl);
+      await page.getByRole('button', { name: '关闭图片预览' }).click();
+      await expect(page.getByRole('dialog', { name: '图片预览' })).toBeHidden();
     });
   }
 }

@@ -91,6 +91,7 @@ impl VerifiedProgram {
 }
 struct ProcessState {
     child: Mutex<ReapedChild>,
+    _bundle: Option<super::engine_bundle::TrustedEngineBundle>,
     writer: SyncSender<Vec<u8>>,
     codec: Mutex<IpcCodec>,
     alive: Arc<AtomicBool>,
@@ -99,7 +100,34 @@ struct ProcessState {
 }
 // Own the child immediately after spawn, including every early-error path.
 // Dropping std::process::Child alone neither terminates nor reaps it.
-struct ReapedChild(Option<Child>);
+struct ReapedChild(
+    Option<Child>,
+    #[cfg(windows)] super::windows_process::EngineJob,
+);
+impl ReapedChild {
+    fn spawn(command: &mut Command) -> std::io::Result<Self> {
+        #[cfg(windows)]
+        {
+            let (child, job) = super::windows_process::EngineJob::spawn(command)?;
+            Ok(Self(Some(child), job))
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(Self(Some(command.spawn()?)))
+        }
+    }
+
+    fn terminate_tree(&mut self) -> std::io::Result<()> {
+        #[cfg(windows)]
+        {
+            self.1.terminate()
+        }
+        #[cfg(not(windows))]
+        {
+            self.kill()
+        }
+    }
+}
 impl std::ops::Deref for ReapedChild {
     type Target = Child;
     fn deref(&self) -> &Child {
@@ -113,6 +141,8 @@ impl std::ops::DerefMut for ReapedChild {
 }
 impl Drop for ReapedChild {
     fn drop(&mut self) {
+        #[cfg(windows)]
+        let _ = self.1.terminate();
         let Some(mut child) = self.0.take() else {
             return;
         };
@@ -170,7 +200,7 @@ impl ProcessMediaDriver {
     pub(super) fn idle_test_process(session_id: &str) -> HostResult<(Self, Receiver<IpcMessage>)> {
         let mut command = Command::new("/bin/sleep");
         command.arg("60");
-        Self::spawn_command(command, session_id)
+        Self::spawn_command(command, session_id, None)
     }
     /// Native-only product factory. Resource location comes from Tauri itself.
     pub fn spawn_bundled(
@@ -182,7 +212,7 @@ impl ProcessMediaDriver {
         let command = bundle
             .command()
             .map_err(|_| "REMOTE_ENGINE_BUNDLE_REJECTED")?;
-        Self::spawn_command(command, session_id)
+        Self::spawn_command(command, session_id, Some(bundle))
     }
     #[cfg(feature = "remote-control-harness")]
     pub fn spawn(
@@ -200,11 +230,12 @@ impl ProcessMediaDriver {
             command.arg(&script.path);
         }
         command.args(args);
-        Self::spawn_command(command, session_id)
+        Self::spawn_command(command, session_id, None)
     }
     fn spawn_command(
         mut command: Command,
         session_id: &str,
+        bundle: Option<super::engine_bundle::TrustedEngineBundle>,
     ) -> HostResult<(Self, Receiver<IpcMessage>)> {
         let session = IpcSession::new(session_id).map_err(|_| "REMOTE_IPC_BOOTSTRAP_FAILED")?;
         let bootstrap = session
@@ -214,9 +245,8 @@ impl ProcessMediaDriver {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = ReapedChild(Some(
-            command.spawn().map_err(|_| "REMOTE_SIDECAR_SPAWN_FAILED")?,
-        ));
+        let mut child = ReapedChild::spawn(&mut command)
+            .map_err(|_| "REMOTE_SIDECAR_SPAWN_FAILED")?;
         let mut stdin = child.stdin.take().ok_or("REMOTE_SIDECAR_PIPE_FAILED")?;
         let stdout = child.stdout.take().ok_or("REMOTE_SIDECAR_PIPE_FAILED")?;
         let stderr = child.stderr.take().ok_or("REMOTE_SIDECAR_PIPE_FAILED")?;
@@ -236,6 +266,7 @@ impl ProcessMediaDriver {
             .try_send(bootstrap)
             .map_err(|_| "REMOTE_SIDECAR_PIPE_FAILED")?;
         let state = Arc::new(ProcessState {
+            _bundle: bundle,
             child: Mutex::new(child),
             writer,
             codec: Mutex::new(session.supervisor_codec()),
@@ -375,6 +406,10 @@ impl ProcessMediaDriver {
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => {
+                    #[cfg(windows)]
+                    child
+                        .terminate_tree()
+                        .map_err(|_| "REMOTE_SIDECAR_EXIT_UNCONFIRMED")?;
                     self.0.alive.store(false, Ordering::Release);
                     return Ok(());
                 }
@@ -386,7 +421,7 @@ impl ProcessMediaDriver {
             }
             thread::sleep(Duration::from_millis(10));
         }
-        let _ = child.kill();
+        let _ = child.terminate_tree();
         let deadline = Instant::now() + Duration::from_millis(700);
         while Instant::now() < deadline {
             if matches!(child.try_wait(), Ok(Some(_))) {

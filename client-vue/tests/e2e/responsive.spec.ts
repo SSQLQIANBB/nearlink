@@ -339,9 +339,21 @@ test.describe('响应式布局', () => {
 
   test('群列表点击发起共享后立即申请屏幕并进入共享状态', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
+    await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
+    await page.route('**/api/remote-control/capabilities', (route) =>
+      route.fulfill({
+        json: {
+          protocolVersion: 1,
+          releasedPlatforms: [],
+          webControllerReleaseEnabled: false,
+          desktopControllerEnabled: false,
+          desktopHostEnabled: false,
+        },
+      }),
+    );
     await preparePage(page);
     await page.goto('/groups');
-    await page.getByRole('button', { name: '发起屏幕共享' }).click();
+    await page.getByRole('button', { name: '共享', exact: true }).click();
     await expect(page).toHaveURL(/\/group-screen\/7$/);
     await expect(page.getByRole('button', { name: '停止共享' })).toBeVisible();
     expect(await page.evaluate(() => (window as any).__screenCaptureCount)).toBe(1);

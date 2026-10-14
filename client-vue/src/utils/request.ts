@@ -4,6 +4,7 @@ import router from '@/router';
 import { getAuthRedirect } from '@/services/authNavigation';
 import { publicEnv } from '@/config/env';
 import { createRequestId } from './requestId';
+import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 
 const API_BASE_URL = publicEnv.apiBaseUrl;
 
@@ -45,7 +46,12 @@ export function refreshAccessToken(): Promise<boolean> {
     return refreshTokenPromise;
   refreshGeneration = auth.authGeneration;
   refreshCredential = auth.refreshToken;
-  const operation = performTokenRefresh().finally(() => {
+  const refresh = isAuxiliaryWindow
+    ? import('@/services/desktopAuxiliaryClient').then(({ refreshAuxiliaryAuth }) =>
+        refreshAuxiliaryAuth(),
+      )
+    : performTokenRefresh();
+  const operation = refresh.finally(() => {
     if (refreshTokenPromise === operation) {
       refreshTokenPromise = null;
       refreshGeneration = null;
@@ -110,6 +116,11 @@ async function performTokenRefresh(): Promise<boolean> {
 }
 
 async function handleAuthenticationFailure() {
+  if (isAuxiliaryWindow) {
+    const { reportAuxiliaryAuthFailure } = await import('@/services/desktopAuxiliaryClient');
+    reportAuxiliaryAuthFailure();
+    return;
+  }
   if (authFailurePromise) {
     await authFailurePromise;
     return;

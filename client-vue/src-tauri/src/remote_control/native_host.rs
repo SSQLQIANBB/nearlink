@@ -5,7 +5,7 @@ use super::{
     host_runtime::{Availability, HostResult, HostRuntime},
     host_transport::PreparedHost,
     identity,
-    input::MacOsInputExecutor,
+    input::PlatformInputExecutor,
     platform, RemoteControlState,
 };
 use serde::Deserialize;
@@ -157,7 +157,7 @@ pub(super) fn launch(
                 if prepared.transport.observed_transport().is_some() && runtime.is_none() {
                     if let Some(proof) = connection.take() {
                         wait_for_proof_clock(&proof)?;
-                        let input = MacOsInputExecutor::new_primary_screen(1).map_err(|_| "REMOTE_INPUT_UNAVAILABLE")?;
+                        let input = PlatformInputExecutor::new_primary_screen(1).map_err(|_| "REMOTE_INPUT_UNAVAILABLE")?;
                         runtime = Some(app.state::<RemoteControlState>().connect_native_host(&proof, &mut prepared.transport,
                             Box::new(prepared.driver.clone()), Box::new(input), Box::new(|| {
                                 let (capture, input) = platform::permissions();

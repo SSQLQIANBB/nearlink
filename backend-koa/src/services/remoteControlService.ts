@@ -57,6 +57,7 @@ export class RemoteControlService {
   async request(input: {
     requestId: string;
     grantId: string;
+    admissionKind?: 'device-code';
     grantCreatedBySid?: string;
     controller: RemoteEndpoint;
     host: RemoteEndpoint;
@@ -72,6 +73,7 @@ export class RemoteControlService {
       id: randomUUID(),
       requestId: input.requestId,
       grantId: input.grantId,
+      ...(input.admissionKind ? { admissionKind: input.admissionKind } : {}),
       grantCreatedBySid: input.grantCreatedBySid,
       requestHash: remoteDigest(input),
       controller: input.controller,

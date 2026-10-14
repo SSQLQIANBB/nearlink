@@ -392,6 +392,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { isAuxiliaryWindow, closeAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
+import { captureDesktopScreen } from '@/services/desktopScreenShare';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 let mediaClaim: MediaClaim | null = null;
 import { useRoute, useRouter } from 'vue-router';
@@ -539,7 +541,8 @@ async function loadGroupDetail() {
     members.value = detail.members;
   } catch (error: any) {
     message.error('加载群组详情失败: ' + error.message);
-    router.back();
+    if (isAuxiliaryWindow) closeAuxiliaryWindow();
+    else router.back();
   }
 }
 
@@ -639,14 +642,16 @@ async function startScreenShare() {
     // 获取屏幕共享流
     const screenStream =
       pendingInitialScreen.value ||
-      (await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: preset.width },
-          height: { ideal: preset.height },
-          frameRate: { ideal: preset.frameRate },
-        },
-        audio: false,
-      }));
+      (isAuxiliaryWindow
+        ? await captureDesktopScreen()
+        : await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              width: { ideal: preset.width },
+              height: { ideal: preset.height },
+              frameRate: { ideal: preset.frameRate },
+            },
+            audio: false,
+          }));
 
     if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) {
       screenStream.getTracks().forEach((track) => track.stop());
@@ -686,7 +691,7 @@ async function startScreenShare() {
     // 向所有成员发送流
     await broadcastStream();
   } catch (error: any) {
-    message.error('开始屏幕共享失败: ' + error.message);
+    if (error.name !== 'AbortError') message.error('开始屏幕共享失败: ' + error.message);
   } finally {
     startingScreenShare = false;
   }
@@ -1108,7 +1113,8 @@ async function handleQualityChange(key: string) {
 // 退出
 function handleExit() {
   cleanupScreenCall(true);
-  router.back();
+  if (isAuxiliaryWindow) closeAuxiliaryWindow();
+  else router.back();
 }
 
 function cleanupScreenCall(endOwnedSession: boolean) {
@@ -1130,7 +1136,9 @@ function cleanupScreenCall(endOwnedSession: boolean) {
   participantState.clear(groupId.value, 'screen');
   if (
     endOwnedSession &&
-    groupSessionState.getSession(groupId.value, 'screen')?.ownerUserId === currentUser.value?.id
+    // 独立窗口可能在开始共享的响应到达前关闭；服务端按 ownerSocketId 校验结束权限。
+    (isAuxiliaryWindow ||
+      groupSessionState.getSession(groupId.value, 'screen')?.ownerUserId === currentUser.value?.id)
   ) {
     socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: 2 });
   }

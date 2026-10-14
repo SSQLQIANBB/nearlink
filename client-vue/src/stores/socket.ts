@@ -11,6 +11,8 @@ import { refreshAccessToken } from '@/utils/request';
 import { publicEnv } from '@/config/env';
 import { useAuthStore } from './auth';
 import { pinia } from '@/stores';
+import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
+import { auxiliarySocket, auxiliaryAuthenticated } from '@/services/desktopAuxiliaryClient';
 
 export type PresenceStatus = 'online' | 'offline' | 'busy';
 export type OnlineUser = User & { socketId: string };
@@ -136,7 +138,7 @@ export const useSocketStore = defineStore('socket', () => {
     target.on('connect', handleConnect);
     target.on('disconnect', handleDisconnect);
     target.on('authenticated', handleAuthenticated);
-    target.on('auth_error', handleAuthError);
+    if (!isAuxiliaryWindow) target.on('auth_error', handleAuthError);
     target.on('user_list', handleUserList);
     target.on('user_presence', handleUserPresence);
     target.on('group_call_state', handleGroupCallState);
@@ -160,6 +162,16 @@ export const useSocketStore = defineStore('socket', () => {
 
   function connect(token: string, user: User) {
     credentials = { token, user };
+
+    if (isAuxiliaryWindow) {
+      if (!socket.value) {
+        socket.value = auxiliarySocket;
+        bindEvents(auxiliarySocket);
+        connected.value = auxiliarySocket.connected;
+        authenticated.value = auxiliaryAuthenticated;
+      }
+      return socket.value;
+    }
 
     if (!socket.value) {
       const target = io(publicEnv.socketUrl || window.location.origin, {

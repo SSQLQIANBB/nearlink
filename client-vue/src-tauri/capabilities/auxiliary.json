@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "auxiliary",
+  "description": "图片预览和媒体通话独立窗口，只允许窗口事件、通知及用户选择的文件保存",
+  "windows": ["image-preview", "media-call"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-toggle-maximize",
+    "notification:default",
+    "dialog:allow-save",
+    "fs:allow-write-file"
+  ]
+}

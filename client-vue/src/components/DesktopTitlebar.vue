@@ -100,6 +100,7 @@ onUnmounted(() => cleanup?.());
 
 <style scoped>
 .desktop-window-drag-region {
+  pointer-events: none;
   position: fixed;
   inset: 0 0 auto;
   z-index: 20;
@@ -115,6 +116,7 @@ onUnmounted(() => cleanup?.());
 }
 
 .desktop-chat-top-drag-region {
+  pointer-events: none;
   position: fixed;
   top: 0;
   left: 320px;
@@ -125,6 +127,7 @@ onUnmounted(() => cleanup?.());
 }
 
 .desktop-windows-drag-region {
+  pointer-events: none;
   position: fixed;
   inset: 0 138px auto 0;
   height: 32px;

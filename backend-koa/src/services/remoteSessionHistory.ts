@@ -10,6 +10,7 @@ import User from '../models/User';
 import LoginSession from '../models/LoginSession';
 import { RemoteControlError, type RemoteSession } from './remoteControlProtocol';
 import type { SessionRevocation } from './loginSessionService';
+import type { RemoteDeviceCodes } from './remoteDeviceCodes';
 
 export interface PreparedRemoteRequest {
   created: boolean;
@@ -24,6 +25,7 @@ export interface RemoteHistoryWriter {
 
 /** Durable admission and audit only. Historical rows never recreate a live Redis session. */
 export class RemoteSessionHistory implements RemoteHistoryWriter {
+  constructor(private readonly deviceCodes?: RemoteDeviceCodes) {}
   async assertAuthorized(
     session: RemoteSession,
     admission = false,
@@ -65,6 +67,16 @@ export class RemoteSessionHistory implements RemoteHistoryWriter {
       ) {
         throw new RemoteControlError('AUTH_REVOKED', 401);
       }
+    }
+    if (session.admissionKind === 'device-code') {
+      if (!this.deviceCodes) throw new RemoteControlError('REMOTE_CODE_UNAVAILABLE', 503);
+      this.deviceCodes.assertAuthorized(session);
+      const device = await RemoteDevice.findByPk(session.host.endpointId, { transaction });
+      if (!device || device.revokedAt || device.ownerUserId !== session.host.userId)
+        throw new RemoteControlError('TARGET_UNAVAILABLE', 403);
+      // Refresh/disconnect can occur while the database read is pending.
+      this.deviceCodes.assertAuthorized(session);
+      return;
     }
     const [device, grant] = await Promise.all([
       RemoteDevice.findByPk(session.host.endpointId, { transaction }),

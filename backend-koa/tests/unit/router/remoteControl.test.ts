@@ -73,42 +73,12 @@ const read = (path: string, token = 'valid') =>
   fetch(`${origin}/api/remote-control${path}`, { headers: { Authorization: `Bearer ${token}` } });
 
 describe('远控REST真实HTTP权限边界', () => {
-  it('协助许可支持临时/长期，续期保持ID并拒绝任意时长', async () => {
-    vi.stubEnv('REMOTE_CONTROL_PREVIEW_USER_IDS', '7');
-    const id = randomUUID();
-    mocks.revoke.mockResolvedValue({ id });
-    const grant = (duration?: string) =>
-      fetch(`${origin}/api/remote-control/assistance-grants`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hostDeviceId: id,
-          controllerUserId: 8,
-          ...(duration ? { duration } : {}),
-        }),
-      });
-    const before = Date.now();
-    const temporary = await (await grant()).json();
-    expect(new Date(temporary.grant.expiresAt).getTime() - before).toBeGreaterThanOrEqual(900000);
-    const hour = await (await grant('1h')).json();
-    expect(new Date(hour.grant.expiresAt).getTime() - before).toBeGreaterThanOrEqual(3600000);
-    expect((await (await grant('permanent')).json()).grant.expiresAt).toBeNull();
-    const prior = {
-      id: randomUUID(),
-      hostDeviceId: id,
-      controllerUserId: 8,
-      createdBySid: 'session-7',
-      expiresAt: null as Date | null,
-      update: vi.fn(async function (this: any, values: any) {
-        Object.assign(this, values);
-      }),
-    };
-    mocks.grants.mockResolvedValue([prior]);
-    expect((await (await grant('1h')).json()).grant.id).toBe(prior.id);
-    expect(prior.expiresAt).toBeInstanceOf(Date);
-    expect((await grant('forever-invalid')).status).toBe(400);
-    mocks.revoke.mockResolvedValue(null);
-    expect((await grant('permanent')).status).toBe(404);
+  it('旧联系人许可创建入口不再提供', async () => {
+    const response = await fetch(`${origin}/api/remote-control/assistance-grants`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostDeviceId: randomUUID(), controllerUserId: 8, duration: 'permanent' }),
+    });
+    expect([404, 405]).toContain(response.status);
   });
   it('签名公钥接口要求登录，只返回显式配置的公钥与有效期', async () => {
     expect((await fetch(`${origin}/api/remote-control/signing-keys`)).status).toBe(401);
@@ -161,7 +131,7 @@ describe('远控REST真实HTTP权限边界', () => {
     ]);
   });
   it('未验收时不返回聊天在线用户为远控目标，不向任意会话发放ICE凭据', async () => {
-    expect(await (await read('/targets?userId=8')).json()).toEqual({ targets: [] });
+    expect((await read('/targets?userId=8')).status).toBe(404);
     const ice = await read('/sessions/00000000-0000-4000-8000-000000000000/ice');
     expect(ice.status).toBe(404);
     expect((await ice.json()).code).toBe('SESSION_NOT_FOUND');

@@ -253,6 +253,7 @@ export class RemoteLiveAuthority implements RemoteCoordinatorAuthority {
       this.now(),
     );
     this.current(value);
+    if (presence.platform !== value.platform) return fail('PLATFORM_MISMATCH');
     value.presence = presence;
     return presence;
   }

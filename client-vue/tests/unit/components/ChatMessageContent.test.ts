@@ -5,6 +5,11 @@ import ChatImageMessage from '../../../src/components/ChatImageMessage.vue';
 import ChatVoiceMessage from '../../../src/components/ChatVoiceMessage.vue';
 import ChatMessageContent from '../../../src/components/ChatMessageContent.vue';
 
+vi.mock('naive-ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('naive-ui')>()),
+  useMessage: () => ({ error: vi.fn() }),
+}));
+
 const image = {
   url: 'https://files.example.com/photo.png',
   mimeType: 'image/png',

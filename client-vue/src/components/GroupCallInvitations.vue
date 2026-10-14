@@ -10,6 +10,8 @@ import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
 import type { GroupSession } from '@/services/groupSessionState';
 import notificationService from '@/services/notificationService';
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 
 const dialog = useDialog();
 const router = useRouter();
@@ -66,6 +68,20 @@ function handleStarted(
       positiveText: '接受邀请',
       negativeText: '暂不加入',
       onPositiveClick: () => {
+        if (isDesktopWindow) {
+          return openDesktopGroupWindow(path)
+            .then(() => {
+              finishInvitation(key, eventId);
+            })
+            .catch((error) => {
+              dialog.warning({
+                title: '无法加入通话',
+                content: error.message,
+                positiveText: '知道了',
+              });
+              return false;
+            });
+        }
         if (mediaOccupancy.current.value) {
           dialog.warning({
             title: '当前媒体会话进行中',

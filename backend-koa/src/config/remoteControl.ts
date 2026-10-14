@@ -1,8 +1,5 @@
-import { activeAssistanceWhere } from '../services/assistanceGrantPolicy';
 import type { Server, Socket } from 'socket.io';
-import { Op } from 'sequelize';
 import { z } from 'zod';
-import { AssistanceGrant } from '../models/RemoteControl';
 import { getRemoteControlCapabilities } from '../services/remoteControlPolicy';
 import { getRemoteControlContext } from '../services/remoteControlContext';
 import {
@@ -29,7 +26,7 @@ const handshake = z.discriminatedUnion('role', [
     .object({
       token: z.string().min(1).max(8192),
       role: z.literal('host'),
-      platform: z.literal('macos'),
+      platform: z.enum(['macos', 'windows']),
       deviceId: uuid,
     })
     .strict(),
@@ -75,7 +72,7 @@ const fail = (code: string): never => {
 /** Dedicated namespace, authenticated native presence, bounded signaling, and durable admission. */
 export function initializeRemoteControl(io: Server) {
   const namespace = io.of('/remote-control');
-  const { authority, coordinator, service, store, history } = getRemoteControlContext();
+  const { authority, coordinator, service, store, history, deviceCodes } = getRemoteControlContext();
   const sessionsBySocket = new Map<string, string>();
   const sessions = new Map<string, RemoteSession>();
   const queues = new Map<string, { tail: Promise<unknown>; pending: number }>();
@@ -99,6 +96,7 @@ export function initializeRemoteControl(io: Server) {
   const unsubscribe = service.subscribe((s) => {
     emit(s, 'remote:state', snapshot(s));
     if (s.state === 'ended') {
+      if (s.admissionKind === 'device-code') deviceCodes.forget(s.grantId);
       emit(s, 'remote:ended', { sessionId: s.id });
       for (const id of [s.host.connectionId, s.controller.connectionId]) {
         if (sessionsBySocket.get(id) === s.id) sessionsBySocket.delete(id);
@@ -118,21 +116,21 @@ export function initializeRemoteControl(io: Server) {
     try {
       const token = socket.handshake.auth?.token;
       if (typeof token !== 'string') fail('AUTH_REVOKED');
-      const authenticated = await validateAuthenticatedSession(token);
-      const policy = getRemoteControlCapabilities(authenticated.userId);
-      if (!authority || !coordinator) fail(policy.reason);
+      await validateAuthenticatedSession(token);
+      const policy = getRemoteControlCapabilities();
+      if (!authority || !coordinator) fail('REMOTE_SERVICE_UNAVAILABLE');
       const input = handshake.parse(socket.handshake.auth);
       if (
         !authority ||
         !coordinator ||
         (input.role === 'host'
-          ? !policy.desktopHostEnabled
+          ? !policy.desktopHostEnabled || !policy.releasedPlatforms.includes(input.platform)
           : input.platform === 'web'
             ? !policy.webControllerReleaseEnabled
             : !policy.desktopControllerEnabled ||
               !policy.releasedPlatforms.includes(input.platform))
       )
-        fail(policy.reason);
+        fail('PLATFORM_UNSUPPORTED');
       connection = await authority!.connect(
         input.token,
         socket.id,
@@ -164,6 +162,20 @@ export function initializeRemoteControl(io: Server) {
       () => socket.disconnect(true),
       Math.max(1, connection.expiresAt - Date.now()),
     );
+    let issuingPresence = false;
+    const requestPresence = async () => {
+      // Do not replace a challenge while the native client is still proving it.
+      if (issuingPresence || connection.challenge || !socket.connected) return;
+      issuingPresence = true;
+      try {
+        const proof = await authority!.presenceChallenge(connection);
+        if (socket.connected) socket.emit('remote:presence-challenge', { proof });
+      } catch {
+        socket.disconnect(true);
+      } finally {
+        issuingPresence = false;
+      }
+    };
     const presence =
       connection.role === 'host'
         ? setInterval(() => {
@@ -174,10 +186,7 @@ export function initializeRemoteControl(io: Server) {
               socket.disconnect(true);
               return;
             }
-            void authority!
-              .presenceChallenge(connection)
-              .then((proof) => socket.emit('remote:presence-challenge', { proof }))
-              .catch(() => socket.disconnect(true));
+            void requestPresence();
           }, 10_000)
         : undefined;
     let bindingAttempts = 0,
@@ -230,16 +239,13 @@ export function initializeRemoteControl(io: Server) {
     }
     deadline.unref();
     presence?.unref();
-    if (connection.role === 'host')
-      void authority!
-        .presenceChallenge(connection)
-        .then((proof) => socket.emit('remote:presence-challenge', { proof }))
-        .catch(() => socket.disconnect(true));
+    if (connection.role === 'host') void requestPresence();
     socket.on('disconnect', () => {
       clearTimeout(deadline);
       clearInterval(presence);
       clearInterval(controllerTimer);
       authority!.disconnect(connection);
+      deviceCodes.disconnect(connection.endpoint);
       const sessionId = sessionsBySocket.get(socket.id);
       if (sessionId) void service.end(sessionId, 'ENDPOINT_DISCONNECTED').catch(() => {});
     });
@@ -254,13 +260,31 @@ export function initializeRemoteControl(io: Server) {
         const { proof } = z.object({ proof: z.unknown() }).strict().parse(value);
         await authority!.acceptPresence(connection, proof);
         ack({ ok: true });
-      } catch {
-        console.warn('remote_presence_rejected');
-        ack({ ok: false, code: 'INVALID_NATIVE_EVIDENCE' });
+      } catch (error) {
+        const code = error instanceof RemoteControlError ? error.code : 'INVALID_NATIVE_EVIDENCE';
+        console.warn('remote_presence_rejected', code);
+        ack({ ok: false, code });
         socket.disconnect(true);
       } finally {
         pending--;
       }
+    });
+    socket.on('remote:credentials', async (raw: unknown, ack: unknown) => {
+      if (typeof ack !== 'function') return;
+      if (pending >= 2) { ack({ ok: false, code: 'REMOTE_BACKPRESSURE' }); return; }
+      pending++;
+      try {
+        empty.parse(raw);
+        const credentials = await serial(socket.id, async () => {
+          if (connection.role !== 'host') fail('HOST_REQUIRED');
+          const host = await authority!.resolveConnection(connection.handle);
+          if (sessionsBySocket.has(socket.id)) fail('REMOTE_SESSION_BUSY');
+          return deviceCodes.issue(host);
+        });
+        ack({ ok: true, credentials });
+      } catch (error) {
+        ack({ ok: false, code: error instanceof RemoteControlError ? error.code : 'INVALID_REQUEST' });
+      } finally { pending--; }
     });
     for (const event of [
       'request',
@@ -299,11 +323,13 @@ export function initializeRemoteControl(io: Server) {
                 sessions.size >= 128
               )
                 fail('REMOTE_SESSION_BUSY');
-              const input = z
-                .object({ targetDeviceId: uuid, scope: z.enum(['view', 'control']) })
-                .strict()
-                .parse(envelope.payload);
-              const host = authority!.host(input.targetDeviceId);
+              const input = z.object({ deviceCode: z.string().regex(/^\d{9}$/),
+                  temporaryPassword: z.string().regex(/^[a-z2-9]{10}$/),
+                  scope: z.enum(['view', 'control']) }).strict().parse(envelope.payload);
+              const admission = deviceCodes.authorize(input.deviceCode, input.temporaryPassword, actor, envelope.requestId, input.scope);
+              const targetDeviceId = admission.host.endpointId;
+              const host = authority!.host(targetDeviceId);
+              if (connection.controllerDeviceId === targetDeviceId) fail('SELF_CONTROL_NOT_ALLOWED');
               if (
                 !host ||
                 !host.presence?.canCapture ||
@@ -311,19 +337,12 @@ export function initializeRemoteControl(io: Server) {
               )
                 fail('HOST_UNAVAILABLE');
               await authority!.assertCurrent(host!.endpoint);
-              const grant = await AssistanceGrant.findOne({
-                where: {
-                  hostDeviceId: input.targetDeviceId,
-                  controllerUserId: actor.userId,
-                  ...activeAssistanceWhere(),
-                },
-                order: [['createdAt', 'DESC']],
-              });
-              if (!grant) fail('ASSISTANCE_GRANT_REQUIRED');
+              if (!isEndpoint(admission.host, host!.endpoint)) fail('HOST_UNAVAILABLE');
               const { session } = await service.request({
                 requestId: envelope.requestId,
-                grantId: grant!.id,
-                grantCreatedBySid: grant!.createdBySid,
+                grantId: admission.id,
+                grantCreatedBySid: admission.host.sid,
+                admissionKind: 'device-code',
                 controller: actor,
                 host: host!.endpoint,
                 scope: input.scope,
@@ -473,7 +492,9 @@ export function initializeRemoteControl(io: Server) {
             }
             return session!;
           });
-          ack({ ok: true, sessionId: result.id, revision: result.revision, state: result.state });
+          ack({ ok: true, sessionId: result.id, revision: result.revision, state: result.state,
+            ...(event === 'request' ? { targetDeviceId: result.host.endpointId,
+              canHostControl: authority!.host(result.host.endpointId)?.presence?.canControl === true } : {}) });
         } catch (error) {
           const code =
             error instanceof RemoteControlError

@@ -4,7 +4,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 const titleRegions =
   '.chat-header, .group-im-shell header, .desktop-call-header, .desktop-windows-drag-region';
 const interactive =
-  'button, a, input, textarea, select, [role="button"], [role="switch"], [contenteditable]:not([contenteditable="false"]), [data-no-drag]';
+  'button, a, input, textarea, select, label, summary, [role="button"], [role="switch"], [role="tab"], [role="slider"], [role="dialog"], [tabindex], .cursor-pointer, [contenteditable]:not([contenteditable="false"]), [data-no-drag]';
+const topDragHeight = 50;
 
 /** 标题内容可拖动，窗口事件同步全屏留白和 Windows 最大化按钮。 */
 export function installDesktopWindowControls(
@@ -55,10 +56,16 @@ export function installDesktopWindowControls(
     const target = event.target;
     if (
       !(target instanceof Element) ||
-      !target.closest(titleRegions) ||
+      (event.clientY >= topDragHeight && !target.closest(titleRegions)) ||
       target.closest(interactive)
     )
       return;
+    // Preserve native scrollbar interaction, including scroll containers beneath the top band.
+    for (let element: Element | null = target; element; element = element.parentElement) {
+      if (!(element instanceof HTMLElement) || element.scrollHeight <= element.clientHeight) continue;
+      const rect = element.getBoundingClientRect();
+      if (event.clientX >= rect.left + element.clientLeft + element.clientWidth) return;
+    }
     event.preventDefault();
     // 原生拖动可能接管 mouseup，和 Tauri 拖动区一样在第二次 mousedown 处理双击。
     if (event.detail === 2) {

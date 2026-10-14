@@ -36,10 +36,59 @@ MAX_FRAME_BYTES = 4 * 1024 * 1024
 MAX_PENDING = 32
 MAX_SAFE_SEQUENCE = 9_007_199_254_740_991
 MAX_U64 = (1 << 64) - 1
+_WINDOWS_DLL_HANDLES = []
 
 
 def clock_ns():
+    if os.name == "nt":
+        # CPython uses QPC, matching the native Windows media clock.
+        return time.perf_counter_ns()
     return time.clock_gettime_ns(time.CLOCK_MONOTONIC)
+
+
+def wait_pipe_readable(fd, timeout):
+    if os.name != "nt":
+        return bool(select.select([fd], [], [], timeout)[0])
+    import msvcrt
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    peek = kernel.PeekNamedPipe
+    peek.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
+                     ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p]
+    peek.restype = wintypes.BOOL
+    handle = msvcrt.get_osfhandle(fd)
+    deadline = time.monotonic() + timeout
+    while True:
+        available = wintypes.DWORD()
+        if not peek(handle, None, 0, None, ctypes.byref(available), None):
+            error = ctypes.get_last_error()
+            if error in (109, 232):  # Broken/disconnected pipe: let read report EOF.
+                return True
+            raise ctypes.WinError(error)
+        if available.value:
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.005, remaining))
+
+
+def write_pipe(fd, data, timeout):
+    """The caller sets nonblocking mode; backpressure must not block the watchdog."""
+    deadline = time.monotonic() + timeout
+    while data:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("IPC_WRITE_TIMEOUT")
+        if os.name != "nt" and not select.select([], [fd], [], remaining)[1]:
+            raise TimeoutError("IPC_WRITE_TIMEOUT")
+        try:
+            count = os.write(fd, data)
+            if count <= 0:
+                raise BrokenPipeError("IPC_WRITE_CLOSED")
+            data = data[count:]
+        except BlockingIOError:
+            time.sleep(min(0.001, remaining))
 
 
 class IpcLineFramer:
@@ -140,7 +189,7 @@ class MediaLayoutTracker:
         geometry = value["geometry"]
         keys(geometry, ("displayId", "coordinateSpace", "displayBounds", "displayPixels", "rotationDegrees", "encodedSize", "contentRect"))
         integer(geometry["displayId"], 1, (1 << 32) - 1)
-        if geometry["coordinateSpace"] != "quartz-global-logical":
+        if geometry["coordinateSpace"] not in ("quartz-global-logical", "windows-desktop-physical"):
             raise ValueError("INVALID_MEDIA_LAYOUT")
         integer(geometry["rotationDegrees"], 0, 270)
         if geometry["rotationDegrees"] not in {0, 90, 180, 270}:
@@ -302,25 +351,54 @@ class MediaDeadline:
         return not self.terminal and self.deadline is not None and now_ns < self.deadline
 
 
-def load_sdk(registry, sdk_root=None):
+def load_gst(registry, sdk_root=None):
+    sdk = Path(sdk_root) if sdk_root is not None else Path(sysconfig.get_paths()["purelib"])
+    if os.name == "nt":
+        directories = [str(sdk / package / "bin") for package in
+                       ("gstreamer_ext_runtime", "gstreamer_libs", "gstreamer_plugins_libs")]
+        for directory in directories:
+            _WINDOWS_DLL_HANDLES.append(os.add_dll_directory(directory))
+        os.environ["PYGI_DLL_DIRS"] = os.pathsep.join(directories)
+        # GModule resolves transitive plugin imports using the Windows DLL path.
+        os.environ["PATH"] = os.pathsep.join(directories + [os.environ.get("PATH", "")])
+        sys.path.insert(0, str(sdk / "gstreamer_python/Lib/site-packages"))
+        typelib_directories = [sdk / package / "lib/girepository-1.0" for package in
+                               ("gstreamer_libs", "gstreamer_plugins", "gstreamer_plugins_libs", "gstreamer_python")]
+        os.environ["GI_TYPELIB_PATH"] = os.pathsep.join(str(path) for path in typelib_directories)
+        repository = ctypes.CDLL(str(sdk / "gstreamer_libs/bin/girepository-1.0-1.dll"))
+        repository.g_irepository_prepend_search_path.argtypes = [ctypes.c_char_p]
+        for directory in typelib_directories:
+            repository.g_irepository_prepend_search_path(str(directory).encode("utf-8"))
+        repository.g_irepository_prepend_library_path.argtypes = [ctypes.c_char_p]
+        for directory in directories:
+            repository.g_irepository_prepend_library_path(directory.encode("utf-8"))
     os.environ.update(GST_PLUGIN_SYSTEM_PATH_1_0="", GST_PLUGIN_PATH_1_0="",
                       GST_REGISTRY_1_0=registry, GST_REGISTRY_FORK="no")
     import gi
     gi.require_version("Gst", "1.0")
+    from gi.repository import GLib, Gst
+    Gst.init(None)
+    for name in ("coreelements", "app"):
+        filename = f"gst{name}.dll" if os.name == "nt" else f"libgst{name}.dylib"
+        Gst.Plugin.load_file(str(sdk / "gstreamer_libs/lib/gstreamer-1.0" / filename))
+    return GLib, Gst, sdk
+
+
+def load_sdk(registry, sdk_root=None):
+    GLib, Gst, sdk = load_gst(registry, sdk_root)
+    import gi
     gi.require_version("GstSdp", "1.0")
     gi.require_version("GstWebRTC", "1.0")
-    from gi.repository import GLib, Gst, GstSdp, GstWebRTC
-    Gst.init(None)
-    sdk = Path(sdk_root) if sdk_root is not None else Path(sysconfig.get_paths()["purelib"])
-    for package, names in [("gstreamer_libs", ["coreelements", "app"]),
-                           ("gstreamer_plugins", ["videoparsersbad", "rtp", "rtpmanager", "nice", "dtls", "srtp", "sctp", "webrtc"])]:
-        for name in names:
-            Gst.Plugin.load_file(str(sdk / package / "lib/gstreamer-1.0" / f"libgst{name}.dylib"))
+    from gi.repository import GstSdp, GstWebRTC
+    for name in ("videoparsersbad", "rtp", "rtpmanager", "nice", "dtls", "srtp", "sctp", "webrtc"):
+        filename = f"gst{name}.dll" if os.name == "nt" else f"libgst{name}.dylib"
+        Gst.Plugin.load_file(str(sdk / "gstreamer_plugins/lib/gstreamer-1.0" / filename))
     return GLib, Gst, GstSdp, GstWebRTC, sdk
 
 
 def bind_loopback(peer, sdk):
-    nice = ctypes.CDLL(str(sdk / "gstreamer_plugins_libs/lib/libnice.10.dylib"))
+    library = "bin/nice-10.dll" if os.name == "nt" else "lib/libnice.10.dylib"
+    nice = ctypes.CDLL(str(sdk / "gstreamer_plugins_libs" / library))
     nice.nice_address_new.restype = ctypes.c_void_p
     nice.nice_address_set_from_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
     nice.nice_address_set_from_string.restype = ctypes.c_int
@@ -340,6 +418,14 @@ def bind_loopback(peer, sdk):
         nice.nice_address_free(address)
     # Keep GI wrappers and their plugin library alive for the entire native peer.
     return ice_agent, agent, nice
+
+
+def h264_rtp_caps(payload):
+    # RFC 6184 table 5: 42/x1xx0000 is constrained baseline. Windows MF emits
+    # 42401f; VideoToolbox emits 42c01f/42e01f. Preserve the encoded SPS bytes.
+    profiles = "42e01f,42c01f,42401f" if os.name == "nt" else "42e01f,42c01f"
+    return (f"application/x-rtp,media=video,encoding-name=H264,payload={payload},"
+            f"clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string){{{profiles}}}")
 
 
 class Engine:
@@ -377,9 +463,8 @@ class Engine:
         self.bytes = 0
         self.reason = "STOPPED"
         self.last_heartbeat = clock_ns()
-        # VT hardware/software emit equivalent constrained-baseline SPS values
-        # 42c01f/42e01f. Gst caps compare strings, so retain both locally while
-        # SDP selects the offered 42e01f. Do not rewrite SPS constraint bits.
+        # Gst compares caps as strings; h264_rtp_caps retains observed platform
+        # variants while SDP selects the offered 42e01f. Never rewrite SPS bits.
         # No STAP-A aggregation: system WKWebView received RTP but assembled no
         # video frames with zero-latency aggregation in the real-device probe.
         self.pipeline = self.Gst.parse_launch(
@@ -388,7 +473,7 @@ class Engine:
             'caps=video/x-h264,stream-format=byte-stream,alignment=au,width=1280,height=720,framerate=15/1 ! '
             'h264parse ! rtph264pay name=screenpay pt=96 config-interval=-1 aggregate-mode=none ! '
             'queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! '
-            'capsfilter name=screenrtp caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string){42e01f,42c01f}" ! peer.')
+            f'capsfilter name=screenrtp caps="{h264_rtp_caps(96)}" ! peer.')
         self.peer = self.pipeline.get_by_name("peer")
         self.sdk = sdk
         self.ice_policy = "loopback"
@@ -415,8 +500,13 @@ class Engine:
         # A congested GLib/IPC queue must not postpone stopping the capture process.
         if self.screen is not None and self.screen.poll() is None:
             try:
-                self.screen.terminate()
-            except ProcessLookupError:
+                if os.name == "nt":
+                    # TerminateProcess cannot run the source's pipeline cleanup.
+                    # EOF wakes its watchdog; run() and the native Job still bound exit.
+                    self.screen.stdin.close()
+                else:
+                    self.screen.terminate()
+            except (ProcessLookupError, OSError):
                 pass
         self.GLib.idle_add(self.loop.quit)
 
@@ -426,16 +516,7 @@ class Engine:
             return False
         try:
             data = self.codec.encode(kind, payload)
-            deadline = time.monotonic() + 0.1
-            while data:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or not select.select([], [sys.stdout.fileno()], [], remaining)[1]:
-                    raise TimeoutError()
-                try:
-                    written = os.write(sys.stdout.fileno(), data)
-                    data = data[written:]
-                except BlockingIOError:
-                    continue
+            write_pipe(sys.stdout.fileno(), data, 0.1)
             return True
         except (OSError, ValueError, TimeoutError):
             self.fail("IPC_WRITE_FAILED")
@@ -469,7 +550,7 @@ class Engine:
         framer = IpcLineFramer()
         try:
             while not self.closed.is_set():
-                if not select.select([sys.stdin.fileno()], [], [], 0.1)[0]:
+                if not wait_pipe_readable(sys.stdin.fileno(), 0.1):
                     continue
                 chunk = os.read(sys.stdin.fileno(), 8192)
                 if not chunk:
@@ -511,7 +592,7 @@ class Engine:
             self.offer_received = True
             self.pipeline.get_by_name("screenpay").set_property("pt", value)
             self.pipeline.get_by_name("screenrtp").set_property("caps", self.Gst.Caps.from_string(
-                f"application/x-rtp,media=video,encoding-name=H264,payload={value},clock-rate=90000,packetization-mode=(string)1,profile-level-id=(string){{42e01f,42c01f}}"))
+                h264_rtp_caps(value)))
             _, sdp = self.GstSdp.SDPMessage.new()
             if self.GstSdp.sdp_message_parse_buffer(payload["sdp"].encode(), sdp) != self.GstSdp.SDPResult.OK:
                 raise ValueError()
@@ -716,7 +797,8 @@ class Engine:
             raise ValueError()
         self.media_started_at_ns = clock_ns()
         self.screen = subprocess.Popen([self.source, *self.source_args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, bufsize=0, close_fds=True)
+                                       stderr=subprocess.PIPE, bufsize=0, close_fds=True,
+                                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         os.set_blocking(self.screen.stdin.fileno(), False)
         threading.Thread(target=self.read_screen, daemon=True).start()
         self.diagnostics_thread = threading.Thread(target=self.read_diagnostics, daemon=True)
@@ -859,7 +941,7 @@ def read_bootstrap():
     bootstrap = bytearray()
     deadline = time.monotonic() + 5
     while b"\n" not in bootstrap and time.monotonic() < deadline:
-        if select.select([sys.stdin.fileno()], [], [], max(0, deadline - time.monotonic()))[0]:
+        if wait_pipe_readable(sys.stdin.fileno(), max(0, deadline - time.monotonic())):
             value = os.read(sys.stdin.fileno(), 1)
             if not value:
                 raise ValueError("BOOTSTRAP_EOF")

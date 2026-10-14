@@ -636,6 +636,8 @@ import { getUserList } from '@/api/auth';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 import { groupSessionState } from '@/services/groupSessionState';
 
 const router = useRouter();
@@ -872,11 +874,25 @@ function handleChatClick(group: Group) {
 
 // 群组视频通话
 function handleVideoCall(group: Group) {
+  if (isDesktopWindow) {
+    void openDesktopGroupWindow(`/group-video/${group.id}`).catch((error) =>
+      message.warning(error.message),
+    );
+    return;
+  }
   router.push(`/group-video/${group.id}`);
 }
 
 // 群组屏幕共享
 async function handleScreenShare(group: Group) {
+  if (isDesktopWindow) {
+    try {
+      await openDesktopGroupWindow(`/group-screen/${group.id}`);
+    } catch (error: any) {
+      message.warning(error.message);
+    }
+    return;
+  }
   if (groupSessionState.getSession(group.id, 'screen')) {
     await router.push(`/group-screen/${group.id}`);
     return;

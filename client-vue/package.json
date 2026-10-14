@@ -1,7 +1,7 @@
 {
   "name": "client-vue",
   "private": true,
-  "version": "0.8.0-alpha.4",
+  "version": "0.9.0-alpha.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "build": "node ../scripts/product-version.mjs check && vue-tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "desktop:dev": "tauri dev",
+    "desktop:dev": "node ../scripts/remote-control-desktop-dev.mjs",
+    "desktop:dev:chat": "tauri dev",
     "desktop:build": "node ../scripts/product-version.mjs check && tauri build",
     "desktop:check": "tauri info",
     "desktop:web:dev": "vite --config vite.desktop.config.ts --mode desktop",

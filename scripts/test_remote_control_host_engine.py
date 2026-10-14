@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import ssl
 import struct
@@ -22,6 +23,39 @@ spec.loader.exec_module(engine)
 
 
 class EngineContractTests(unittest.TestCase):
+    def test_windows_physical_layout_is_preserved(self):
+        message = self.layout_message()
+        message['geometry']['coordinateSpace'] = 'windows-desktop-physical'
+        tracker = engine.MediaLayoutTracker()
+        tracker.source(message)
+        self.assertEqual(tracker.snapshot()['geometry']['coordinateSpace'], 'windows-desktop-physical')
+
+    def test_native_pipe_readiness_data_eof_and_write_backpressure(self):
+        reader, writer = os.pipe()
+        try:
+            os.set_blocking(writer, False)
+            self.assertFalse(engine.wait_pipe_readable(reader, 0.01))
+            engine.write_pipe(writer, b"hello\n", 0.1)
+            self.assertTrue(engine.wait_pipe_readable(reader, 0.1))
+            self.assertEqual(os.read(reader, 6), b"hello\n")
+            with self.assertRaises(TimeoutError):
+                engine.write_pipe(writer, b"x" * (1024 * 1024), 0.03)
+            os.close(writer)
+            writer = None
+            while os.read(reader, 8192):
+                pass
+            self.assertTrue(engine.wait_pipe_readable(reader, 0.1))
+            self.assertEqual(os.read(reader, 1), b"")
+        finally:
+            os.close(reader)
+            if writer is not None:
+                os.close(writer)
+
+    def test_media_clock_is_positive_and_monotonic_on_this_platform(self):
+        first = engine.clock_ns()
+        self.assertGreater(first, 0)
+        self.assertGreaterEqual(engine.clock_ns(), first)
+
     def test_live_engine_survives_sixty_seconds_with_continuously_renewed_leases(self):
         instance = object.__new__(engine.Engine)
         instance.closed = threading.Event()

@@ -9,6 +9,7 @@ export interface NativeRemoteCapabilities {
   osVersion: string;
   protocolVersion: number;
   engineReady: boolean;
+  reason?: string;
   canCapture: boolean;
   canInjectInput: boolean;
   deviceRegistrationReady?: boolean;
@@ -45,7 +46,7 @@ export interface RemoteCapabilities {
 }
 export const remoteCapabilityMessages: Record<RemoteCapabilityReason, string> = {
   RELEASE_UNAVAILABLE: '暂时无法确认远程控制发布状态，请稍后重试。',
-  NOT_RELEASED: '此版本暂未开放远程控制，可继续使用屏幕共享。',
+  NOT_RELEASED: '服务端尚未开放此平台的远程控制，请更新后端并刷新状态。',
   PLATFORM_UNSUPPORTED: '当前桌面系统暂不支持远程控制。',
   PROTOCOL_MISMATCH: '当前客户端的远程控制协议不兼容，请升级客户端。',
   CONTROLLER_UNSUPPORTED: '当前环境不支持此版本的远程协助，请升级客户端或浏览器。',

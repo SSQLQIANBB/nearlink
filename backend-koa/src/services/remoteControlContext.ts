@@ -9,10 +9,12 @@ import { RemoteAuthorizationCoordinator } from './remoteAuthorizationCoordinator
 import { remoteCredentialSignerFromEnvironment } from './remoteCredentials';
 import { getRemoteControlCapabilities } from './remoteControlPolicy';
 import { RemoteControlError } from './remoteControlProtocol';
+import { RemoteDeviceCodes } from './remoteDeviceCodes';
 
 function createContext() {
+  const deviceCodes = new RemoteDeviceCodes();
   const store = new RedisRemoteSessionStore(redis),
-    history = new RemoteSessionHistory();
+    history = new RemoteSessionHistory(deviceCodes);
   const service = new RemoteControlService(store, Date.now, history);
   const signer = remoteCredentialSignerFromEnvironment();
   const authority = signer
@@ -21,10 +23,7 @@ function createContext() {
           authenticate: validateAuthenticatedSession,
           device: async (id) => (await RemoteDevice.findByPk(id))?.get({ plain: true }) || null,
           released: async (session) => {
-            const policy = getRemoteControlCapabilities(session.host.userId);
-            if (!policy.desktopHostEnabled) throw new RemoteControlError(policy.reason, 503);
-            if (!getRemoteControlCapabilities(session.controller.userId).desktopControllerEnabled)
-              throw new RemoteControlError('NATIVE_VALIDATION_PENDING', 503);
+            const policy = getRemoteControlCapabilities();
             const host = authority?.host(session.host.endpointId);
             if (
               !host ||
@@ -42,7 +41,7 @@ function createContext() {
     signer && authority
       ? new RemoteAuthorizationCoordinator(service, store, history, signer, authority)
       : null;
-  return { store, history, service, signer, authority, coordinator };
+  return { store, history, service, signer, authority, coordinator, deviceCodes };
 }
 let context: ReturnType<typeof createContext> | undefined;
 /** Runtime cleanup, REST discovery and Socket admission share the same service owner. */

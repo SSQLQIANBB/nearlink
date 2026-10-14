@@ -16,7 +16,6 @@ import {
 } from '../../../src/services/remoteCredentials';
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubEnv('REMOTE_CONTROL_PREVIEW_USER_IDS', '2');
 });
 afterEach(() => {
   vi.clearAllTimers();

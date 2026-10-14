@@ -865,6 +865,14 @@ mod macos {
 // Production activation remains gated; the harness uses a recording sink.
 pub use macos::MacOsInputExecutor;
 
+#[cfg(target_os = "windows")]
+#[path = "windows_input.rs"]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::WindowsInputExecutor as PlatformInputExecutor;
+#[cfg(not(target_os = "windows"))]
+pub use MacOsInputExecutor as PlatformInputExecutor;
+
 #[cfg(not(target_os = "macos"))]
 pub struct MacOsInputExecutor;
 #[cfg(not(target_os = "macos"))]

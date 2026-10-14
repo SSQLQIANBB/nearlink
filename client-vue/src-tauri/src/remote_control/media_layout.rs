@@ -110,7 +110,7 @@ impl MediaLayout {
         if self.screen_id != "primary"
             || self.layout_version == 0
             || self.layout_version > 9_007_199_254_740_991
-            || self.geometry.coordinate_space != "quartz-global-logical"
+            || !matches!(self.geometry.coordinate_space.as_str(), "quartz-global-logical" | "windows-desktop-physical")
         {
             return Err("REMOTE_MEDIA_LAYOUT_INVALID");
         }
@@ -264,7 +264,32 @@ pub(super) fn primary_display_snapshot() -> LayoutResult<DisplaySnapshot> {
     }
     Ok(snapshot)
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub(super) fn primary_display_snapshot() -> LayoutResult<DisplaySnapshot> {
+    use windows_sys::Win32::Graphics::Gdi::{EnumDisplaySettingsW, DEVMODEW, ENUM_CURRENT_SETTINGS};
+    let mut mode: DEVMODEW = unsafe { std::mem::zeroed() };
+    mode.dmSize = std::mem::size_of::<DEVMODEW>() as u16;
+    // Display settings are physical pixels, independent of the WebView's DPI.
+    if unsafe { EnumDisplaySettingsW(std::ptr::null(), ENUM_CURRENT_SETTINGS, &mut mode) } == 0 {
+        return Err("REMOTE_MEDIA_LAYOUT_UNAVAILABLE");
+    }
+    let display = unsafe { mode.Anonymous1.Anonymous2 };
+    DisplaySnapshot {
+        display_id: 1,
+        bounds: Rect {
+            x: f64::from(display.dmPosition.x),
+            y: f64::from(display.dmPosition.y),
+            width: f64::from(mode.dmPelsWidth),
+            height: f64::from(mode.dmPelsHeight),
+        },
+        pixels: PixelSize { width: mode.dmPelsWidth, height: mode.dmPelsHeight },
+        rotation_degrees: match display.dmDisplayOrientation {
+            0 => 0, 1 => 90, 2 => 180, 3 => 270,
+            _ => return Err("REMOTE_MEDIA_LAYOUT_INVALID"),
+        },
+    }.validate()
+}
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub(super) fn primary_display_snapshot() -> LayoutResult<DisplaySnapshot> {
     Err("REMOTE_MEDIA_LAYOUT_UNSUPPORTED")
 }
@@ -278,6 +303,15 @@ pub(super) fn fixture() -> MediaLayout {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn windows_coordinate_space_is_preserved_and_unknown_spaces_are_rejected() {
+        let mut layout = fixture();
+        layout.geometry.coordinate_space = "windows-desktop-physical".into();
+        assert!(layout.validate().is_ok());
+        assert_eq!(MediaLayout::parse(serde_json::to_value(&layout).unwrap()).unwrap(), layout);
+        layout.geometry.coordinate_space = "unverified".into();
+        assert!(layout.validate().is_err());
+    }
     #[test]
     fn shared_fixture_maps_retina_centres_edges_and_rotations_without_double_transform() {
         let fixture: Value = serde_json::from_str(include_str!(

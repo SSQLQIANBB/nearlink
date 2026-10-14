@@ -6,6 +6,7 @@ fn main() {
     println!("cargo:rerun-if-changed=remote-control-sidecars.json");
     println!("cargo:rerun-if-env-changed=TODE_REMOTE_ENGINE_BUNDLE");
     println!("cargo:rerun-if-changed=src/remote_control/engine_bundle_format.rs");
+    println!("cargo:rerun-if-changed=src/remote_control/windows_engine_bundle.rs");
     let legacy: serde_json::Value = serde_json::from_slice(
         &std::fs::read("remote-control-sidecars.json").expect("read legacy sidecar selection"),
     )
@@ -18,6 +19,22 @@ fn main() {
     let target = std::env::var("TARGET").expect("Cargo target");
     println!("cargo:rustc-env=TODE_REMOTE_ENGINE_TARGET={target}");
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
+    println!("cargo:rerun-if-env-changed=TODE_REMOTE_DEV_PUBLIC_KEY");
+    let mut trusted_keys: Vec<serde_json::Value> = serde_json::from_slice(
+        &std::fs::read("remote-control-trusted-keys.json").expect("read trusted keys"),
+    ).expect("valid trusted keys");
+    if let Some(path) = std::env::var_os("TODE_REMOTE_DEV_PUBLIC_KEY") {
+        assert_eq!(std::env::var("PROFILE").as_deref(), Ok("debug"), "Development trust is debug-only");
+        let path = std::path::PathBuf::from(path);
+        println!("cargo:rerun-if-changed={}", path.display());
+        let key: serde_json::Value = serde_json::from_slice(&std::fs::read(path).expect("read development public key"))
+            .expect("valid development public key");
+        if !trusted_keys.iter().any(|existing| existing["keyId"] == key["keyId"]) {
+            trusted_keys.push(key);
+        }
+    }
+    std::fs::write(out.join("remote-control-trusted-keys.json"), serde_json::to_vec(&trusted_keys).unwrap())
+        .expect("embed trusted public keys");
     let selected = match std::env::var_os("TODE_REMOTE_ENGINE_BUNDLE") {
         None => b"[]".to_vec(),
         Some(path) => {
@@ -50,6 +67,12 @@ fn main() {
     // App commands otherwise bypass the per-window capability allowlist.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "screen_share_sources",
+            "screen_share_preview",
+            "screen_share_start",
+            "screen_share_frame",
+            "screen_share_present",
+            "screen_share_stop",
             "remote_control_capabilities",
             "remote_control_open_permission_settings",
             "remote_control_stop",

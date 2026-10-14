@@ -206,11 +206,13 @@ pub(super) fn show(mtm: MainThreadMarker, parent: &NSWindow, prompt: Prompt) -> 
     checkbox.setFont(Some(&NSFont::systemFontOfSize(17.0)));
     checkbox.setContentTintColor(Some(&color(0x354157)));
     checkbox.setState(0);
+    checkbox.setHidden(!prompt.allow_remember);
     root.addSubview(&checkbox);
     label(
         mtm,
         &root,
-        "可在本机协助设置恢复每次确认；该操作不会结束当前会话。",
+        if prompt.allow_remember { "可在本机协助设置恢复每次确认；该操作不会结束当前会话。" }
+        else { "设备代码连接每次都需要本机确认，不会保存自动允许。" },
         rect(34.0, 307.0, 632.0, 24.0),
         13.0,
         0x7789A4,
@@ -260,9 +262,10 @@ pub(super) fn show(mtm: MainThreadMarker, parent: &NSWindow, prompt: Prompt) -> 
     // All key-loop views are retained by the content view for the modal lifetime.
     unsafe {
         reject.setNextKeyView(Some(&view));
-        view.setNextKeyView(Some(control.as_deref().map(|v| &**v).unwrap_or(&checkbox)));
+        let after_allow = if prompt.allow_remember { &checkbox } else { &reject };
+        view.setNextKeyView(Some(control.as_deref().map(|v| &**v).unwrap_or(after_allow)));
         if let Some(control) = &control {
-            control.setNextKeyView(Some(&checkbox));
+            control.setNextKeyView(Some(after_allow));
         }
         checkbox.setNextKeyView(Some(&reject));
     }
@@ -282,7 +285,7 @@ pub(super) fn show(mtm: MainThreadMarker, parent: &NSWindow, prompt: Prompt) -> 
     panel.makeKeyAndOrderFront(None);
     let response = app.runModalForWindow(&panel);
     timer.invalidate();
-    let result = choice(response, prompt.control, checkbox.state() == 1);
+    let result = choice(response, prompt.control, prompt.allow_remember && checkbox.state() == 1);
     parent.endSheet(&panel);
     panel.orderOut(None);
     result

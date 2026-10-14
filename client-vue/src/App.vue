@@ -7,7 +7,8 @@
       <n-notification-provider>
         <n-dialog-provider>
           <GroupCallInvitations />
-          <GlobalPrivateCall />
+          <DesktopAuxiliaryHost v-if="isDesktopWindow" />
+          <GlobalPrivateCall v-else />
           <GlobalRemoteControl />
           <GlobalRemoteControlHost />
           <GlobalMessages />
@@ -22,6 +23,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
+import DesktopAuxiliaryHost from '@/components/DesktopAuxiliaryHost.vue';
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
 const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
@@ -39,7 +42,7 @@ import { useRoute } from 'vue-router';
 import type { GlobalThemeOverrides } from 'naive-ui';
 const route = useRoute();
 const designTheme = computed<GlobalThemeOverrides>(() =>
-  ['/remote', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/')
+  ['/remote', '/remote-control', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/')
     ? {
         common: {
           primaryColor: '#2563eb',

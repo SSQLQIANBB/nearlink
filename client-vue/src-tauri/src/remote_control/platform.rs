@@ -71,9 +71,30 @@ pub fn permissions() -> (PermissionState, PermissionState) {
 }
 
 #[cfg(target_os = "windows")]
+pub(super) fn interactive_desktop() -> bool {
+    use std::ffi::c_void;
+    #[link(name = "user32")]
+    extern "system" {
+        fn OpenInputDesktop(flags: u32, inherit: i32, access: u32) -> *mut c_void;
+        fn GetUserObjectInformationW(object: *mut c_void, index: i32, info: *mut c_void, length: u32, needed: *mut u32) -> i32;
+        fn CloseDesktop(desktop: *mut c_void) -> i32;
+    }
+    let desktop = unsafe { OpenInputDesktop(0, 0, 1 /* DESKTOP_READOBJECTS */) };
+    if desktop.is_null() { return false; }
+    let mut name = [0u16; 64];
+    let mut required = 0;
+    let read = unsafe { GetUserObjectInformationW(desktop, 2 /* UOI_NAME */, name.as_mut_ptr().cast(), std::mem::size_of_val(&name) as u32, &mut required) };
+    unsafe { CloseDesktop(desktop) };
+    let end = name.iter().position(|v| *v == 0).unwrap_or(name.len());
+    read != 0 && String::from_utf16_lossy(&name[..end]) == "Default"
+}
+
+#[cfg(target_os = "windows")]
 pub fn permissions() -> (PermissionState, PermissionState) {
-    // OS version alone cannot establish capture access or SendInput/UIPI success.
-    (PermissionState::Unknown, PermissionState::Unknown)
+    // Windows has no TCC grant: access is limited to the interactive desktop.
+    // Capture progress and SendInput/UIPI failures are still enforced at runtime.
+    let access = if interactive_desktop() { PermissionState::Granted } else { PermissionState::Denied };
+    (access, access)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]

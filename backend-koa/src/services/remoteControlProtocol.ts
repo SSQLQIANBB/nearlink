@@ -48,6 +48,7 @@ export type RemoteSession = {
   requestId: string;
   requestHash: string;
   grantId: string;
+  admissionKind?: 'device-code';
   grantCreatedBySid?: string;
   controller: RemoteEndpoint;
   host: RemoteEndpoint;

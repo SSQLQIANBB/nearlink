@@ -11,6 +11,7 @@ import {
   SocketRemoteControllerAdapter,
   type RemoteControllerAdapter,
   type RemoteControllerEvent,
+  type RemoteCodeConnection,
 } from '@/services/remoteControlAdapter';
 import {
   RemoteControlPeer,
@@ -46,19 +47,13 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   let queuedBytes = 0;
   let videoElement: HTMLVideoElement | null = null;
 
-  async function start(target: RemoteTarget, requestedScope: 'view' | 'control') {
+  async function start(target: RemoteCodeConnection, requestedScope: 'view' | 'control') {
     const capabilities = useRemoteControlStore();
     const auth = useAuthStore();
-    const discovered = capabilities.targets.find((item) => item.deviceId === target.deviceId);
     if (
       !capabilities.canControl ||
       !auth.token ||
-      auth.loggingOut ||
-      !discovered ||
-      !discovered.online ||
-      discovered.busy ||
-      !discovered.canHostView ||
-      (requestedScope === 'control' && !discovered.canHostControl)
+      auth.loggingOut
     )
       throw new Error('当前设备暂不能发起远程协助');
     if (visible.value) throw new Error('请先结束当前远程协助');
@@ -67,7 +62,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     );
     if (!claim) throw new Error('请先结束当前通话或屏幕共享');
     const current = ++generation;
-    device.value = { ...discovered };
+    device.value = null;
     controllerDeviceVerified.value = false;
     sessionId.value = null;
     stream.value = null;
@@ -99,7 +94,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
         (event) => queue(event, current),
         bindDevice ? { deviceId: localDeviceId!, prove: proveRemoteController } : undefined,
       );
-      const id = await adapter.request(target.deviceId, requestedScope);
+      const id = await adapter.request(target, requestedScope);
       if (current !== generation) return;
       sessionId.value = id;
       if (phase.value === 'requesting') phase.value = 'pending';
@@ -158,7 +153,10 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     event: Exclude<RemoteControllerEvent, { type: 'ended' }>,
     current: number,
   ) {
-    if (event.type === 'device-verified') {
+    if (event.type === 'target-resolved') {
+      device.value = { deviceId: event.deviceId, alias: '远程设备', platform: '', online: true,
+        busy: true, canHostView: true, canHostControl: event.canHostControl };
+    } else if (event.type === 'device-verified') {
       controllerDeviceVerified.value = true;
     } else if (event.type === 'connecting') {
       if (peer) throw new Error('REMOTE_CONNECTING_REPLAY');

@@ -22,6 +22,16 @@ const fixtures = JSON.parse(
 }>;
 const fresh = () => structuredClone(fixtures[0]!.layout);
 describe('远控内容矩形合同', () => {
+  it('保留 Windows 物理像素坐标类型并沿用内容矩形映射', () => {
+    const layout = fresh();
+    layout.geometry.coordinateSpace = 'windows-desktop-physical';
+    layout.geometry.displayBounds.width = layout.geometry.displayPixels.width;
+    layout.geometry.displayBounds.height = layout.geometry.displayPixels.height;
+    expect(parseRemoteControlLayout(layout)).toEqual(layout);
+    const invalid = structuredClone(layout) as unknown as { geometry: { coordinateSpace: string } };
+    invalid.geometry.coordinateSpace = 'unverified';
+    expect(parseRemoteControlLayout(invalid)).toBeNull();
+  });
   it.each(fixtures)('$name 与原生共享角点/中心及两层黑边样例', (fixture) => {
     const parsed = parseRemoteControlLayout(fixture.layout)!;
     expect(parsed).not.toBeNull();

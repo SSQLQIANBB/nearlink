@@ -20,6 +20,7 @@ pub(super) struct Prompt {
     pub controller_account: u64,
     pub details: String,
     pub control: bool,
+    pub allow_remember: bool,
     pub deadline: std::time::Instant,
 }
 #[cfg(target_os = "macos")]

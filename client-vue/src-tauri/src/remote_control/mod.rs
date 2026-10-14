@@ -28,6 +28,10 @@ mod identity;
 mod native_host;
 mod native_presence;
 mod platform;
+#[cfg(target_os = "windows")]
+mod windows_capture;
+#[cfg(target_os = "windows")]
+mod windows_process;
 #[cfg(all(feature = "remote-control-harness", not(debug_assertions)))]
 compile_error!("remote-control-harness is a debug-only development binary; never enable it in a packaged release");
 
@@ -69,7 +73,7 @@ pub struct RemoteControlState {
     host: Mutex<Option<host_runtime::HostSupervisor>>,
     identity: Arc<Mutex<identity::IdentityState>>,
     bridge: Mutex<Option<native_host::NativeHostBridge>>,
-    engine_ready: OnceLock<bool>,
+    engine_ready: OnceLock<Result<(), &'static str>>,
     consent_memory_epoch: Arc<Mutex<u64>>,
 }
 
@@ -155,7 +159,7 @@ pub async fn remote_control_presence(
 ) -> Result<authorization::SignedEnvelope, &'static str> {
     require_main_window(window.label())?;
     tauri::async_runtime::spawn_blocking(move || {
-        if std::env::consts::OS != "macos" {
+        if !platform::probe().candidate_platform {
             return Err("PLATFORM_UNSUPPORTED");
         }
         let engine = engine_bundle::TrustedEngineBundle::from_app(&app)
@@ -185,7 +189,7 @@ pub async fn remote_control_start_host(
 ) -> Result<(), &'static str> {
     require_main_window(window.label())?;
     tauri::async_runtime::spawn_blocking(move || {
-        if std::env::consts::OS != "macos" {
+        if !platform::probe().candidate_platform {
             return Err("PLATFORM_UNSUPPORTED");
         }
         let state = app.state::<RemoteControlState>();
@@ -238,18 +242,26 @@ pub async fn remote_control_capabilities(
     require_main_window(window.label())?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<RemoteControlState>();
-        let ready = *state.engine_ready.get_or_init(|| {
-            std::env::consts::OS == "macos"
-                && platform::probe().candidate_platform
-                && host_process::ProcessMediaDriver::probe_bundled(&app).is_ok()
+        let readiness = *state.engine_ready.get_or_init(|| {
+            if !platform::probe().candidate_platform {
+                return Err("PLATFORM_UNSUPPORTED");
+            }
+            if !engine_bundle::is_configured() {
+                return Err("REMOTE_ENGINE_NOT_CONFIGURED");
+            }
+            host_process::ProcessMediaDriver::probe_bundled(&app)
         });
-        capabilities(ready)
+        let mut result = capabilities(readiness.is_ok());
+        if let Err(reason) = readiness {
+            result.reason = reason;
+        }
+        result
     }).await.map_err(|_| "REMOTE_NATIVE_WORKER_FAILED")
 }
 
 fn capabilities(engine_ready: bool) -> RemoteControlCapabilities {
     let probe = platform::probe();
-    let engine_ready = engine_ready && probe.candidate_platform && probe.platform == "macos";
+    let engine_ready = engine_ready && probe.candidate_platform;
     RemoteControlCapabilities {
         runtime: "tauri",
         platform: probe.platform,

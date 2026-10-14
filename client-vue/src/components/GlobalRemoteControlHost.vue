@@ -1,6 +1,6 @@
 <template>
   <aside
-    v-if="host.phase !== 'offline'"
+    v-if="host.session"
     class="remote-ui host-status"
     role="status"
     aria-label="本机远程协助"
@@ -13,10 +13,9 @@
             : '对方正在远程查看本机'
           : host.phase === 'pending'
             ? '请在系统弹窗中确认协助请求'
-            : '本机远程协助已开启'
+            : '正在建立远程连接'
       }}
     </strong>
-    <span v-if="host.phase === 'online'">请求按本机已保存的允许范围确认</span>
     <n-button
       size="small"
       type="error"
@@ -55,9 +54,5 @@ const host = useRemoteControlHostStore();
 }
 .host-status strong {
   font-size: 14px;
-}
-.host-status span {
-  color: #72839e;
-  font-size: 12px;
 }
 </style>

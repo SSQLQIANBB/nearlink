@@ -3,8 +3,8 @@ import { defineStore } from 'pinia';
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core';
 import { io, type Socket } from 'socket.io-client';
 import { publicEnv } from '@/config/env';
-import { getRemoteSessionIce, getRemoteControlRelease } from '@/api/remoteControl';
-import { confirmRemoteNativeRequest } from '@/services/remoteDeviceNative';
+import { getRemoteSessionIce, getRemoteControlRelease, type RemoteAssistanceCredentials } from '@/api/remoteControl';
+import { confirmRemoteNativeRequest, probeRemoteDeviceSupport } from '@/services/remoteDeviceNative';
 import { validRemoteConnecting, type RemoteConnecting } from '@/services/remoteControlAdapter';
 import { validateRemoteIceConfiguration } from '@/services/remoteControlIce';
 import { registerRemoteControlCleanup } from '@/services/remoteControlSafety';
@@ -20,6 +20,10 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
   const deviceId = ref<string | null>(null);
   const scope = ref<'view' | 'control'>('view');
   const error = ref('');
+  const credentials = shallowRef<RemoteAssistanceCredentials | null>(null);
+  // Keep the last issued code visible when assistance stops; it grants no access.
+  const displayedDeviceCode = ref('');
+  const refreshingCredentials = ref(false);
   const session = shallowRef<RemoteStateSnapshot | null>(null);
   let socket: Socket | null = null,
     generation = 0,
@@ -34,7 +38,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
   const auth = useAuthStore();
   function failure(message: string, cause: unknown) {
     const code = cause instanceof Error ? cause.message : cause;
-    return typeof code === 'string' && /^REMOTE_[A-Z_]{1,64}$/.test(code)
+    return typeof code === 'string' && /^[A-Z][A-Z_]{1,80}$/.test(code)
       ? `${message}（${code}）`
       : message;
   }
@@ -57,6 +61,8 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
     nativeStarted = false;
     phase.value = 'offline';
     deviceId.value = null;
+    credentials.value = null;
+    refreshingCredentials.value = false;
     queue = Promise.resolve();
     queued = 0;
     if (reason) error.value = reason;
@@ -66,7 +72,30 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
       error.value = '本机停止确认失败，请重新启动客户端后再开启协助。';
     });
   }
-  registerRemoteControlCleanup(() => stop());
+  registerRemoteControlCleanup(() => {
+    stop();
+    displayedDeviceCode.value = '';
+  });
+  async function refreshCredentials() {
+    if (!socket?.connected || refreshingCredentials.value || session.value) return;
+    const value = generation;
+    refreshingCredentials.value = true;
+    credentials.value = null;
+    try {
+      const response = await socket.timeout(5000).emitWithAck('remote:credentials', {});
+      if (!current(value)) return;
+      const item = response?.credentials;
+      if (!response?.ok) throw new Error(response?.code || 'REMOTE_CREDENTIALS_UNAVAILABLE');
+      if (!item || !/^\d{9}$/.test(item.deviceCode) || !/^[a-z2-9]{10}$/.test(item.temporaryPassword) ||
+          !Number.isSafeInteger(item.expiresAt) || item.expiresAt <= Date.now())
+        throw new Error('REMOTE_CREDENTIALS_INVALID');
+      credentials.value = item;
+      displayedDeviceCode.value = item.deviceCode;
+      error.value = '';
+    } finally {
+      if (generation === value) refreshingCredentials.value = false;
+    }
+  }
   async function command(
     event: string,
     payload: Record<string, unknown>,
@@ -119,22 +148,29 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
       if (generation !== value) return;
       const release = await getRemoteControlRelease();
       if (generation !== value) return;
-      if (!release.desktopHostEnabled || !release.releasedPlatforms.includes('macos'))
+      const support = await probeRemoteDeviceSupport();
+      if (generation !== value) return;
+      const platform = support.platform;
+      if ((platform !== 'windows' && platform !== 'macos') ||
+          !release.desktopHostEnabled || !release.releasedPlatforms.includes(platform))
         throw new Error('REMOTE_NOT_RELEASED');
       const transport = io(`${publicEnv.socketUrl}/remote-control`, {
         path: '/meeting',
         transports: ['websocket'],
         reconnection: false,
         autoConnect: false,
-        auth: { token: auth.token, role: 'host', platform: 'macos', deviceId: id },
+        auth: { token: auth.token, role: 'host', platform, deviceId: id },
       });
       socket = transport;
       deviceId.value = id;
       transport.on('disconnect', () => {
         if (generation === value) stop('设备已离线，远程协助已停止。');
       });
-      transport.on('connect_error', () => {
-        if (generation === value) stop('无法上线，请检查设备登记、登录状态和服务器配置。');
+      transport.on('connect_error', (cause) => {
+        if (generation !== value) return;
+        stop(cause.message === 'REMOTE_SERVICE_UNAVAILABLE'
+          ? '远控服务未就绪：后端缺少签名配置，请完成本地开发准备并重启后端。'
+          : failure('无法连接远控服务，请检查登录状态与后端连接。', cause));
       });
       transport.on('remote:presence-challenge', (message) => {
         if (!current(value)) return;
@@ -144,11 +180,14 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
             const response = await transport
               .timeout(5000)
               .emitWithAck('remote:presence', { proof });
-            if (!response?.ok) throw new Error('REMOTE_PRESENCE_REJECTED');
-            if (phase.value === 'starting') phase.value = 'online';
+            if (!response?.ok) throw new Error(response?.code || 'REMOTE_PRESENCE_REJECTED');
+            if (phase.value === 'starting') {
+              await refreshCredentials();
+              if (current(value)) phase.value = 'online';
+            }
           })
-          .catch(() => {
-            if (current(value)) stop('设备上线校验失败，请检查客户端版本、设备身份和系统权限。');
+          .catch((cause) => {
+            if (current(value)) stop(failure('设备在线状态更新失败。', cause));
           });
       });
       transport.on('remote:state', (state: RemoteStateSnapshot) => {
@@ -309,5 +348,5 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
         stop('当前版本尚不能开启本机协助，请完成客户端与服务器配置后重试。');
     }
   }
-  return { phase, deviceId, scope, error, session, start, stop };
+  return { phase, deviceId, scope, error, session, credentials, displayedDeviceCode, refreshingCredentials, refreshCredentials, start, stop };
 });

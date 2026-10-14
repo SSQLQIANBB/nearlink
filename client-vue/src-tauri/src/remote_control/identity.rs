@@ -20,7 +20,7 @@ use std::{
 use zeroize::Zeroizing;
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
-const COMPILED_KEYS: &str = include_str!("../../remote-control-trusted-keys.json");
+const COMPILED_KEYS: &str = include_str!(concat!(env!("OUT_DIR"), "/remote-control-trusted-keys.json"));
 pub(super) fn trusted_keys() -> Result<PinnedKeys, &'static str> {
     let keys: Vec<PinnedKey> =
         serde_json::from_str(COMPILED_KEYS).map_err(|_| "REMOTE_TRUST_NOT_CONFIGURED")?;
@@ -211,6 +211,8 @@ pub(super) struct ApprovalRequest {
     host: Endpoint,
     controller: Endpoint,
     requested_scope: Scope,
+    #[serde(default)]
+    require_local_confirmation: bool,
     authorization_revision: u64,
     control_epoch: u64,
     host_key_version: u64,
@@ -619,9 +621,11 @@ impl VerifiedApproval {
         }
     }
     pub fn remembered_choice(&self, preferences: &super::consent_memory::Preferences) -> Option<Decision> {
+        if self.claims.require_local_confirmation { return None; }
         preferences.decision(&self.remembered_binding(), self.claims.requested_scope, &self.key.verifying_key())
     }
     pub fn remember_choice(&self, preferences: &mut super::consent_memory::Preferences, decision: Decision, checked: bool) -> bool {
+        if self.claims.require_local_confirmation { return false; }
         preferences.remember(self.remembered_binding(), decision, checked, &self.key)
     }
     pub fn is_grant_control(&self) -> bool {
@@ -698,12 +702,18 @@ impl VerifiedApproval {
             controller_account: self.claims.controller.user_id,
             details: self.message(),
             control: self.wants_control(),
+            allow_remember: !self.claims.require_local_confirmation,
             deadline: self.deadline,
         }
     }
 
     pub fn message(&self) -> String {
         let c = &self.claims;
+        if c.require_local_confirmation {
+            return format!("请求方账号：{}\n请求方设备：{}\n会话：{}\n共享范围：主显示器\n请求权限：{}\n\n对方通过设备代码和临时密码发起请求。每次连接均需本机确认；可随时结束协助。此确认在 45 秒内过期。",
+                c.controller.user_id, c.controller.endpoint_id, c.session_id,
+                if c.requested_scope == Scope::Control { "查看屏幕和键鼠控制" } else { "仅查看屏幕" });
+        }
         format!("请求方账号：{}\n请求方设备：{}\n本机账号：{}\n会话：{}\n共享范围：主显示器\n请求权限：{}\n\n仅在认识并信任对方时批准。此确认在 45 秒内过期。勾选“不再提示”并允许后，此账号在相同或更小权限范围内的后续请求将自动批准；可在本机协助设置中恢复每次确认。",
             c.controller.user_id, c.controller.endpoint_id, c.host.user_id, c.session_id,
             if c.requested_scope == Scope::Control { "查看屏幕和键鼠控制" } else { "仅查看屏幕" })
