@@ -68,7 +68,6 @@ declare module 'vue' {
     NUpload: typeof import('naive-ui')['NUpload']
     RememberedApprovalSettings: typeof import('./src/components/RememberedApprovalSettings.vue')['default']
     RemoteControlWorkbench: typeof import('./src/components/RemoteControlWorkbench.vue')['default']
-    RemoteDeviceSettings: typeof import('./src/components/RemoteDeviceSettings.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScreenAnnotation: typeof import('./src/components/ScreenAnnotation.vue')['default']

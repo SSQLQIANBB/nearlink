@@ -10,8 +10,6 @@ import { getRemoteControlCapabilities } from '../services/remoteControlPolicy';
 import { RemoteControlError, uuid } from '../services/remoteControlProtocol';
 import {
   deviceRegistrationSchema,
-  deviceIdentitySchema,
-  verifyDeviceIdentity,
   RemoteDeviceChallengeStore,
   verifyRegistrationProof,
 } from '../services/remoteDeviceProof';
@@ -75,15 +73,6 @@ router.get('/signing-keys', (ctx) => {
   // Only explicit server configuration supplies keys. No token/URL can add a trust anchor.
   ctx.body = { keys: signer ? [signer.publicKey] : [] };
 });
-router.get('/devices', async (ctx) => {
-  const devices = await RemoteDevice.findAll({
-    where: { ownerUserId: ctx.state.remoteAuth.userId },
-    limit: 100,
-    order: [['createdAt', 'DESC']],
-  });
-  ctx.body = { devices: devices.map(safeDevice) };
-});
-
 router.post('/device-challenges', async (ctx) => {
   z.object({})
     .strict()
@@ -98,36 +87,6 @@ router.post('/device-challenges', async (ctx) => {
   );
   if (count > 5) throw new RemoteControlError('RATE_LIMITED', 429);
   ctx.body = { challenge: await challenges.create(userId, sid) };
-});
-
-router.post('/device-identity-challenges', async (ctx) => {
-  z.object({})
-    .strict()
-    .parse(ctx.request.body || {});
-  const { userId, sid } = ctx.state.remoteAuth;
-  const count = Number(
-    await redis.eval(
-      `local n=redis.call('INCR', KEYS[1]); if n==1 then redis.call('PEXPIRE', KEYS[1], 60000) end; return n`,
-      1,
-      `remote:identity-rate:${userId}`,
-    ),
-  );
-  if (count > 5) throw new RemoteControlError('RATE_LIMITED', 429);
-  ctx.set('Cache-Control', 'no-store');
-  ctx.body = { challenge: await challenges.create(userId, sid, 'identify-device') };
-});
-router.post('/device-identity/verify', async (ctx) => {
-  const input = deviceIdentitySchema.parse(ctx.request.body);
-  const { userId, sid } = ctx.state.remoteAuth;
-  const challenge = await challenges.consume(input.challengeId, userId, sid, 'identify-device');
-  const fingerprint = verifyDeviceIdentity(challenge, input, userId, sid, Date.now());
-  const device = await RemoteDevice.findOne({
-    where: { fingerprint, ownerUserId: userId, revokedAt: null, platform: input.platform },
-  });
-  if (!device) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
-  ctx.set('Cache-Control', 'no-store');
-  // Identification is not presence, a trusted-controller policy, or authorization.
-  ctx.body = { device: safeDevice(device) };
 });
 
 router.post('/devices', async (ctx) => {
@@ -149,42 +108,6 @@ router.post('/devices', async (ctx) => {
     throw new RemoteControlError('DEVICE_KEY_UNAVAILABLE', 403);
   // Registration proves key ownership only. It never marks this device online or control-capable.
   ctx.body = { device: safeDevice(device) };
-});
-
-router.patch('/devices/:id', async (ctx) => {
-  const id = uuid.parse(ctx.params.id);
-  const { alias } = z
-    .object({
-      alias: z
-        .string()
-        .trim()
-        .min(1)
-        .max(80)
-        .regex(/^[^\u0000-\u001f\u007f]+$/),
-    })
-    .strict()
-    .parse(ctx.request.body);
-  const where = { id, ownerUserId: ctx.state.remoteAuth.userId, revokedAt: null };
-  // Scope the write itself: a concurrent revocation must not permit a later rename.
-  await RemoteDevice.update({ alias }, { where });
-  const device = await RemoteDevice.findOne({ where });
-  if (!device) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
-  ctx.set('Cache-Control', 'no-store');
-  ctx.body = { device: safeDevice(device) };
-});
-
-router.delete('/devices/:id', async (ctx) => {
-  const id = uuid.parse(ctx.params.id);
-  const device = await RemoteDevice.findOne({
-    where: { id, ownerUserId: ctx.state.remoteAuth.userId },
-  });
-  if (!device) throw new RemoteControlError('TARGET_UNAVAILABLE', 404);
-  await device.update({ revokedAt: device.revokedAt || new Date() });
-  await AssistanceGrant.update(
-    { revokedAt: new Date() },
-    { where: { hostDeviceId: id, revokedAt: null } },
-  );
-  ctx.body = { ok: true };
 });
 
 router.delete('/assistance-grants/:id', async (ctx) => {

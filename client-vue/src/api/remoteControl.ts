@@ -56,8 +56,6 @@ export interface RemoteDeviceRegistration {
   alias: string;
   platform: RemotePlatform;
 }
-export const getRemoteDevices = (signal?: AbortSignal) =>
-  request<{ devices: RemoteDevice[] }>('/api/remote-control/devices', { signal });
 export const getRemoteDeviceChallenge = (signal?: AbortSignal) =>
   request<{ challenge: RemoteDeviceChallenge }>('/api/remote-control/device-challenges', {
     method: 'POST',
@@ -68,11 +66,6 @@ export const registerRemoteDevice = (proof: RemoteDeviceRegistration, signal?: A
   request<{ device: RemoteDevice }>('/api/remote-control/devices', {
     method: 'POST',
     body: proof,
-    signal,
-  });
-export const revokeRemoteDevice = (deviceId: string, signal?: AbortSignal) =>
-  request<{ ok: true }>(`/api/remote-control/devices/${encodeURIComponent(deviceId)}`, {
-    method: 'DELETE',
     signal,
   });
 export const getRemoteControlRelease = () =>
@@ -89,25 +82,7 @@ export const getRemoteSessionIce = (sessionId: string) =>
     `/api/remote-control/sessions/${encodeURIComponent(sessionId)}/ice`,
   );
 
-export const renameRemoteDevice = (deviceId: string, alias: string, signal?: AbortSignal) =>
-  request<{ device: RemoteDevice }>(`/api/remote-control/devices/${encodeURIComponent(deviceId)}`, {
-    method: 'PATCH',
-    body: { alias },
-    signal,
-  });
-
 export interface RemoteIdentityChallenge extends Omit<RemoteDeviceChallenge, 'action'> {
   action: 'identify-device';
 }
 export type RemoteIdentityProof = Omit<RemoteDeviceRegistration, 'alias'>;
-export const getRemoteIdentityChallenge = (signal?: AbortSignal) =>
-  request<{ challenge: RemoteIdentityChallenge }>(
-    '/api/remote-control/device-identity-challenges',
-    { method: 'POST', body: {}, signal },
-  );
-export const verifyRemoteIdentity = (proof: RemoteIdentityProof, signal?: AbortSignal) =>
-  request<{ device: RemoteDevice }>('/api/remote-control/device-identity/verify', {
-    method: 'POST',
-    body: proof,
-    signal,
-  });

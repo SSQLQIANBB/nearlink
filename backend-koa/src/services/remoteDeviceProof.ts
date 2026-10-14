@@ -26,7 +26,7 @@ export type DeviceChallenge = {
   nonce: string;
   userId: number;
   sid: string;
-  action: 'register-device' | 'identify-device';
+  action: 'register-device';
   expiresAt: number;
 };
 export function registrationMessage(
@@ -79,14 +79,13 @@ export class RemoteDeviceChallengeStore {
   async create(
     userId: number,
     sid: string,
-    action: DeviceChallenge['action'] = 'register-device',
   ): Promise<DeviceChallenge> {
     const challenge: DeviceChallenge = {
       id: randomUUID(),
       nonce: randomBytes(32).toString('base64url'),
       userId,
       sid,
-      action,
+      action: 'register-device',
       expiresAt: this.now() + REMOTE_LIMITS.challengeMs,
     };
     await this.redis.set(
@@ -101,7 +100,6 @@ export class RemoteDeviceChallengeStore {
     id: string,
     userId: number,
     sid: string,
-    action: DeviceChallenge['action'] = 'register-device',
   ): Promise<DeviceChallenge> {
     const raw = await this.redis.eval(
       `
@@ -115,46 +113,9 @@ return raw`,
       `remote:challenge:${id}`,
       userId,
       sid,
-      action,
+      'register-device',
     );
     if (typeof raw !== 'string') throw new RemoteControlError('INVALID_DEVICE_PROOF', 403);
     return JSON.parse(raw);
-  }
-}
-
-export const deviceIdentitySchema = deviceRegistrationSchema.omit({ alias: true });
-export type DeviceIdentityProof = z.infer<typeof deviceIdentitySchema>;
-export function verifyDeviceIdentity(
-  challenge: DeviceChallenge,
-  input: DeviceIdentityProof,
-  userId: number,
-  sid: string,
-  now: number,
-) {
-  if (
-    challenge.id !== input.challengeId ||
-    challenge.userId !== userId ||
-    challenge.sid !== sid ||
-    challenge.action !== 'identify-device' ||
-    challenge.expiresAt <= now
-  )
-    throw new RemoteControlError('INVALID_DEVICE_PROOF', 403);
-  try {
-    const key = createPublicKey(input.publicKey);
-    if (key.asymmetricKeyType !== 'ed25519') throw new Error('key type');
-    const message = canonicalJson({
-      protocolVersion: 1,
-      ...challenge,
-      publicKey: input.publicKey,
-      platform: input.platform,
-    });
-    const signature = Buffer.from(input.signature, 'base64');
-    if (signature.length !== 64 || !verify(null, Buffer.from(message), key, signature))
-      throw new Error('signature');
-    return createHash('sha256')
-      .update(key.export({ type: 'spki', format: 'der' }))
-      .digest('hex');
-  } catch {
-    throw new RemoteControlError('INVALID_DEVICE_PROOF', 403);
   }
 }

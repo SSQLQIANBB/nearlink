@@ -418,12 +418,6 @@
               </div>
             </div>
           </n-tab-pane>
-          <n-tab-pane
-            name="remote-devices"
-            tab="远程设备"
-          >
-            <RemoteDeviceSettings />
-          </n-tab-pane>
         </n-tabs>
       </n-card>
 
@@ -539,7 +533,6 @@ import { useSocketStore } from '@/stores/socket';
 import notificationService from '@/services/notificationService';
 import NotificationSoundSettings from '@/components/NotificationSoundSettings.vue';
 import AvatarCropper from '@/components/AvatarCropper.vue';
-import RemoteDeviceSettings from '@/components/RemoteDeviceSettings.vue';
 import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useEmailCodeCooldown } from '@/hooks/useEmailCodeCooldown';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolicy';
