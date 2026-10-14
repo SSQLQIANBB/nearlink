@@ -55,12 +55,15 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_main(app)
         }))
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
+        .plugin({
+            let builder = tauri_plugin_window_state::Builder::default()
                 // 托盘退出时窗口可能隐藏或最小化，重新启动必须能看到主窗口。
-                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
-                .build(),
-        )
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED);
+            // 开发启动使用配置尺寸，避免历史窗口状态覆盖正在调整的默认布局。
+            #[cfg(debug_assertions)]
+            let builder = builder.skip_initial_state("main");
+            builder.build()
+        })
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

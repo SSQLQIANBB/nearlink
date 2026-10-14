@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "NearLink 内测版 0.8.0-alpha.4",
-        "width": 1200,
-        "height": 800,
+        "width": 960,
+        "height": 640,
         "minWidth": 800,
         "minHeight": 600,
         "center": true,
