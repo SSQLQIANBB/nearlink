@@ -16,11 +16,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: mocks.isTauri }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => mocks }));
 let cleanup: (() => void) | undefined;
-const press = (selector: string, button = 0) =>
+const press = (selector: string, button = 0, clientY = 100) =>
   document
     .querySelector(selector)!
     .dispatchEvent(
-      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button, detail: 1 }),
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button, detail: 1, clientY }),
     );
 
 beforeEach(() => {
@@ -46,6 +46,17 @@ afterEach(() => {
 });
 
 describe('桌面标题与全屏状态', () => {
+  it('顶部空白区域可拖动，50px 边界及正文区域不触发拖动', async () => {
+    cleanup = installDesktopWindowControls();
+    await flushPromises();
+    press('main', 0, 49);
+    expect(mocks.startDragging).toHaveBeenCalledOnce();
+    press('main', 0, 50);
+    press('main', 0, 100);
+    press('#action', 0, 20);
+    expect(mocks.startDragging).toHaveBeenCalledOnce();
+  });
+
   it('标题文字和背景可拖动，按钮、输入框、链接及聊天内容不触发拖动', async () => {
     cleanup = installDesktopWindowControls();
     await flushPromises();
