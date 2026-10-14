@@ -211,18 +211,6 @@
                 </div>
               </div>
             </div>
-            <n-button
-              secondary
-              @click="showGroupDetail = true"
-            >
-              <template #icon>
-                <i
-                  class="iconfont group-action-icon icon-info"
-                  aria-hidden="true"
-                ></i>
-              </template>
-              群组详情
-            </n-button>
           </header>
 
           <!-- 消息列表 -->
@@ -315,95 +303,6 @@
           </footer>
         </div>
       </n-layout-content>
-
-      <!-- 群组详情抽屉 -->
-      <n-drawer
-        v-model:show="showGroupDetail"
-        width="min(400px, calc(100vw - 24px))"
-        placement="right"
-      >
-        <n-drawer-content title="群组详情">
-          <n-spin :show="detailLoading">
-            <div class="space-y-4">
-              <!-- 群组信息 -->
-              <div class="text-center">
-                <n-avatar
-                  :size="80"
-                  :src="groupInfo?.avatar || undefined"
-                >
-                  <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
-                  <template #fallback>
-                    <span class="flex h-full w-full items-center justify-center">
-                      {{ groupInfo?.name?.charAt(0) }}
-                    </span>
-                  </template>
-                </n-avatar>
-                <h3 class="text-xl font-bold mt-3">{{ groupInfo?.name }}</h3>
-                <p class="text-sm text-gray-500 mt-1">{{ groupInfo?.description }}</p>
-              </div>
-
-              <n-divider />
-
-              <!-- 群组统计 -->
-              <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="p-3 bg-blue-50 rounded-lg">
-                  <div class="text-2xl font-bold text-blue-600">{{ members.length }}</div>
-                  <div class="text-xs text-gray-500 mt-1">群组成员</div>
-                </div>
-                <div class="p-3 bg-green-50 rounded-lg">
-                  <div class="text-2xl font-bold text-green-600">{{ onlineCount }}</div>
-                  <div class="text-xs text-gray-500 mt-1">在线成员</div>
-                </div>
-              </div>
-
-              <n-divider />
-
-              <!-- 快捷操作 -->
-              <div class="space-y-2">
-                <n-button
-                  block
-                  secondary
-                  @click="handleVideoCall"
-                >
-                  <template #icon>
-                    <i
-                      class="iconfont call-action-icon icon-video"
-                      aria-hidden="true"
-                    ></i>
-                  </template>
-                  {{ groupSessionState.getButtonLabel(groupId, 'video') }}
-                </n-button>
-                <n-button
-                  block
-                  secondary
-                  @click="handleAudioCall"
-                >
-                  <template #icon>
-                    <i
-                      class="iconfont call-action-icon icon-dianhua"
-                      aria-hidden="true"
-                    ></i>
-                  </template>
-                  {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
-                </n-button>
-                <n-button
-                  block
-                  secondary
-                  @click="handleScreenShare"
-                >
-                  <template #icon>
-                    <i
-                      class="iconfont call-action-icon icon-gongxiangpingmu"
-                      aria-hidden="true"
-                    ></i>
-                  </template>
-                  {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
-                </n-button>
-              </div>
-            </div>
-          </n-spin>
-        </n-drawer-content>
-      </n-drawer>
     </n-layout>
   </div>
 </template>
@@ -443,9 +342,6 @@ const mobileSidebarOpen = ref(false);
 const groupId = ref(parseInt(route.params.id as string));
 const scrollbarRef = ref<ScrollbarInst | null>(null);
 
-const detailLoading = ref(false);
-const showGroupDetail = ref(false);
-
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { online?: boolean })[]>([]);
 const messages = ref<any[]>([]);
@@ -464,7 +360,6 @@ const onlineCount = computed(() => {
 // 加载群组详情
 async function loadGroupDetail() {
   try {
-    detailLoading.value = true;
     const detail = await getGroupDetail(groupId.value);
     groupInfo.value = detail.group;
     const onlineIds = new Set(socketStore.userList.map((user) => user.id));
@@ -473,8 +368,6 @@ async function loadGroupDetail() {
   } catch (error: any) {
     message.error('加载群组详情失败: ' + error.message);
     router.back();
-  } finally {
-    detailLoading.value = false;
   }
 }
 

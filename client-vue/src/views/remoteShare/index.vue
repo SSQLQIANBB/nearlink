@@ -1,5 +1,9 @@
 <template>
-  <div class="im-page">
+  <div
+    ref="pageRef"
+    class="im-page"
+    :class="{ 'is-resizing': resizing }"
+  >
     <n-layout
       has-sider
       class="remote-shell h-full w-full"
@@ -15,7 +19,7 @@
         class="remote-sidebar"
         :class="{ 'mobile-open': mobileSidebarOpen }"
         bordered
-        :width="320"
+        :width="sidebarWidth"
         :collapsed-width="0"
         collapse-mode="transform"
         :show-trigger="false"
@@ -286,6 +290,28 @@
         </n-tabs>
       </n-layout-sider>
 
+      <div
+        class="sidebar-resizer"
+        :style="{ left: `${sidebarWidth - 3}px` }"
+        role="separator"
+        aria-label="调整联系人栏宽度"
+        aria-orientation="vertical"
+        :aria-valuenow="sidebarWidth"
+        :aria-valuemin="280"
+        :aria-valuemax="maxSidebarWidth"
+        tabindex="0"
+        data-no-drag
+        @pointerdown="startSidebarResize"
+        @pointermove="resizeSidebar"
+        @pointerup="stopSidebarResize"
+        @pointercancel="stopSidebarResize"
+        @lostpointercapture="resizing = false"
+        @keydown.left.prevent="setSidebarWidth(sidebarWidth - 10)"
+        @keydown.right.prevent="setSidebarWidth(sidebarWidth + 10)"
+        @keydown.home.prevent="setSidebarWidth(280)"
+        @keydown.end.prevent="setSidebarWidth(maxSidebarWidth)"
+      ></div>
+
       <n-layout-content content-class="w-full flex flex-col">
         <RemoteControlWorkbench v-if="showRemoteControl" />
         <div
@@ -486,6 +512,43 @@ const unread = useUnreadStore();
 const { socket, authenticated: online, userList } = storeToRefs(socketStore);
 const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
 const mobileSidebarOpen = ref(false);
+const pageRef = ref<HTMLElement | null>(null);
+const sidebarWidth = ref(320);
+const maxSidebarWidth = ref(420);
+const resizing = ref(false);
+let resizeStartX = 0;
+let resizeStartWidth = 320;
+let layoutObserver: ResizeObserver;
+
+function setSidebarWidth(width: number) {
+  sidebarWidth.value = Math.max(280, Math.min(maxSidebarWidth.value, width));
+}
+function startSidebarResize(event: PointerEvent) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  resizeStartX = event.clientX;
+  resizeStartWidth = sidebarWidth.value;
+  resizing.value = true;
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+function resizeSidebar(event: PointerEvent) {
+  if (resizing.value) setSidebarWidth(resizeStartWidth + event.clientX - resizeStartX);
+}
+function stopSidebarResize(event: PointerEvent) {
+  resizing.value = false;
+  const handle = event.currentTarget as HTMLElement;
+  if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+}
+onMounted(() => {
+  // 观察实际容器，兼顾网页外边距与桌面窗口缩放。
+  layoutObserver = new ResizeObserver(([entry]) => {
+    if (entry!.contentRect.width < 768) resizing.value = false;
+    maxSidebarWidth.value = Math.max(280, Math.min(420, entry!.contentRect.width - 480));
+    setSidebarWidth(sidebarWidth.value);
+  });
+  layoutObserver.observe(pageRef.value!.firstElementChild!);
+});
+onUnmounted(() => layoutObserver.disconnect());
 
 type User = OnlineUser;
 
@@ -951,6 +1014,37 @@ onUnmounted(() => {
   font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.is-resizing .sidebar-resizer {
+  background: #2563eb55;
+}
+.sidebar-resizer:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px #2563eb;
+}
+.is-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+:deep(.remote-sidebar) {
+  transition: none;
+}
+@media (max-width: 767px) {
+  .sidebar-resizer {
+    display: none;
+  }
+}
+
 :deep(.remote-sidebar) {
   border-right: 1px solid rgba(203, 213, 225, 0.76);
   box-shadow: none;
@@ -1023,7 +1117,14 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+:deep(.sidebar-tabs .n-tabs-tab-wrapper) {
+  flex: 1;
+  min-width: 0;
+}
+
 :deep(.sidebar-tabs .n-tabs-tab) {
+  width: 100%;
+  justify-content: center;
   padding-block: 13px;
   color: #64748b;
   font-weight: 600;
