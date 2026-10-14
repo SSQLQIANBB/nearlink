@@ -15,12 +15,14 @@ describe('mediaParticipantState', () => {
     const state = createMediaParticipantState();
     state.setChannel(7, 'screen', 'current-channel');
 
-    expect(state.apply({
-      groupId: 7,
-      type: 'screen',
-      channelId: 'old-channel',
-      userIds: [1],
-    })).toBe(false);
+    expect(
+      state.apply({
+        groupId: 7,
+        type: 'screen',
+        channelId: 'old-channel',
+        userIds: [1],
+      }),
+    ).toBe(false);
     expect(state.userIds(7, 'screen')).toEqual([]);
   });
 

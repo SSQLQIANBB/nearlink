@@ -1,7 +1,17 @@
 <template>
   <span class="audio-waveform">
-    <span v-for="side in 2" :key="side" class="audio-waveform__side" :class="{ 'audio-waveform__side--right': side === 2 }" aria-hidden="true">
-      <i v-for="(weight, index) in [0.55, 1, 0.8]" :key="index" :style="{ height: `${4 + (8 + level * 16) * weight}px` }"></i>
+    <span
+      v-for="side in 2"
+      :key="side"
+      class="audio-waveform__side"
+      :class="{ 'audio-waveform__side--right': side === 2 }"
+      aria-hidden="true"
+    >
+      <i
+        v-for="(weight, index) in [0.55, 1, 0.8]"
+        :key="index"
+        :style="{ height: `${4 + (8 + level * 16) * weight}px` }"
+      ></i>
     </span>
     <span class="audio-waveform__label"><slot /></span>
   </span>
@@ -50,9 +60,33 @@ onBeforeUnmount(dispose);
 </script>
 
 <style scoped>
-.audio-waveform { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 26px; pointer-events: none; }
-.audio-waveform__side { display: flex; align-items: center; gap: 3px; height: 26px; }
-.audio-waveform__side i { display: block; width: 3px; border-radius: 3px; background: currentColor; }
-.audio-waveform__side--right { order: 2; transform: scaleX(-1); }
-.audio-waveform__label { display: flex; align-items: center; gap: 6px; }
+.audio-waveform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 26px;
+  pointer-events: none;
+}
+.audio-waveform__side {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+}
+.audio-waveform__side i {
+  display: block;
+  width: 3px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.audio-waveform__side--right {
+  order: 2;
+  transform: scaleX(-1);
+}
+.audio-waveform__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 </style>

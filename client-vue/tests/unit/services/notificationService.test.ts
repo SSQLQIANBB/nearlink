@@ -10,7 +10,9 @@ class BrowserNotification {
   static permission: NotificationPermission = 'granted';
   static requestPermission = askPermission;
   onclick: ((event: Event) => void) | null = null;
-  constructor(title: string, options: NotificationOptions) { created.push({ title, options }); }
+  constructor(title: string, options: NotificationOptions) {
+    created.push({ title, options });
+  }
   close() {}
 }
 
@@ -22,10 +24,20 @@ beforeEach(() => {
   sounds.length = 0;
   BrowserNotification.permission = 'granted';
   vi.stubGlobal('Notification', BrowserNotification);
-  vi.stubGlobal('Audio', class {
-    src = ''; volume = 0; currentTime = 0; loop = false; play = play; pause = pause;
-    constructor() { sounds.push(this); }
-  });
+  vi.stubGlobal(
+    'Audio',
+    class {
+      src = '';
+      volume = 0;
+      currentTime = 0;
+      loop = false;
+      play = play;
+      pause = pause;
+      constructor() {
+        sounds.push(this);
+      }
+    },
+  );
 });
 
 describe('通知设置', () => {
@@ -60,8 +72,15 @@ describe('通知设置', () => {
   it('迁移旧版静音并恢复独立开关与音效选择', async () => {
     localStorage.setItem('notification_sound_enabled', 'false');
     const { default: service } = await import('../../../src/services/notificationService');
-    expect(service.getSoundPreferences()).toMatchObject({ messageEnabled: false, callEnabled: false });
-    service.updateSoundPreferences({ messageEnabled: true, messageTone: 'happy', callTone: 'classic' });
+    expect(service.getSoundPreferences()).toMatchObject({
+      messageEnabled: false,
+      callEnabled: false,
+    });
+    service.updateSoundPreferences({
+      messageEnabled: true,
+      messageTone: 'happy',
+      callTone: 'classic',
+    });
     expect(sounds[0]!.src).toContain('happy-beep.mp3');
     expect(sounds[1]!.src).toContain('classic-ring.mp3');
     vi.resetModules();
@@ -72,9 +91,17 @@ describe('通知设置', () => {
   });
 
   it('无效存储中的铃声使用默认值，不破坏已保存的静音设置', async () => {
-    localStorage.setItem('notification_sounds', JSON.stringify({ messageEnabled: false, callTone: 'unknown', messageTone: null }));
+    localStorage.setItem(
+      'notification_sounds',
+      JSON.stringify({ messageEnabled: false, callTone: 'unknown', messageTone: null }),
+    );
     const { default: service } = await import('../../../src/services/notificationService');
-    expect(service.getSoundPreferences()).toEqual({ messageEnabled: false, callEnabled: true, messageTone: 'default', callTone: 'default' });
+    expect(service.getSoundPreferences()).toEqual({
+      messageEnabled: false,
+      callEnabled: true,
+      messageTone: 'default',
+      callTone: 'default',
+    });
   });
 
   it('响铃期间切换铃声保留邀请状态，结束邀请仍会停止', async () => {
@@ -137,7 +164,10 @@ describe('通知设置', () => {
 
   it('未授权时不自动请求权限，测试通知只在真正创建后返回成功', async () => {
     BrowserNotification.permission = 'default';
-    askPermission.mockImplementation(async () => { BrowserNotification.permission = 'granted'; return 'granted'; });
+    askPermission.mockImplementation(async () => {
+      BrowserNotification.permission = 'granted';
+      return 'granted';
+    });
     const { default: service } = await import('../../../src/services/notificationService');
     expect(await service.showSystem('测试通知', '检查通知')).toBe(false);
     expect(askPermission).not.toHaveBeenCalled();

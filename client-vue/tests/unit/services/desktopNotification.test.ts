@@ -1,6 +1,9 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
-const { invoke, isPermissionGranted } = vi.hoisted(() => ({ invoke: vi.fn(), isPermissionGranted: vi.fn() }));
+const { invoke, isPermissionGranted } = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  isPermissionGranted: vi.fn(),
+}));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke }));
 vi.mock('@tauri-apps/plugin-notification', () => ({ isPermissionGranted }));
 
@@ -8,7 +11,14 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   localStorage.clear();
-  vi.stubGlobal('Audio', class { src = ''; play = vi.fn().mockResolvedValue(undefined); pause() {} });
+  vi.stubGlobal(
+    'Audio',
+    class {
+      src = '';
+      play = vi.fn().mockResolvedValue(undefined);
+      pause() {}
+    },
+  );
   vi.stubGlobal('Notification', { permission: 'granted' });
   isPermissionGranted.mockResolvedValue(true);
   invoke.mockResolvedValue(undefined);

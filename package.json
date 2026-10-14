@@ -15,7 +15,9 @@
     "version:check": "node scripts/product-version.mjs check",
     "version:sync": "node scripts/product-version.mjs sync",
     "version:set": "node scripts/product-version.mjs set",
-    "test:release": "node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs"
+    "test:release": "node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [],
   "author": "",
@@ -24,5 +26,8 @@
   "dependencies": {
     "uuid": "^13.0.0"
   },
-  "desktopBuildNumber": 31
+  "desktopBuildNumber": 31,
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
 }

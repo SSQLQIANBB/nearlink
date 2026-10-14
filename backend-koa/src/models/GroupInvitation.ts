@@ -11,9 +11,13 @@ export interface GroupInvitationAttributes {
   updatedAt?: Date;
 }
 
-interface GroupInvitationCreationAttributes extends Optional<GroupInvitationAttributes, 'id' | 'status'> {}
+interface GroupInvitationCreationAttributes
+  extends Optional<GroupInvitationAttributes, 'id' | 'status'> {}
 
-class GroupInvitation extends Model<GroupInvitationAttributes, GroupInvitationCreationAttributes> implements GroupInvitationAttributes {
+class GroupInvitation
+  extends Model<GroupInvitationAttributes, GroupInvitationCreationAttributes>
+  implements GroupInvitationAttributes
+{
   declare id?: number;
   declare groupId: number;
   declare inviterId: number;
@@ -55,8 +59,7 @@ GroupInvitation.init(
     sequelize,
     tableName: 'group_invitations',
     timestamps: true,
-  }
+  },
 );
 
 export default GroupInvitation;
-

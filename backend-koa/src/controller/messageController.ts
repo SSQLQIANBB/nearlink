@@ -55,7 +55,7 @@ export async function markMessagesAsRead(ctx: Context) {
           id: messageIds,
           toUserId: userId,
         },
-      }
+      },
     );
 
     ctx.body = { message: 'Messages marked as read' };
@@ -141,11 +141,23 @@ export async function getGroupMessages(ctx: Context) {
     const parsedGroupId = Number(groupId);
     const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
     const parsedOffset = Math.max(0, Number(offset) || 0);
-    if (!Number.isInteger(parsedGroupId) || parsedGroupId < 1 || (afterId !== undefined && (!Number.isSafeInteger(Number(afterId)) || Number(afterId) < 0))) {
-      ctx.status = 400; ctx.body = { error: '群组或游标无效' }; return;
+    if (
+      !Number.isInteger(parsedGroupId) ||
+      parsedGroupId < 1 ||
+      (afterId !== undefined && (!Number.isSafeInteger(Number(afterId)) || Number(afterId) < 0))
+    ) {
+      ctx.status = 400;
+      ctx.body = { error: '群组或游标无效' };
+      return;
     }
-    const member = await GroupMember.findOne({ where: { groupId: parsedGroupId, userId: ctx.state.user.userId } });
-    if (!member) { ctx.status = 403; ctx.body = { error: '不是群组成员' }; return; }
+    const member = await GroupMember.findOne({
+      where: { groupId: parsedGroupId, userId: ctx.state.user.userId },
+    });
+    if (!member) {
+      ctx.status = 403;
+      ctx.body = { error: '不是群组成员' };
+      return;
+    }
 
     const whereClause: any = {
       groupId: parsedGroupId,
@@ -188,27 +200,42 @@ export async function getGroupMessages(ctx: Context) {
 
 export async function getGroupCursors(ctx: Context) {
   try {
-    const memberships = await GroupMember.findAll({ where: { userId: ctx.state.user.userId }, attributes: ['groupId'] });
-    const groupIds = memberships.map(member => member.groupId);
-    if (!groupIds.length) { ctx.body = { cursors: {} }; return; }
+    const memberships = await GroupMember.findAll({
+      where: { userId: ctx.state.user.userId },
+      attributes: ['groupId'],
+    });
+    const groupIds = memberships.map((member) => member.groupId);
+    if (!groupIds.length) {
+      ctx.body = { cursors: {} };
+      return;
+    }
     const rows = await GroupMessage.findAll({
       attributes: ['groupId', [fn('MAX', col('id')), 'latestId']],
       where: { groupId: { [Op.in]: groupIds } },
-      group: ['groupId'], raw: true,
+      group: ['groupId'],
+      raw: true,
     });
     const cursors: Record<number, number> = {};
     for (const row of rows as any[]) cursors[row.groupId] = Number(row.latestId) || 0;
     ctx.body = { cursors };
   } catch (error) {
     console.error('get group cursors failed:', error);
-    ctx.status = 500; ctx.body = { error: '获取群消息游标失败' };
+    ctx.status = 500;
+    ctx.body = { error: '获取群消息游标失败' };
   }
 }
 
 export async function saveGroupMessage(ctx: Context) {
   try {
     const userId = ctx.state.user?.userId;
-    const { groupId, message, messageType = 'text', fileUrl, fileName, fileSize } = ctx.request.body as any;
+    const {
+      groupId,
+      message,
+      messageType = 'text',
+      fileUrl,
+      fileName,
+      fileSize,
+    } = ctx.request.body as any;
 
     if (!groupId || !message) {
       ctx.status = 400;

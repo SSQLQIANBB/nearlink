@@ -4,7 +4,9 @@ export function readGroupCursors(userId: number): Record<number, number> {
   try {
     const value = JSON.parse(localStorage.getItem(key(userId)) || '{}');
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
 export function advanceGroupCursor(userId: number, groupId: number, messageId: number) {

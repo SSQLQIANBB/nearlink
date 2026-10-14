@@ -35,7 +35,7 @@ class RedisService {
   async setUserStatus(userId: number, status: 'online' | 'offline' | 'busy'): Promise<void> {
     const key = REDIS_KEYS.USER_STATUS + userId;
     await redis.setex(key, REDIS_TTL.USER_STATUS, status);
-    
+
     // 同时更新在线用户集合
     if (status === 'online') {
       await redis.sadd(REDIS_KEYS.ONLINE_USERS, userId.toString());
@@ -57,7 +57,7 @@ class RedisService {
    */
   async getOnlineUsers(): Promise<number[]> {
     const userIds = await redis.smembers(REDIS_KEYS.ONLINE_USERS);
-    return userIds.map(id => parseInt(id));
+    return userIds.map((id) => parseInt(id));
   }
 
   /**
@@ -202,4 +202,3 @@ class RedisService {
 }
 
 export default new RedisService();
-

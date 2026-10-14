@@ -55,7 +55,7 @@ export const useSocketStore = defineStore('socket', () => {
 
   function handleAuthenticated() {
     authenticated.value = true;
-    joinedGroupIds.forEach(groupId => {
+    joinedGroupIds.forEach((groupId) => {
       socket.value?.emit('join_group', { groupId });
     });
   }
@@ -74,15 +74,19 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function handleUserList(users: OnlineUser[]) {
-    userList.value = users.filter(user => (
-      user.id !== credentials?.user.id && user.socketId !== socket.value?.id
-    ));
+    userList.value = users.filter(
+      (user) => user.id !== credentials?.user.id && user.socketId !== socket.value?.id,
+    );
   }
 
   function handleUserPresence(change: PresenceChange) {
     if (!authenticated.value || !Number.isInteger(change.userId)) return;
-    const users = userList.value.filter(user => user.id !== change.userId);
-    if (change.user && change.user.id === change.userId && change.user.id !== credentials?.user.id) {
+    const users = userList.value.filter((user) => user.id !== change.userId);
+    if (
+      change.user &&
+      change.user.id === change.userId &&
+      change.user.id !== credentials?.user.id
+    ) {
       users.push(change.user);
     }
     userList.value = users;
@@ -95,7 +99,11 @@ export const useSocketStore = defineStore('socket', () => {
 
   function handleGroupCallState(data: {
     groupId: number;
-    sessions: { video: GroupSession | null; audio: GroupSession | null; screen: GroupSession | null };
+    sessions: {
+      video: GroupSession | null;
+      audio: GroupSession | null;
+      screen: GroupSession | null;
+    };
   }) {
     groupSessionState.applySnapshot(data.groupId, data.sessions);
   }

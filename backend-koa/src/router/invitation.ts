@@ -10,4 +10,3 @@ router.post('/:invitationId/accept', authMiddleware, invitationController.accept
 router.post('/:invitationId/reject', authMiddleware, invitationController.rejectInvitation);
 
 export default router;
-

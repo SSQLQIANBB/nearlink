@@ -1,66 +1,122 @@
 <template>
   <div class="screen-share">
     <div class="toolbar">
-      <n-button type="primary" :disabled="isSharing" @click="startShare">共享屏幕</n-button>
-      <n-button type="error" v-if="isSharing" @click="stopShare">结束共享</n-button>
-      <n-button @click="captureScreen" :disabled="!isSharing">截图</n-button>
+      <n-button
+        type="primary"
+        :disabled="isSharing"
+        @click="startShare"
+      >
+        共享屏幕
+      </n-button>
+      <n-button
+        type="error"
+        v-if="isSharing"
+        @click="stopShare"
+      >
+        结束共享
+      </n-button>
+      <n-button
+        @click="captureScreen"
+        :disabled="!isSharing"
+      >
+        截图
+      </n-button>
 
-      <n-button type="success" :disabled="!isSharing || isRecording" @click="startRecord">开始录制</n-button>
-      <n-button type="warning" v-if="isRecording" @click="stopRecord">结束录制</n-button>
+      <n-button
+        type="success"
+        :disabled="!isSharing || isRecording"
+        @click="startRecord"
+      >
+        开始录制
+      </n-button>
+      <n-button
+        type="warning"
+        v-if="isRecording"
+        @click="stopRecord"
+      >
+        结束录制
+      </n-button>
     </div>
 
     <div class="video-wrapper">
       <!-- 主屏幕 -->
-      <video ref="screenVideoRef" v-show="isSharing" autoplay playsinline width="100%" />
-    
+      <video
+        ref="screenVideoRef"
+        v-show="isSharing"
+        autoplay
+        playsinline
+        width="100%"
+      />
+
       <!-- 摄像头画面 -->
-      <video 
-        ref="cameraVideoRef" 
-        autoplay 
-        muted 
+      <video
+        ref="cameraVideoRef"
+        autoplay
+        muted
         playsinline
         class="camera-preview"
-        v-show="isSharing" 
+        v-show="isSharing"
       />
     </div>
 
-    <canvas ref="canvasRef" style="display: none"></canvas>
+    <canvas
+      ref="canvasRef"
+      style="display: none"
+    ></canvas>
 
-    <img v-if="imgSrc" :src="imgSrc" alt="截图结果" class="screenshot" />
+    <img
+      v-if="imgSrc"
+      :src="imgSrc"
+      alt="截图结果"
+      class="screenshot"
+    />
 
-    <div v-if="recordedUrl" class="recorded">
+    <div
+      v-if="recordedUrl"
+      class="recorded"
+    >
       <h4>录制结果：</h4>
-      <video :src="recordedUrl" controls width="100%" />
-      <div style="margin-top: 8px;">
-        <n-button type="info" :loading="saving" @click="downloadRecord">下载视频</n-button>
+      <video
+        :src="recordedUrl"
+        controls
+        width="100%"
+      />
+      <div style="margin-top: 8px">
+        <n-button
+          type="info"
+          :loading="saving"
+          @click="downloadRecord"
+        >
+          下载视频
+        </n-button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
-import { useMessage } from 'naive-ui'
-import { saveFile } from '@/services/saveFile'
+import { ref, onBeforeUnmount } from 'vue';
+import { useMessage } from 'naive-ui';
+import { saveFile } from '@/services/saveFile';
 
-const message = useMessage()
-const saving = ref(false)
+const message = useMessage();
+const saving = ref(false);
 
-const screenVideoRef = ref<HTMLVideoElement | null>(null)
-const cameraVideoRef = ref<HTMLVideoElement | null>(null)
-const canvasRef = ref<HTMLCanvasElement | null>(null)
+const screenVideoRef = ref<HTMLVideoElement | null>(null);
+const cameraVideoRef = ref<HTMLVideoElement | null>(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-const imgSrc = ref<string | null>(null)
-const recordedUrl = ref<string | null>(null)
+const imgSrc = ref<string | null>(null);
+const recordedUrl = ref<string | null>(null);
 
-const isSharing = ref(false)
-const isRecording = ref(false)
+const isSharing = ref(false);
+const isRecording = ref(false);
 
-let screenStream: MediaStream | null = null
-let cameraStream: MediaStream | null = null
-let mixedStream: MediaStream | null = null
-let recorder: MediaRecorder | null = null
-let recordedChunks: BlobPart[] = []
+let screenStream: MediaStream | null = null;
+let cameraStream: MediaStream | null = null;
+let mixedStream: MediaStream | null = null;
+let recorder: MediaRecorder | null = null;
+let recordedChunks: BlobPart[] = [];
 
 /** 启动屏幕共享 */
 async function startShare() {
@@ -72,139 +128,149 @@ async function startShare() {
         height: { ideal: 1080 },
       },
       audio: true, // 打开音频录制
-    }
+    };
 
-    screenStream = await navigator.mediaDevices.getDisplayMedia(constraints)
+    screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
     cameraStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { width: 320, height: 240 }
-    })
+      video: { width: 320, height: 240 },
+    });
 
-    if (screenVideoRef.value) screenVideoRef.value.srcObject = screenStream
-    if (cameraVideoRef.value) cameraVideoRef.value.srcObject = cameraStream
+    if (screenVideoRef.value) screenVideoRef.value.srcObject = screenStream;
+    if (cameraVideoRef.value) cameraVideoRef.value.srcObject = cameraStream;
 
-    isSharing.value = true
+    isSharing.value = true;
 
     // 自动检测用户在浏览器中停止共享
-    screenStream.getVideoTracks()[0]?.addEventListener('ended', stopShare)
+    screenStream.getVideoTracks()[0]?.addEventListener('ended', stopShare);
   } catch (err) {
-    console.error('获取屏幕失败:', err)
+    console.error('获取屏幕失败:', err);
   }
 }
 
 /** 停止共享 */
 function stopShare() {
-  if (isRecording.value) stopRecord()
+  if (isRecording.value) stopRecord();
 
-  screenStream?.getTracks().forEach(track => track.stop())
-  cameraStream?.getTracks().forEach(track => track.stop())
+  screenStream?.getTracks().forEach((track) => track.stop());
+  cameraStream?.getTracks().forEach((track) => track.stop());
 
-  screenStream = null
-  cameraStream = null
+  screenStream = null;
+  cameraStream = null;
 
-  if (screenVideoRef.value) screenVideoRef.value.srcObject = null
-  if (cameraVideoRef.value) cameraVideoRef.value.srcObject = null
+  if (screenVideoRef.value) screenVideoRef.value.srcObject = null;
+  if (cameraVideoRef.value) cameraVideoRef.value.srcObject = null;
 
-  isSharing.value = false
+  isSharing.value = false;
 }
 
 /** 截取当前画面 */
 function captureScreen() {
-  if (!screenVideoRef.value || !cameraVideoRef.value || !canvasRef.value) return
+  if (!screenVideoRef.value || !cameraVideoRef.value || !canvasRef.value) return;
 
-  const video = screenVideoRef.value
-  const camera = cameraVideoRef.value
-  const canvas = canvasRef.value
-  const context = canvas.getContext('2d')
-  if (!context) return
+  const video = screenVideoRef.value;
+  const camera = cameraVideoRef.value;
+  const canvas = canvasRef.value;
+  const context = canvas.getContext('2d');
+  if (!context) return;
 
-  canvas.width = video.videoWidth
-  canvas.height = video.videoHeight
-  const cameraWidth = 320, cameraHeight = 240;
-  context.drawImage(video, 0, 0, canvas.width, canvas.height)
-  context.drawImage(camera, canvas.width - cameraWidth - 10, canvas.height - cameraHeight - 10, cameraWidth, cameraHeight)
-  imgSrc.value = canvas.toDataURL('image/png')
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const cameraWidth = 320,
+    cameraHeight = 240;
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    camera,
+    canvas.width - cameraWidth - 10,
+    canvas.height - cameraHeight - 10,
+    cameraWidth,
+    cameraHeight,
+  );
+  imgSrc.value = canvas.toDataURL('image/png');
 }
 
 /** 开始录制(合并流) */
 function startRecord() {
-  if (!screenStream || !cameraStream) return
+  if (!screenStream || !cameraStream) return;
 
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
 
-  canvas.width = 1920
-  canvas.height = 1080
+  canvas.width = 1920;
+  canvas.height = 1080;
 
-  const screenVideoEle = document.createElement('video')
-  screenVideoEle.srcObject = screenStream
-  screenVideoEle.play()
+  const screenVideoEle = document.createElement('video');
+  screenVideoEle.srcObject = screenStream;
+  screenVideoEle.play();
 
-  const cameraVideoEle = document.createElement('video')
-  cameraVideoEle.srcObject = cameraStream
-  cameraVideoEle.play()
+  const cameraVideoEle = document.createElement('video');
+  cameraVideoEle.srcObject = cameraStream;
+  cameraVideoEle.play();
 
   // 使用canvas合成画面
   const draw = () => {
-    ctx?.drawImage(screenVideoEle, 0, 0, canvas.width, canvas.height)
-    const cameraWidth = 320
-    const cameraHeight = 240
-    ctx?.drawImage(cameraVideoEle, canvas.width - cameraWidth - 20, canvas.height - cameraHeight - 20, cameraWidth, cameraHeight)
-    requestAnimationFrame(draw)
-  }
+    ctx?.drawImage(screenVideoEle, 0, 0, canvas.width, canvas.height);
+    const cameraWidth = 320;
+    const cameraHeight = 240;
+    ctx?.drawImage(
+      cameraVideoEle,
+      canvas.width - cameraWidth - 20,
+      canvas.height - cameraHeight - 20,
+      cameraWidth,
+      cameraHeight,
+    );
+    requestAnimationFrame(draw);
+  };
 
   draw();
 
   const videoOut = canvas.captureStream(30);
-  const audioTracks = [
-    ...cameraStream.getAudioTracks(),
-    ...screenStream.getAudioTracks()
-  ]
+  const audioTracks = [...cameraStream.getAudioTracks(), ...screenStream.getAudioTracks()];
 
-  mixedStream = new MediaStream([...videoOut.getVideoTracks(), ...audioTracks])
+  mixedStream = new MediaStream([...videoOut.getVideoTracks(), ...audioTracks]);
 
-  recordedChunks = []
-  recorder = new MediaRecorder(mixedStream, { mimeType: 'video/webm; codecs=vp9' })
+  recordedChunks = [];
+  recorder = new MediaRecorder(mixedStream, { mimeType: 'video/webm; codecs=vp9' });
 
-  recorder.ondataavailable = e => {
-    if (e.data.size > 0) recordedChunks.push(e.data)
-  }
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
 
   recorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: 'video/webm' })
-    recordedUrl.value = URL.createObjectURL(blob)
-  }
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    recordedUrl.value = URL.createObjectURL(blob);
+  };
 
-  recorder.start()
-  isRecording.value = true
-  console.log('🎥 开始录制')
+  recorder.start();
+  isRecording.value = true;
+  console.log('🎥 开始录制');
 }
 
 /** 停止录制 */
 function stopRecord() {
-  if (!recorder) return
-  recorder.stop()
-  isRecording.value = false
-  console.log('🛑 录制结束')
+  if (!recorder) return;
+  recorder.stop();
+  isRecording.value = false;
+  console.log('🛑 录制结束');
 }
 
 /** 下载录制结果 */
 async function downloadRecord() {
-  if (!recordedUrl.value || saving.value) return
-  saving.value = true
+  if (!recordedUrl.value || saving.value) return;
+  saving.value = true;
   try {
-    await saveFile(new Blob(recordedChunks, { type: 'video/webm' }), `record-${Date.now()}.webm`)
+    await saveFile(new Blob(recordedChunks, { type: 'video/webm' }), `record-${Date.now()}.webm`);
   } catch {
-    message.error('保存失败，请重试')
+    message.error('保存失败，请重试');
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 /** 组件卸载时清理资源 */
 onBeforeUnmount(() => {
-  stopShare()
-})
+  stopShare();
+});
 </script>
 
 <style scoped>
@@ -252,7 +318,7 @@ onBeforeUnmount(() => {
   width: 160px;
   height: 120px;
   border-radius: 8px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.3);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
   z-index: 10;
   background: #000;
 }

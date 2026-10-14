@@ -6,12 +6,11 @@ export function resolveChatMediaUrl(url: string) {
 }
 
 export function selectAudioMimeType() {
-  return [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/ogg;codecs=opus',
-    'audio/mp4',
-  ].find(type => MediaRecorder.isTypeSupported(type)) || '';
+  return (
+    ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find((type) =>
+      MediaRecorder.isTypeSupported(type),
+    ) || ''
+  );
 }
 
 export function getAudioFileExtension(mimeType: string) {

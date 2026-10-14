@@ -80,7 +80,13 @@ describe('群会话换代保护', () => {
     expect(fresh.startedAt).not.toEqual(old.startedAt);
   });
   it('NX失败后记录消失不返回不存在的会话', async () => {
-    const service = new GroupSessionService({ create: async () => false, get: async () => null, delete: async () => false });
-    await expect(service.start(7, 'video', { id: 1, socketId: 'socket' })).rejects.toThrow('GROUP_SESSION_CHANGED');
+    const service = new GroupSessionService({
+      create: async () => false,
+      get: async () => null,
+      delete: async () => false,
+    });
+    await expect(service.start(7, 'video', { id: 1, socketId: 'socket' })).rejects.toThrow(
+      'GROUP_SESSION_CHANGED',
+    );
   });
 });

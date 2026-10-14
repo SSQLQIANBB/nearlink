@@ -11,9 +11,13 @@ export interface RefreshTokenAttributes {
   updatedAt?: Date;
 }
 
-interface RefreshTokenCreationAttributes extends Optional<RefreshTokenAttributes, 'id' | 'isRevoked'> {}
+interface RefreshTokenCreationAttributes
+  extends Optional<RefreshTokenAttributes, 'id' | 'isRevoked'> {}
 
-class RefreshToken extends Model<RefreshTokenAttributes, RefreshTokenCreationAttributes> implements RefreshTokenAttributes {
+class RefreshToken
+  extends Model<RefreshTokenAttributes, RefreshTokenCreationAttributes>
+  implements RefreshTokenAttributes
+{
   declare id?: number;
   declare userId: number;
   declare token: string;
@@ -64,8 +68,7 @@ RefreshToken.init(
         fields: ['token'],
       },
     ],
-  }
+  },
 );
 
 export default RefreshToken;
-

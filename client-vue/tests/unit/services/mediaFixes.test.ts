@@ -15,7 +15,9 @@ describe('共享标注布局', () => {
     const rect = containedVideoRect({ width: 1000, height: 1000 }, { width: 1920, height: 1080 });
     expect(rect.width).toBeCloseTo(1000);
     expect(rect.height).toBeCloseTo(562.5);
-    expect(containedVideoRect({ width: 800, height: 450 }, { width: 1920, height: 1080 }))
-      .toEqual({ width: 800, height: 450 });
+    expect(containedVideoRect({ width: 800, height: 450 }, { width: 1920, height: 1080 })).toEqual({
+      width: 800,
+      height: 450,
+    });
   });
 });

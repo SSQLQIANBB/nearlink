@@ -1,6 +1,11 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { defaultNotificationSettings, getNotificationSettings, updateNotificationSettings, type NotificationSettings } from '@/api/notificationSettings';
+import {
+  defaultNotificationSettings,
+  getNotificationSettings,
+  updateNotificationSettings,
+  type NotificationSettings,
+} from '@/api/notificationSettings';
 import notificationService from '@/services/notificationService';
 
 export const useNotificationSettingsStore = defineStore('notificationSettings', () => {
@@ -14,9 +19,15 @@ export const useNotificationSettingsStore = defineStore('notificationSettings', 
 
   function apply(value: NotificationSettings) {
     settings.value = { ...value };
-    const { desktopEnabled, messageEnabled, callEnabled, messageTone, callTone, ...preferences } = value;
+    const { desktopEnabled, messageEnabled, callEnabled, messageTone, callTone, ...preferences } =
+      value;
     notificationService.updatePreferences(preferences);
-    notificationService.updateSoundPreferences({ messageEnabled, callEnabled, messageTone, callTone });
+    notificationService.updateSoundPreferences({
+      messageEnabled,
+      callEnabled,
+      messageTone,
+      callTone,
+    });
     if (desktopEnabled) notificationService.enable();
     else notificationService.disable();
   }

@@ -21,8 +21,7 @@ function key(purpose: EmailCodePurpose, email: string, type: string) {
 }
 
 function codeHash(code: string) {
-  return crypto.createHmac('sha256', env.auth.jwtSecret)
-    .update(code).digest('hex');
+  return crypto.createHmac('sha256', env.auth.jwtSecret).update(code).digest('hex');
 }
 
 export function isMailConfigured() {
@@ -45,7 +44,11 @@ async function sendMail(email: string, code: string, purpose: EmailCodePurpose) 
     disableUrlAccess: true,
   });
   const label: Record<EmailCodePurpose, string> = {
-    register: '注册', bind: '绑定邮箱', reset: '找回密码', 'change-password': '修改密码', login: '登录',
+    register: '注册',
+    bind: '绑定邮箱',
+    reset: '找回密码',
+    'change-password': '修改密码',
+    login: '登录',
   };
   try {
     await transport.sendMail({
@@ -59,7 +62,10 @@ async function sendMail(email: string, code: string, purpose: EmailCodePurpose) 
   }
 }
 
-export async function issueEmailCode(purpose: EmailCodePurpose, email: string): Promise<'sent' | 'cooldown'> {
+export async function issueEmailCode(
+  purpose: EmailCodePurpose,
+  email: string,
+): Promise<'sent' | 'cooldown'> {
   const cooldownKey = key(purpose, email, 'cooldown');
   const reserved = await redis.set(cooldownKey, '1', 'EX', COOLDOWN_SECONDS, 'NX');
   if (reserved !== 'OK') return 'cooldown';
@@ -77,7 +83,11 @@ export async function issueEmailCode(purpose: EmailCodePurpose, email: string): 
   }
 }
 
-export async function consumeEmailCode(purpose: EmailCodePurpose, email: string, code: unknown): Promise<boolean> {
+export async function consumeEmailCode(
+  purpose: EmailCodePurpose,
+  email: string,
+  code: unknown,
+): Promise<boolean> {
   if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return false;
   const verificationKey = key(purpose, email, 'code');
   const attemptsKey = key(purpose, email, 'attempts');

@@ -4,18 +4,24 @@ test('背景分割模型能从项目资源加载并处理真实浏览器画布',
   test.setTimeout(90000);
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { createSegmenter, composeBackground } = await import(/* @vite-ignore */ '/src/services/backgroundProcessor.ts');
+    const { createSegmenter, composeBackground } = await import(
+      /* @vite-ignore */ '/src/services/backgroundProcessor.ts'
+    );
     const segmenter = await createSegmenter();
     const source = document.createElement('canvas');
-    source.width = 256; source.height = 144;
+    source.width = 256;
+    source.height = 144;
     source.getContext('2d')!.fillRect(0, 0, 256, 144);
     const output = document.createElement('canvas');
-    output.width = 256; output.height = 144;
+    output.width = 256;
+    output.height = 144;
     let frames = 0;
     segmenter.onResults((results: any) => {
       frames++;
       composeBackground(output.getContext('2d')!, results, 256, 144, {
-        effect: 'color', color: '#FF0000', image: null,
+        effect: 'color',
+        color: '#FF0000',
+        image: null,
       });
     });
     await segmenter.send({ image: source });

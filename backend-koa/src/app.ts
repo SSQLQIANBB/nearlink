@@ -1,5 +1,5 @@
 import Koa from 'koa';
-import chalk from 'chalk'
+import chalk from 'chalk';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
@@ -12,21 +12,23 @@ import sequelize, { initDatabase } from './config/database';
 import redis from './config/redis';
 import { initializeRemoteControlRuntime } from './services/initializeRemoteControlRuntime';
 import { env } from './config/env';
-import cors from '@/middleware/cors'
+import cors from '@/middleware/cors';
 
 const app = new Koa();
-const httpServer = http.createServer(app.callback())
+const httpServer = http.createServer(app.callback());
 
 // 配置cors
-app.use(cors)
+app.use(cors);
 
 // 配置请求体解析
-app.use(koaBody({
-  multipart: true,
-  formidable: {
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-  }
-}));
+app.use(
+  koaBody({
+    multipart: true,
+    formidable: {
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+    },
+  }),
+);
 
 app.use(async (ctx, next) => {
   if (!ctx.path.startsWith('/uploads/')) return next();
@@ -71,7 +73,9 @@ async function startServer() {
         await redis.quit();
         clearTimeout(deadline);
         process.exit(0);
-      } catch { process.exit(1); }
+      } catch {
+        process.exit(1);
+      }
     };
     process.once('SIGTERM', shutdown);
     process.once('SIGINT', shutdown);
@@ -87,16 +91,16 @@ async function startServer() {
       }
       await next();
     });
-    setupRouter(app)
+    setupRouter(app);
     console.log(chalk.green('✓ 路由注册完成\n'));
 
     // 4. 兜底响应（必须在路由注册之后）
-    app.use(ctx => {
+    app.use((ctx) => {
       ctx.status = 404;
       ctx.body = {
         code: 404,
         message: '未找到请求的资源',
-        path: ctx.path
+        path: ctx.path,
       };
     });
 
@@ -105,7 +109,9 @@ async function startServer() {
       console.log(chalk.cyan.bold('========================================'));
       console.log(chalk.green.bold('✓ NearLink 服务端启动成功！'));
       console.log(chalk.cyan.bold('========================================'));
-      console.log(chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${env.app.port}`));
+      console.log(
+        chalk.blue('  服务地址: ') + chalk.green.bold(`http://localhost:${env.app.port}`),
+      );
       console.log(chalk.blue('  环境: ') + chalk.yellow(env.app.nodeEnv));
       console.log(chalk.cyan.bold('========================================\n'));
     });

@@ -1,4 +1,10 @@
-import { callTones, messageTones, readSoundPreferences, type SoundKind, type SoundPreferences } from './notificationSounds';
+import {
+  callTones,
+  messageTones,
+  readSoundPreferences,
+  type SoundKind,
+  type SoundPreferences,
+} from './notificationSounds';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
 /**
@@ -70,7 +76,10 @@ class NotificationService {
     // 初始化音频
     this.initAudio();
     this.initCallRingtone();
-    this.defaultSoundSources = { message: this.notificationSound?.src || '', call: this.callRingtone?.src || '' };
+    this.defaultSoundSources = {
+      message: this.notificationSound?.src || '',
+      call: this.callRingtone?.src || '',
+    };
     this.applySoundSources();
   }
 
@@ -82,15 +91,22 @@ class NotificationService {
       const bytes = new Uint8Array(44 + sampleCount * 2);
       const view = new DataView(bytes.buffer);
       const label = (offset: number, value: string) => {
-        for (let index = 0; index < value.length; index++) bytes[offset + index] = value.charCodeAt(index);
+        for (let index = 0; index < value.length; index++)
+          bytes[offset + index] = value.charCodeAt(index);
       };
-      label(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true);
-      label(8, 'WAVE'); label(12, 'fmt ');
-      view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+      label(0, 'RIFF');
+      view.setUint32(4, bytes.length - 8, true);
+      label(8, 'WAVE');
+      label(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
       view.setUint32(28, sampleRate * 2, true);
-      view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-      label(36, 'data'); view.setUint32(40, sampleCount * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      label(36, 'data');
+      view.setUint32(40, sampleCount * 2, true);
       const notes = [392, 587, 494, 659, 440, 659, 523, 784];
       const noteLength = 0.43;
       for (let index = 0; index < sampleCount; index++) {
@@ -99,9 +115,11 @@ class NotificationService {
         const frequency = notes[noteIndex];
         if (!frequency) continue;
         const elapsed = seconds - noteIndex * noteLength;
-        const envelope = Math.min(1, elapsed * 30, (noteLength - elapsed) * 25) * Math.exp(-elapsed * 2);
-        const tone = Math.sin(2 * Math.PI * frequency * elapsed)
-          + 0.18 * Math.sin(4 * Math.PI * frequency * elapsed);
+        const envelope =
+          Math.min(1, elapsed * 30, (noteLength - elapsed) * 25) * Math.exp(-elapsed * 2);
+        const tone =
+          Math.sin(2 * Math.PI * frequency * elapsed) +
+          0.18 * Math.sin(4 * Math.PI * frequency * elapsed);
         view.setInt16(44 + index * 2, Math.round(tone * envelope * 10500), true);
       }
       this.callRingtone = new Audio();
@@ -122,15 +140,22 @@ class NotificationService {
       const bytes = new Uint8Array(44 + sampleCount * 2);
       const view = new DataView(bytes.buffer);
       const label = (offset: number, value: string) => {
-        for (let index = 0; index < value.length; index++) bytes[offset + index] = value.charCodeAt(index);
+        for (let index = 0; index < value.length; index++)
+          bytes[offset + index] = value.charCodeAt(index);
       };
-      label(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true);
-      label(8, 'WAVE'); label(12, 'fmt ');
-      view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+      label(0, 'RIFF');
+      view.setUint32(4, bytes.length - 8, true);
+      label(8, 'WAVE');
+      label(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
       view.setUint32(28, sampleRate * 2, true);
-      view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-      label(36, 'data'); view.setUint32(40, sampleCount * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      label(36, 'data');
+      view.setUint32(40, sampleCount * 2, true);
       for (let index = 0; index < sampleCount; index++) {
         const seconds = index / sampleRate;
         const amplitude = Math.sin(2 * Math.PI * 800 * seconds) * Math.exp(-seconds * 18);
@@ -177,9 +202,11 @@ class NotificationService {
     try {
       if (isTauri()) {
         const { isPermissionGranted } = await import('@tauri-apps/plugin-notification');
-        if (!await isPermissionGranted()) return false;
+        if (!(await isPermissionGranted())) return false;
         // 桌面插件不实现 Web Notification 的 close/onclick，通知生命周期由 Windows 管理。
-        await invoke('plugin:notification|notify', { options: { title: options.title, body: options.body } });
+        await invoke('plugin:notification|notify', {
+          options: { title: options.title, body: options.body },
+        });
         return true;
       }
       if (this.getPermission() !== 'granted') return false;
@@ -212,7 +239,9 @@ class NotificationService {
     }
   }
 
-  getPreferences(): NotificationPreferences { return { ...this.preferences }; }
+  getPreferences(): NotificationPreferences {
+    return { ...this.preferences };
+  }
 
   updatePreferences(value: Partial<NotificationPreferences>) {
     this.preferences = { ...this.preferences, ...value };
@@ -222,15 +251,21 @@ class NotificationService {
 
   shouldNotify(type: NotificationType): boolean {
     const keys: Partial<Record<NotificationType, keyof NotificationPreferences>> = {
-      private: 'notifyPrivateMessage', group: 'notifyGroupMessage',
-      call: 'notifyCall', invitation: 'notifyInvitation',
+      private: 'notifyPrivateMessage',
+      group: 'notifyGroupMessage',
+      call: 'notifyCall',
+      invitation: 'notifyInvitation',
     };
     const key = keys[type];
     return key ? this.preferences[key] : true;
   }
 
   previewMessage(message: string, type: 'private' | 'group'): string {
-    return this.preferences.messagePreview ? message : type === 'private' ? '收到一条私聊消息' : '收到一条群组消息';
+    return this.preferences.messagePreview
+      ? message
+      : type === 'private'
+        ? '收到一条私聊消息'
+        : '收到一条群组消息';
   }
 
   playAlert(type: NotificationType, silent = false) {
@@ -238,13 +273,14 @@ class NotificationService {
   }
 
   startCallRingtone(key: string) {
-    if (!this.soundPreferences.callEnabled || !this.shouldNotify('call') || !this.callRingtone) return;
+    if (!this.soundPreferences.callEnabled || !this.shouldNotify('call') || !this.callRingtone)
+      return;
     if (this.activeCallRingtones.has(key)) return;
     const alreadyPlaying = this.activeCallRingtones.size > 0;
     this.activeCallRingtones.add(key);
     if (alreadyPlaying) return;
     this.callRingtone.currentTime = 0;
-    void this.callRingtone.play().catch(error => {
+    void this.callRingtone.play().catch((error) => {
       console.warn('播放来电音失败:', error);
     });
   }
@@ -260,11 +296,11 @@ class NotificationService {
   startOutgoingRingtone(tone: SoundPreferences['callTone']) {
     if (!this.soundPreferences.callEnabled) return;
     this.stopOutgoingRingtone();
-    const audio = this.outgoingRingtone ||= new Audio();
-    audio.src = callTones.find(item => item.value === tone)!.src || this.defaultSoundSources.call;
-    audio.volume = .55;
+    const audio = (this.outgoingRingtone ||= new Audio());
+    audio.src = callTones.find((item) => item.value === tone)!.src || this.defaultSoundSources.call;
+    audio.volume = 0.55;
     audio.loop = true;
-    void audio.play().catch(error => console.warn('播放回铃音失败:', error));
+    void audio.play().catch((error) => console.warn('播放回铃音失败:', error));
   }
 
   stopOutgoingRingtone() {
@@ -289,7 +325,7 @@ class NotificationService {
     try {
       // 重置音频
       this.notificationSound.currentTime = 0;
-      
+
       // 根据不同类型调整音量和音调（可选）
       switch (type) {
         case 'call':
@@ -306,7 +342,7 @@ class NotificationService {
       }
 
       // 播放音频
-      this.notificationSound.play().catch(error => {
+      this.notificationSound.play().catch((error) => {
         console.warn('播放提示音失败:', error);
       });
     } catch (error) {
@@ -331,7 +367,13 @@ class NotificationService {
   /**
    * 显示群组消息通知
    */
-  async showGroupMessage(groupName: string, from: string, message: string, avatar?: string, onClick?: () => void) {
+  async showGroupMessage(
+    groupName: string,
+    from: string,
+    message: string,
+    avatar?: string,
+    onClick?: () => void,
+  ) {
     return this.show({
       title: `${groupName}`,
       body: this.preferences.messagePreview ? `${from}: ${message}` : '收到一条群组消息',
@@ -345,7 +387,12 @@ class NotificationService {
   /**
    * 显示通话通知
    */
-  async showCall(from: string, type: 'video' | 'audio' | 'screen', avatar?: string, onClick?: () => void) {
+  async showCall(
+    from: string,
+    type: 'video' | 'audio' | 'screen',
+    avatar?: string,
+    onClick?: () => void,
+  ) {
     const typeText = type === 'video' ? '视频通话' : type === 'audio' ? '语音通话' : '屏幕共享';
     return this.show({
       title: `来电 - ${from}`,
@@ -400,12 +447,16 @@ class NotificationService {
     localStorage.setItem('notification_enabled', 'false');
   }
 
-  getSoundPreferences(): SoundPreferences { return { ...this.soundPreferences }; }
+  getSoundPreferences(): SoundPreferences {
+    return { ...this.soundPreferences };
+  }
 
   getSoundSource(kind: SoundKind): string {
     return kind === 'message'
-      ? messageTones.find(tone => tone.value === this.soundPreferences.messageTone)!.src || this.defaultSoundSources.message
-      : callTones.find(tone => tone.value === this.soundPreferences.callTone)!.src || this.defaultSoundSources.call;
+      ? messageTones.find((tone) => tone.value === this.soundPreferences.messageTone)!.src ||
+          this.defaultSoundSources.message
+      : callTones.find((tone) => tone.value === this.soundPreferences.callTone)!.src ||
+          this.defaultSoundSources.call;
   }
 
   private applySoundSources() {
@@ -430,7 +481,7 @@ class NotificationService {
       this.callRingtone.pause();
       this.callRingtone.src = this.getSoundSource('call');
       if (this.activeCallRingtones.size > 0) {
-        void this.callRingtone.play().catch(error => console.warn('播放来电音失败:', error));
+        void this.callRingtone.play().catch((error) => console.warn('播放来电音失败:', error));
       }
     }
   }
@@ -454,4 +505,3 @@ class NotificationService {
 // 导出单例
 const notificationService = new NotificationService();
 export default notificationService;
-

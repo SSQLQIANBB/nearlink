@@ -55,8 +55,7 @@ GroupMember.init(
     sequelize,
     tableName: 'group_members',
     timestamps: true,
-  }
+  },
 );
 
 export default GroupMember;
-

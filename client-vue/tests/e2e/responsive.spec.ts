@@ -12,60 +12,88 @@ const authenticatedRoutes = [
 const publicRoutes = ['/login', '/chat', '/socket', '/share'];
 
 async function preparePage(page: Page, userId = 1) {
-  await page.route(/\/meeting(?:\/|\?|$)/, route => route.abort());
-  await page.addInitScript(({ authenticatedUserId }) => {
-    localStorage.setItem('token', 'layout-test-token');
-    localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'layout-test-token', refreshToken: 'layout-refresh-token' }));
-    localStorage.setItem('user', JSON.stringify({
-      id: authenticatedUserId,
-      username: authenticatedUserId === 1 ? 'owner' : 'member',
-      nickname: authenticatedUserId === 1 ? '测试用户' : '成员二',
-      status: 'online',
-    }));
+  await page.route(/\/meeting(?:\/|\?|$)/, (route) => route.abort());
+  await page.addInitScript(
+    ({ authenticatedUserId }) => {
+      localStorage.setItem('token', 'layout-test-token');
+      localStorage.setItem(
+        '__STORAGE_PERSIST_AUTH_',
+        JSON.stringify({ token: 'layout-test-token', refreshToken: 'layout-refresh-token' }),
+      );
+      localStorage.setItem(
+        'user',
+        JSON.stringify({
+          id: authenticatedUserId,
+          username: authenticatedUserId === 1 ? 'owner' : 'member',
+          nickname: authenticatedUserId === 1 ? '测试用户' : '成员二',
+          status: 'online',
+        }),
+      );
 
-    const stream = new MediaStream();
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: {
-        getUserMedia: async () => stream,
-        getDisplayMedia: async () => {
-          (window as any).__screenCaptureCount = ((window as any).__screenCaptureCount || 0) + 1;
-          return stream;
+      const stream = new MediaStream();
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          getUserMedia: async () => stream,
+          getDisplayMedia: async () => {
+            (window as any).__screenCaptureCount = ((window as any).__screenCaptureCount || 0) + 1;
+            return stream;
+          },
         },
-      },
-    });
+      });
 
-    class PeerConnectionStub {
-      addTrack() {}
-      close() {}
-      setLocalDescription() { return Promise.resolve(); }
-      setRemoteDescription() { return Promise.resolve(); }
-      addIceCandidate() { return Promise.resolve(); }
-      createOffer() { return Promise.resolve({ type: 'offer', sdp: '' }); }
-      createAnswer() { return Promise.resolve({ type: 'answer', sdp: '' }); }
-    }
-    Object.defineProperty(window, 'RTCPeerConnection', {
-      configurable: true,
-      value: PeerConnectionStub,
-    });
-  }, { authenticatedUserId: userId });
+      class PeerConnectionStub {
+        addTrack() {}
+        close() {}
+        setLocalDescription() {
+          return Promise.resolve();
+        }
+        setRemoteDescription() {
+          return Promise.resolve();
+        }
+        addIceCandidate() {
+          return Promise.resolve();
+        }
+        createOffer() {
+          return Promise.resolve({ type: 'offer', sdp: '' });
+        }
+        createAnswer() {
+          return Promise.resolve({ type: 'answer', sdp: '' });
+        }
+      }
+      Object.defineProperty(window, 'RTCPeerConnection', {
+        configurable: true,
+        value: PeerConnectionStub,
+      });
+    },
+    { authenticatedUserId: userId },
+  );
 
   await page.route(/\/api\/(auth|groups|messages|invitations)(?:\/|\?|$)/, async (route) => {
     const url = route.request().url();
     let body: Record<string, unknown> = {};
 
     if (url.includes('/api/auth/me')) {
-      body = { user: { id: userId, username: userId === 1 ? 'owner' : 'member', nickname: userId === 1 ? '测试用户' : '成员二', status: 'online' } };
+      body = {
+        user: {
+          id: userId,
+          username: userId === 1 ? 'owner' : 'member',
+          nickname: userId === 1 ? '测试用户' : '成员二',
+          status: 'online',
+        },
+      };
     } else if (url.includes('/api/groups/my')) {
       body = {
-        groups: [{
-          id: 7,
-          name: '响应式测试群组',
-          description: '用于移动端布局检查',
-          ownerId: 1,
-          role: 'owner',
-          memberCount: 2,
-        }],
+        groups: [
+          {
+            id: 7,
+            name: '响应式测试群组',
+            description: '用于移动端布局检查',
+            ownerId: 1,
+            role: 'owner',
+            memberCount: 2,
+          },
+        ],
       };
     } else if (url.includes('/api/groups/7')) {
       body = {
@@ -96,12 +124,19 @@ async function preparePage(page: Page, userId = 1) {
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
-  await expect.poll(async () => page.evaluate(() => {
-    const viewportWidth = document.documentElement.clientWidth;
-    const roots = [document.documentElement, document.body, document.querySelector('#app')]
-      .filter((element): element is Element => Boolean(element));
-    return roots.every((element) => element.scrollWidth <= viewportWidth + 1);
-  })).toBe(true);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const roots = [
+          document.documentElement,
+          document.body,
+          document.querySelector('#app'),
+        ].filter((element): element is Element => Boolean(element));
+        return roots.every((element) => element.scrollWidth <= viewportWidth + 1);
+      }),
+    )
+    .toBe(true);
 }
 
 test.describe('响应式布局', () => {
@@ -116,8 +151,12 @@ test.describe('响应式布局', () => {
 
     const loginPage = page.locator('.login-page');
     const expectNoScroll = async () => {
-      await expect.poll(() => loginPage.evaluate(element => element.scrollHeight - element.clientHeight)).toBe(0);
-      expect(await loginPage.evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe('none');
+      await expect
+        .poll(() => loginPage.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBe(0);
+      expect(await loginPage.evaluate((element) => getComputedStyle(element).scrollbarWidth)).toBe(
+        'none',
+      );
     };
     await expectNoScroll();
     await page.getByText('找回密码', { exact: true }).first().click();
@@ -126,7 +165,9 @@ test.describe('响应式布局', () => {
     await expectNoScroll();
 
     await page.setViewportSize({ width: 375, height: 500 });
-    await expect.poll(() => loginPage.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+    await expect
+      .poll(() => loginPage.evaluate((element) => element.scrollHeight > element.clientHeight))
+      .toBe(true);
     const submit = page.locator('.n-tab-pane:visible .n-button').last();
     await submit.scrollIntoViewIfNeeded();
     await expect(submit).toBeInViewport();
@@ -136,14 +177,17 @@ test.describe('响应式布局', () => {
     await preparePage(page);
     await page.addInitScript(() => {
       (window as any).__desktopNotifications = [];
-      Object.defineProperty(window, 'Notification', { configurable: true, value: class {
-        static permission = 'granted';
-        static requestPermission = async () => 'granted';
-        constructor(title: string, options: NotificationOptions) {
-          (window as any).__desktopNotifications.push({ title, body: options.body });
-        }
-        close() {}
-      } });
+      Object.defineProperty(window, 'Notification', {
+        configurable: true,
+        value: class {
+          static permission = 'granted';
+          static requestPermission = async () => 'granted';
+          constructor(title: string, options: NotificationOptions) {
+            (window as any).__desktopNotifications.push({ title, body: options.body });
+          }
+          close() {}
+        },
+      });
     });
     await page.goto('/profile');
     await page.getByText('通知设置', { exact: true }).click();
@@ -153,16 +197,28 @@ test.describe('响应式布局', () => {
     await switches.nth(3).click(); // 关闭私聊提醒
     await switches.nth(5).click(); // 关闭来电提醒
     await switches.nth(6).click(); // 关闭邀请提醒
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('notify_settings') || '{}'))).toMatchObject({
-      messagePreview: false, notifyPrivateMessage: false, notifyCall: false, notifyInvitation: false,
+    expect(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('notify_settings') || '{}')),
+    ).toMatchObject({
+      messagePreview: false,
+      notifyPrivateMessage: false,
+      notifyCall: false,
+      notifyInvitation: false,
     });
 
     await page.goto('/groups');
     await page.evaluate(async () => {
       const { useSocketStore } = await import('/src/stores/socket.ts' as string);
-      useSocketStore().socket?.listeners('private_message').forEach((listener: Function) => listener({
-        id: 911, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '秘密内容',
-      }));
+      useSocketStore()
+        .socket?.listeners('private_message')
+        .forEach((listener: Function) =>
+          listener({
+            id: 911,
+            fromUserId: 2,
+            sender: { id: 2, nickname: '小明' },
+            message: '秘密内容',
+          }),
+        );
     });
     await expect(page.locator('.n-notification')).toHaveCount(0);
     await expect(page.locator('.global-unread-shortcut__badge')).toHaveText('1');
@@ -173,11 +229,20 @@ test.describe('响应式布局', () => {
     await page.goto('/groups');
     await page.evaluate(async () => {
       const { useSocketStore } = await import('/src/stores/socket.ts' as string);
-      useSocketStore().socket?.listeners('private_message').forEach((listener: Function) => listener({
-        id: 912, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '秘密内容',
-      }));
+      useSocketStore()
+        .socket?.listeners('private_message')
+        .forEach((listener: Function) =>
+          listener({
+            id: 912,
+            fromUserId: 2,
+            sender: { id: 2, nickname: '小明' },
+            message: '秘密内容',
+          }),
+        );
     });
-    await expect(page.locator('.n-notification .global-message-link')).toHaveText('内容：收到一条私聊消息');
+    await expect(page.locator('.n-notification .global-message-link')).toHaveText(
+      '内容：收到一条私聊消息',
+    );
 
     await page.goto('/profile');
     await page.getByText('通知设置', { exact: true }).click();
@@ -186,7 +251,8 @@ test.describe('响应式布局', () => {
     await page.locator('.n-tab-pane:visible .n-switch').nth(0).click();
     await page.getByRole('button', { name: '发送测试' }).click();
     expect(await page.evaluate(() => (window as any).__desktopNotifications)).toContainEqual({
-      title: '测试通知', body: '这是一条测试通知，您的通知设置已生效！',
+      title: '测试通知',
+      body: '这是一条测试通知，您的通知设置已生效！',
     });
   });
 
@@ -198,17 +264,26 @@ test.describe('响应式布局', () => {
       const { useSocketStore } = await import('/src/stores/socket.ts' as string);
       const socket = useSocketStore().socket;
       if (!socket) throw new Error('Socket 尚未初始化');
-      socket.listeners('private_message').forEach((listener: Function) => listener({
-        id: 901, fromUserId: 2, sender: { id: 2, nickname: '小明' }, message: '你好',
-      }));
+      socket.listeners('private_message').forEach((listener: Function) =>
+        listener({
+          id: 901,
+          fromUserId: 2,
+          sender: { id: 2, nickname: '小明' },
+          message: '你好',
+        }),
+      );
     });
 
     const title = page.locator('.n-notification .global-message-title');
     const content = page.locator('.n-notification .global-message-link');
     await expect(title).toHaveText('小明：消息');
     await expect(content).toHaveText('内容：你好');
-    expect(await title.evaluate(element => getComputedStyle(element).color)).toBe('rgb(248, 250, 252)');
-    expect(await content.evaluate(element => getComputedStyle(element).color)).toBe('rgb(219, 234, 254)');
+    expect(await title.evaluate((element) => getComputedStyle(element).color)).toBe(
+      'rgb(248, 250, 252)',
+    );
+    expect(await content.evaluate((element) => getComputedStyle(element).color)).toBe(
+      'rgb(219, 234, 254)',
+    );
 
     await page.getByRole('button', { name: '打开联系人列表' }).click();
     const badge = page.locator('.contact-unread-badge');
@@ -235,9 +310,9 @@ test.describe('响应式布局', () => {
     const scrollbarBox = await scrollbar.boundingBox();
     expect(sidebarBox).not.toBeNull();
     expect(scrollbarBox).not.toBeNull();
-    expect(Math.abs(
-      scrollbarBox!.y + scrollbarBox!.height - sidebarBox!.y - sidebarBox!.height,
-    )).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(scrollbarBox!.y + scrollbarBox!.height - sidebarBox!.y - sidebarBox!.height),
+    ).toBeLessThanOrEqual(1);
   });
 
   test('标注工具栏默认贴近视口底部，可拖动到不遮挡画面的位置', async ({ page }) => {

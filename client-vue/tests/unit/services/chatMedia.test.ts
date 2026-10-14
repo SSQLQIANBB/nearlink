@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getAudioFileExtension, resolveChatMediaUrl, selectAudioMimeType } from '@/services/chatMedia';
+import {
+  getAudioFileExtension,
+  resolveChatMediaUrl,
+  selectAudioMimeType,
+} from '@/services/chatMedia';
 
 describe('聊天媒体工具', () => {
   it('保留 HTTPS 地址并解析站内上传地址', () => {
-    expect(resolveChatMediaUrl('https://files.example.com/a.png')).toBe('https://files.example.com/a.png');
+    expect(resolveChatMediaUrl('https://files.example.com/a.png')).toBe(
+      'https://files.example.com/a.png',
+    );
     expect(resolveChatMediaUrl('/uploads/a.png')).toMatch(/\/uploads\/a\.png$/);
   });
 

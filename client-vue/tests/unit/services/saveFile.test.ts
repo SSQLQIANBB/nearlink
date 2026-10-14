@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { isTauri, save, writeFile } = vi.hoisted(() => ({
-  isTauri: vi.fn(), save: vi.fn(), writeFile: vi.fn(),
+  isTauri: vi.fn(),
+  save: vi.fn(),
+  writeFile: vi.fn(),
 }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save }));
@@ -21,14 +23,23 @@ describe('桌面录制保存', () => {
     save.mockResolvedValue('C:\\Users\\test\\Videos\\meeting.webm');
     writeFile.mockResolvedValue(undefined);
     expect(await saveFile(blob, 'meeting.webm')).toBe(true);
-    expect(save).toHaveBeenCalledWith({ defaultPath: 'meeting.webm', filters: [{ name: 'WebM 视频', extensions: ['webm'] }] });
-    expect(writeFile).toHaveBeenCalledWith('C:\\Users\\test\\Videos\\meeting.webm', new Uint8Array([1, 2, 3]));
+    expect(save).toHaveBeenCalledWith({
+      defaultPath: 'meeting.webm',
+      filters: [{ name: 'WebM 视频', extensions: ['webm'] }],
+    });
+    expect(writeFile).toHaveBeenCalledWith(
+      'C:\\Users\\test\\Videos\\meeting.webm',
+      new Uint8Array([1, 2, 3]),
+    );
   });
 
   it('macOS MP4 录制使用匹配的保存类型', async () => {
     save.mockResolvedValue('/tmp/meeting.mp4');
     expect(await saveFile({ ...blob, type: 'video/mp4' } as Blob, 'meeting.mp4')).toBe(true);
-    expect(save).toHaveBeenCalledWith({ defaultPath: 'meeting.mp4', filters: [{ name: 'MP4 视频', extensions: ['mp4'] }] });
+    expect(save).toHaveBeenCalledWith({
+      defaultPath: 'meeting.mp4',
+      filters: [{ name: 'MP4 视频', extensions: ['mp4'] }],
+    });
   });
 
   it('取消后不读取或写入数据', async () => {

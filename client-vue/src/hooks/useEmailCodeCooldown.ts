@@ -29,11 +29,17 @@ export function useEmailCodeCooldown() {
     void version.value;
     let targetEmail = email.trim();
     if (!targetEmail) {
-      try { targetEmail = window.localStorage.getItem(`${LAST_EMAIL_PREFIX}${purpose}`) || ''; }
-      catch { targetEmail = lastEmails.get(purpose) || ''; }
+      try {
+        targetEmail = window.localStorage.getItem(`${LAST_EMAIL_PREFIX}${purpose}`) || '';
+      } catch {
+        targetEmail = lastEmails.get(purpose) || '';
+      }
     }
     if (!targetEmail) return 0;
-    return Math.min(60, Math.max(0, Math.ceil((readDeadline(storageKey(purpose, targetEmail)) - now.value) / 1000)));
+    return Math.min(
+      60,
+      Math.max(0, Math.ceil((readDeadline(storageKey(purpose, targetEmail)) - now.value) / 1000)),
+    );
   }
 
   function start(purpose: EmailCodePurpose, email: string) {
@@ -44,7 +50,9 @@ export function useEmailCodeCooldown() {
     try {
       window.localStorage.setItem(key, String(deadline));
       window.localStorage.setItem(`${LAST_EMAIL_PREFIX}${purpose}`, email.trim().toLowerCase());
-    } catch { /* 浏览器禁用存储时，至少保持当前页面的倒计时。 */ }
+    } catch {
+      /* 浏览器禁用存储时，至少保持当前页面的倒计时。 */
+    }
     now.value = Date.now();
     version.value += 1;
   }

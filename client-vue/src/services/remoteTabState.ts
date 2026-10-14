@@ -2,7 +2,9 @@ import type { LocationQueryValue } from 'vue-router';
 
 export type RemoteTab = 'users' | 'groups';
 
-export function parseRemoteTab(value: LocationQueryValue | LocationQueryValue[] | undefined): RemoteTab {
+export function parseRemoteTab(
+  value: LocationQueryValue | LocationQueryValue[] | undefined,
+): RemoteTab {
   return value === 'groups' ? 'groups' : 'users';
 }
 

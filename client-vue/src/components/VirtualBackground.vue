@@ -1,12 +1,18 @@
 <template>
   <div class="virtual-background">
     <!-- 背景效果选择器 -->
-    <n-popover trigger="click" placement="top">
+    <n-popover
+      trigger="click"
+      placement="top"
+    >
       <template #trigger>
         <n-button circle>
           <template #icon>
             <n-icon size="20">
-              <i class="iconfont icon-image" aria-hidden="true"></i>
+              <i
+                class="iconfont icon-image"
+                aria-hidden="true"
+              ></i>
             </n-icon>
           </template>
         </n-button>
@@ -24,7 +30,10 @@
         >
           <div class="option-content">
             <n-icon size="32">
-              <i class="iconfont icon-none" aria-hidden="true"></i>
+              <i
+                class="iconfont icon-none"
+                aria-hidden="true"
+              ></i>
             </n-icon>
             <n-text>无效果</n-text>
           </div>
@@ -38,7 +47,10 @@
           @click="applyEffect('color')"
         >
           <div class="option-content">
-            <div class="color-preview" :style="{ background: backgroundColor }"></div>
+            <div
+              class="color-preview"
+              :style="{ background: backgroundColor }"
+            ></div>
             <n-text>纯色背景</n-text>
           </div>
         </n-card>
@@ -59,7 +71,10 @@
         >
           <div class="option-content">
             <n-icon size="32">
-              <i class="iconfont icon-image" aria-hidden="true"></i>
+              <i
+                class="iconfont icon-image"
+                aria-hidden="true"
+              ></i>
             </n-icon>
             <n-text>图片背景</n-text>
           </div>
@@ -73,13 +88,21 @@
           :max="1"
           :show-file-list="false"
         >
-          <n-button size="small" block>上传图片</n-button>
+          <n-button
+            size="small"
+            block
+          >
+            上传图片
+          </n-button>
         </n-upload>
       </n-space>
     </n-popover>
 
     <!-- 隐藏的canvas用于处理 -->
-    <canvas ref="canvasRef" style="display: none"></canvas>
+    <canvas
+      ref="canvasRef"
+      style="display: none"
+    ></canvas>
   </div>
 </template>
 
@@ -87,7 +110,12 @@
 import { ref, watch, onUnmounted, toRaw } from 'vue';
 import { useMessage } from 'naive-ui';
 import type { UploadFileInfo } from 'naive-ui';
-import { createSegmenter, composeBackground, stopProcessedVideo, type Segmenter } from '@/services/backgroundProcessor';
+import {
+  createSegmenter,
+  composeBackground,
+  stopProcessedVideo,
+  type Segmenter,
+} from '@/services/backgroundProcessor';
 
 interface VirtualBackgroundProps {
   stream?: MediaStream | null;
@@ -120,7 +148,10 @@ async function applyEffect(effect: typeof currentEffect.value) {
     stopProcessing();
     return;
   }
-  if (!props.stream) { message.warning('没有可用的视频流'); return; }
+  if (!props.stream) {
+    message.warning('没有可用的视频流');
+    return;
+  }
   if (effect === 'image' && !backgroundImage.value) {
     message.info('请上传背景图片');
     return;
@@ -144,9 +175,12 @@ async function startProcessing() {
     await video.play();
     if (run !== generation) return;
     const processor = await createSegmenter();
-    if (run !== generation) { await processor.close(); return; }
+    if (run !== generation) {
+      await processor.close();
+      return;
+    }
     segmenter = processor;
-    processor.onResults(results => {
+    processor.onResults((results) => {
       if (run !== generation || currentEffect.value === 'none') return;
       if (canvas.width !== (video.videoWidth || 1280)) canvas.width = video.videoWidth || 1280;
       if (canvas.height !== (video.videoHeight || 720)) canvas.height = video.videoHeight || 720;
@@ -154,11 +188,12 @@ async function startProcessing() {
       if (!ctx) throw new Error('浏览器不支持画布处理');
       composeBackground(ctx, results, canvas.width, canvas.height, {
         effect: currentEffect.value,
-        color: backgroundColor.value, image: backgroundImage.value,
+        color: backgroundColor.value,
+        image: backgroundImage.value,
       });
       if (!processedStream) {
         processedStream = canvas.captureStream(30);
-        source.getAudioTracks().forEach(track => processedStream!.addTrack(track));
+        source.getAudioTracks().forEach((track) => processedStream!.addTrack(track));
         emit('stream-updated', processedStream);
       }
     });
@@ -166,11 +201,18 @@ async function startProcessing() {
       if (run !== generation) return;
       try {
         if (video.readyState >= 2) await processor.send({ image: video });
-        if (run === generation) animationFrameId = requestAnimationFrame(() => { void frame(); });
-      } catch (error) { fail(error, run); }
+        if (run === generation)
+          animationFrameId = requestAnimationFrame(() => {
+            void frame();
+          });
+      } catch (error) {
+        fail(error, run);
+      }
     };
     await frame();
-  } catch (error) { fail(error, run); }
+  } catch (error) {
+    fail(error, run);
+  }
 }
 
 function fail(error: unknown, run: number) {
@@ -186,7 +228,10 @@ function stopProcessing() {
   generation++;
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = null;
-  if (inputVideo) { inputVideo.pause(); inputVideo.srcObject = null; }
+  if (inputVideo) {
+    inputVideo.pause();
+    inputVideo.srcObject = null;
+  }
   inputVideo = null;
   const previous = segmenter;
   segmenter = null;
@@ -195,7 +240,9 @@ function stopProcessing() {
   processedStream = null;
 }
 
-function updateBackgroundColor() { /* 下一帧使用当前设置 */ }
+function updateBackgroundColor() {
+  /* 下一帧使用当前设置 */
+}
 
 // 处理图片上传
 function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
@@ -218,10 +265,13 @@ function handleImageUpload(options: { fileList: UploadFileInfo[] }) {
 }
 
 // 监听流变化
-watch(() => props.stream, (newStream) => {
-  stopProcessing();
-  if (newStream && currentEffect.value !== 'none') void startProcessing();
-});
+watch(
+  () => props.stream,
+  (newStream) => {
+    stopProcessing();
+    if (newStream && currentEffect.value !== 'none') void startProcessing();
+  },
+);
 
 // 组件卸载时清理
 onUnmounted(() => {
@@ -269,4 +319,3 @@ defineExpose({
   border: 2px solid #e0e0e0;
 }
 </style>
-

@@ -33,18 +33,21 @@ function finishInvitation(key: string, eventId: string) {
 }
 
 function dismissAll() {
-  pending.forEach(item => item.destroy());
+  pending.forEach((item) => item.destroy());
   pending.clear();
   ringtoneKeys.forEach((eventId, key) => stopRingtone(key, eventId));
   seen.clear();
 }
 
-function handleStarted(data: GroupSession & {
-  deviceType?: number;
-  user?: { nickname?: string; username?: string };
-}) {
+function handleStarted(
+  data: GroupSession & {
+    deviceType?: number;
+    user?: { nickname?: string; username?: string };
+  },
+) {
   if (!authStore.currentUser || data.ownerUserId === authStore.currentUser.id) return;
-  const type = data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video');
+  const type =
+    data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video');
   const path = `/group-${type}/${data.groupId}`;
   if (router.currentRoute.value.path === path) return;
   const key = `${data.groupId}:${type}`;
@@ -55,22 +58,42 @@ function handleStarted(data: GroupSession & {
   stopRingtone(key);
   const label = type === 'screen' ? '屏幕共享' : type === 'audio' ? '语音通话' : '视频通话';
   ringtoneKeys.set(key, eventId);
-  pending.set(key, dialog.info({
-    title: `群组${label}邀请`,
-    content: `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
-    positiveText: '接受邀请',
-    negativeText: '暂不加入',
-    onPositiveClick: () => {
-      if (mediaOccupancy.current.value) { dialog.warning({ title: '当前媒体会话进行中', content: '请先结束当前通话或远程控制，再加入群组通话。', positiveText: '知道了' }); return false; }
-      finishInvitation(key, eventId);
-      void router.push(path);
-    },
-    onNegativeClick: () => { finishInvitation(key, eventId); },
-    onClose: () => { finishInvitation(key, eventId); },
-    maskClosable: false,
-  }));
+  pending.set(
+    key,
+    dialog.info({
+      title: `群组${label}邀请`,
+      content: `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
+      positiveText: '接受邀请',
+      negativeText: '暂不加入',
+      onPositiveClick: () => {
+        if (mediaOccupancy.current.value) {
+          dialog.warning({
+            title: '当前媒体会话进行中',
+            content: '请先结束当前通话或远程控制，再加入群组通话。',
+            positiveText: '知道了',
+          });
+          return false;
+        }
+        finishInvitation(key, eventId);
+        void router.push(path);
+      },
+      onNegativeClick: () => {
+        finishInvitation(key, eventId);
+      },
+      onClose: () => {
+        finishInvitation(key, eventId);
+      },
+      maskClosable: false,
+    }),
+  );
   notificationService.startCallRingtone(`group:${eventId}`);
-  if (isAppInBackground()) void notificationService.showCall(data.user?.nickname || data.user?.username || '群成员', type, undefined, () => window.focus());
+  if (isAppInBackground())
+    void notificationService.showCall(
+      data.user?.nickname || data.user?.username || '群成员',
+      type,
+      undefined,
+      () => window.focus(),
+    );
 }
 
 function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {
@@ -80,15 +103,19 @@ function handleEnded(data: { groupId: number; type?: string; deviceType?: number
   stopRingtone(key);
 }
 
-watch(() => socketStore.socket, (socket, previous) => {
-  previous?.off('group_call_started', handleStarted);
-  previous?.off('group_call_ended', handleEnded);
-  previous?.off('disconnect', dismissAll);
-  dismissAll();
-  socket?.on('group_call_started', handleStarted);
-  socket?.on('group_call_ended', handleEnded);
-  socket?.on('disconnect', dismissAll);
-}, { immediate: true });
+watch(
+  () => socketStore.socket,
+  (socket, previous) => {
+    previous?.off('group_call_started', handleStarted);
+    previous?.off('group_call_ended', handleEnded);
+    previous?.off('disconnect', dismissAll);
+    dismissAll();
+    socket?.on('group_call_started', handleStarted);
+    socket?.on('group_call_ended', handleEnded);
+    socket?.on('disconnect', dismissAll);
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   socketStore.socket?.off('group_call_started', handleStarted);

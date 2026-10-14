@@ -17,8 +17,8 @@ const messages = ref<Message[]>([
     id: '0',
     content: '你好！我是 AI 助手，有什么可以帮你的吗？',
     isUser: false,
-    timestamp: new Date()
-  }
+    timestamp: new Date(),
+  },
 ]);
 
 const inputMessage = ref('');
@@ -32,7 +32,7 @@ function addMessage(content: string, isUser: boolean): Message {
     id: Date.now().toString(),
     content,
     isUser,
-    timestamp: new Date()
+    timestamp: new Date(),
   };
   messages.value.push(message);
   scrollToBottom();
@@ -44,9 +44,9 @@ function scrollToBottom() {
   nextTick(() => {
     if (!messageContainer.value) return;
     // 获取 n-scrollbar 内部实际滚动的内容容器
-    const scrollContainer = document.querySelector('.n-scrollbar-content') 
-      || document.querySelector('.n-scrollbar-rail')
-      // || messageContainer.value;
+    const scrollContainer =
+      document.querySelector('.n-scrollbar-content') || document.querySelector('.n-scrollbar-rail');
+    // || messageContainer.value;
 
     if (scrollContainer) {
       // 使用 requestAnimationFrame 确保在浏览器重绘时执行滚动
@@ -68,7 +68,7 @@ function scrollToBottom() {
 // 发送消息
 async function sendMessage() {
   const message = inputMessage.value.trim();
-  
+
   if (!message || isStreaming.value) {
     return;
   }
@@ -90,7 +90,7 @@ async function sendMessage() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message }),
     });
 
     if (!response.ok) {
@@ -107,14 +107,14 @@ async function sendMessage() {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    reader.read().then(function processText({done, value}): any {
+    reader.read().then(function processText({ done, value }): any {
       if (done) {
         console.log('SSE 流结束');
-        
+
         return;
       }
 
-      const chunk = decoder.decode(value, { stream: true })
+      const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
       // console.log(buffer);
 
@@ -126,7 +126,7 @@ async function sendMessage() {
         if (line.startsWith('data:')) {
           try {
             const data = JSON.parse(line.slice(5).trim());
-            
+
             if (data.type === 'text') {
               aiMessage.content += data.content;
               // 强制触发响应式更新
@@ -141,8 +141,7 @@ async function sendMessage() {
         }
       }
       return reader.read().then(processText);
-    })
-
+    });
   } catch (error) {
     console.error('错误:', error);
     aiMessage.content = '抱歉，发生了错误。请重试。';
@@ -163,7 +162,11 @@ function handleKeyPress(event: KeyboardEvent) {
 
 <template>
   <div class="chat-page">
-    <n-card class="chat-container" :bordered="false" content-style="flex-grow: 1; height: 0; overflow: hidden">
+    <n-card
+      class="chat-container"
+      :bordered="false"
+      content-style="flex-grow: 1; height: 0; overflow: hidden"
+    >
       <template #header>
         <div class="chat-header">
           <span class="header-icon">💬</span>
@@ -172,7 +175,10 @@ function handleKeyPress(event: KeyboardEvent) {
       </template>
 
       <!-- 消息列表 -->
-      <n-scrollbar class="chat-messages" ref="messageContainer">
+      <n-scrollbar
+        class="chat-messages"
+        ref="messageContainer"
+      >
         <div class="messages-wrapper">
           <div
             v-for="msg in messages"
@@ -181,8 +187,8 @@ function handleKeyPress(event: KeyboardEvent) {
           >
             <div class="message-content">
               <div class="message-text">{{ msg.content }}</div>
-              <div 
-                v-if="!msg.isUser && isStreaming && msg === messages[messages.length - 1]" 
+              <div
+                v-if="!msg.isUser && isStreaming && msg === messages[messages.length - 1]"
                 class="message-cursor"
               >
                 ▋
@@ -325,8 +331,14 @@ function handleKeyPress(event: KeyboardEvent) {
 }
 
 @keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .chat-input-container {
@@ -375,4 +387,3 @@ function handleKeyPress(event: KeyboardEvent) {
   }
 }
 </style>
-

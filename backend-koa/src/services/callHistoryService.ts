@@ -45,7 +45,7 @@ export function formatCallDuration(durationSeconds: number) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
-  const parts = [minutes, remainingSeconds].map(value => String(value).padStart(2, '0'));
+  const parts = [minutes, remainingSeconds].map((value) => String(value).padStart(2, '0'));
 
   if (hours > 0) parts.unshift(String(hours).padStart(2, '0'));
   return parts.join(':');
@@ -73,9 +73,12 @@ export function parseCallHistoryMessage(message: string): CallHistoryRecord | nu
   if (!message.startsWith(CALL_HISTORY_PREFIX)) return null;
 
   try {
-    const record = JSON.parse(message.slice(CALL_HISTORY_PREFIX.length)) as Partial<CallHistoryRecord>;
+    const record = JSON.parse(
+      message.slice(CALL_HISTORY_PREFIX.length),
+    ) as Partial<CallHistoryRecord>;
     if (!['video', 'audio', 'screen'].includes(record.type || '')) return null;
-    if (!['completed', 'rejected', 'cancelled', 'failed'].includes(record.status || '')) return null;
+    if (!['completed', 'rejected', 'cancelled', 'failed'].includes(record.status || ''))
+      return null;
     if (!Number.isSafeInteger(record.durationSeconds) || record.durationSeconds! < 0) return null;
     return record as CallHistoryRecord;
   } catch {
@@ -86,7 +89,8 @@ export function parseCallHistoryMessage(message: string): CallHistoryRecord | nu
 export function serializeChatMessage(record: any) {
   const message = typeof record?.toJSON === 'function' ? record.toJSON() : record;
   const call = parseCallHistoryMessage(message.message);
-  if (call) return { ...message, message: formatCallHistoryMessage(call), messageType: 'call', call };
+  if (call)
+    return { ...message, message: formatCallHistoryMessage(call), messageType: 'call', call };
 
   const mediaMessage = parseChatMediaMessage(message.message);
   if (mediaMessage) {
@@ -111,7 +115,7 @@ export class PrivateCallTracker {
   }
 
   getPeerSocketIds(socketId: string) {
-    return [...this.sessions.values()].flatMap(session => {
+    return [...this.sessions.values()].flatMap((session) => {
       if (session.callerSocketId === socketId) return [session.calleeSocketId];
       if (session.calleeSocketId === socketId) return [session.callerSocketId];
       return [];

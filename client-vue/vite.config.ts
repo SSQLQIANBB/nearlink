@@ -1,34 +1,29 @@
-import { defineConfig, loadEnv, type UserConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import { defineConfig, loadEnv, type UserConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
 import AutoImport from 'unplugin-auto-import/vite';
-import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
-import Components from 'unplugin-vue-components/vite'
-import { resolve } from 'path'
-import tailwindcss from 'tailwindcss'
-import viteCompression from 'vite-plugin-compression'
-import { createPublicEnv } from './src/config/publicEnv'
+import { NaiveUiResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
+import { resolve } from 'path';
+import tailwindcss from 'tailwindcss';
+import viteCompression from 'vite-plugin-compression';
+import { createPublicEnv } from './src/config/publicEnv';
 
-const compressibleAssets = /\.(?:js|mjs|json|css|html|svg|txt|xml|wasm)$/i
+const compressibleAssets = /\.(?:js|mjs|json|css|html|svg|txt|xml|wasm)$/i;
 
 // https://vite.dev/config/
 const config = {
   plugins: [
     vue(),
-     AutoImport({
+    AutoImport({
       imports: [
         'vue',
         {
-          'naive-ui': [
-            'useDialog',
-            'useMessage',
-            'useNotification',
-            'useLoadingBar'
-          ]
-        }
-      ]
+          'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar'],
+        },
+      ],
     }),
     Components({
-      resolvers: [NaiveUiResolver()]
+      resolvers: [NaiveUiResolver()],
     }),
     viteCompression({
       algorithm: 'brotliCompress',
@@ -46,21 +41,21 @@ const config = {
       threshold: 0,
       deleteOriginFile: false,
       filter: compressibleAssets,
-    })
+    }),
   ],
   worker: {
-    format: 'es'
+    format: 'es',
   },
   css: {
     postcss: {
       plugins: [tailwindcss],
-    }
+    },
   },
 
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
-    }
+      '@': resolve(__dirname, 'src'),
+    },
   },
 
   build: {
@@ -68,18 +63,26 @@ const config = {
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes('node_modules')) return
+          if (!id.includes('node_modules')) return;
 
-          if (/[\\/]node_modules[\\/](@vue|vue|vue-router|pinia|pinia-plugin-persistedstate)[\\/]/.test(id)) {
-            return 'vendor-vue'
+          if (
+            /[\\/]node_modules[\\/](@vue|vue|vue-router|pinia|pinia-plugin-persistedstate)[\\/]/.test(
+              id,
+            )
+          ) {
+            return 'vendor-vue';
           }
 
           if (/[\\/]node_modules[\\/](naive-ui|@vicons)[\\/]/.test(id)) {
-            return 'vendor-ui'
+            return 'vendor-ui';
           }
 
-          if (/[\\/]node_modules[\\/](socket\.io-client|engine\.io-client|socket\.io-parser|@socket\.io)[\\/]/.test(id)) {
-            return 'vendor-socket'
+          if (
+            /[\\/]node_modules[\\/](socket\.io-client|engine\.io-client|socket\.io-parser|@socket\.io)[\\/]/.test(
+              id,
+            )
+          ) {
+            return 'vendor-socket';
           }
         },
       },
@@ -102,16 +105,16 @@ const config = {
       '/uploads': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-      }
-    }
-  }
-} satisfies UserConfig
+      },
+    },
+  },
+} satisfies UserConfig;
 
 export default defineConfig(({ mode }) => {
-  const fileEnv = loadEnv(mode, process.cwd(), 'VITE_')
+  const fileEnv = loadEnv(mode, process.cwd(), 'VITE_');
   createPublicEnv({
     VITE_API_BASE_URL: process.env.VITE_API_BASE_URL ?? fileEnv.VITE_API_BASE_URL,
-    VITE_SOCKET_URL: process.env.VITE_SOCKET_URL ?? fileEnv.VITE_SOCKET_URL
-  })
-  return config
-})
+    VITE_SOCKET_URL: process.env.VITE_SOCKET_URL ?? fileEnv.VITE_SOCKET_URL,
+  });
+  return config;
+});

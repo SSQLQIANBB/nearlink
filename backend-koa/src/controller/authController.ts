@@ -1,8 +1,14 @@
 import { Context } from 'koa';
 import { User, UserEmail } from '../models';
 import { hashPassword, verifyPassword } from '../utils/crypto';
-import { createLoginSession, rotateLoginSession, revokeLoginSession, hasActiveLoginSessions,
-  replacePasswordAndRevokeSessions, InvalidLoginSessionError } from '../services/loginSessionService';
+import {
+  createLoginSession,
+  rotateLoginSession,
+  revokeLoginSession,
+  hasActiveLoginSessions,
+  replacePasswordAndRevokeSessions,
+  InvalidLoginSessionError,
+} from '../services/loginSessionService';
 import redisService from '../services/redisService';
 import { consumeEmailCode, normalizeEmail } from '../services/emailVerificationService';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
@@ -12,7 +18,14 @@ import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPoli
  */
 export async function register(ctx: Context) {
   try {
-    const { username, password, nickname, email: rawEmail, emailCode, phone } = ctx.request.body as any;
+    const {
+      username,
+      password,
+      nickname,
+      email: rawEmail,
+      emailCode,
+      phone,
+    } = ctx.request.body as any;
     const email = normalizeEmail(rawEmail);
 
     // 验证必填字段
@@ -35,10 +48,14 @@ export async function register(ctx: Context) {
       return;
     }
     if (await UserEmail.findOne({ where: { email } })) {
-      ctx.status = 409; ctx.body = { error: '该邮箱已绑定其他账号' }; return;
+      ctx.status = 409;
+      ctx.body = { error: '该邮箱已绑定其他账号' };
+      return;
     }
-    if (!await consumeEmailCode('register', email, emailCode)) {
-      ctx.status = 400; ctx.body = { error: '邮箱验证码无效或已过期' }; return;
+    if (!(await consumeEmailCode('register', email, emailCode))) {
+      ctx.status = 400;
+      ctx.body = { error: '邮箱验证码无效或已过期' };
+      return;
     }
 
     // 创建用户
@@ -46,10 +63,17 @@ export async function register(ctx: Context) {
     const transaction = await User.sequelize!.transaction();
     let user: User;
     try {
-      user = await User.create({
-        username, password: hashedPassword, nickname: nickname || username,
-        email, phone, status: 'online',
-      }, { transaction });
+      user = await User.create(
+        {
+          username,
+          password: hashedPassword,
+          nickname: nickname || username,
+          email,
+          phone,
+          status: 'online',
+        },
+        { transaction },
+      );
       await UserEmail.create({ userId: user.id, email, verifiedAt: new Date() }, { transaction });
       await transaction.commit();
     } catch (error) {
@@ -84,7 +108,10 @@ export async function register(ctx: Context) {
 async function completeLogin(ctx: Context, user: User) {
   const userData = user.get({ plain: true });
   await user.update({ lastLoginAt: new Date(), status: 'online' });
-  const tokens = await createLoginSession(userData.id!, { authVersion: userData.authVersion, password: userData.password });
+  const tokens = await createLoginSession(userData.id!, {
+    authVersion: userData.authVersion,
+    password: userData.password,
+  });
   ctx.body = {
     message: '登录成功',
     loginSessionId: tokens.loginSessionId,
@@ -106,7 +133,12 @@ async function completeLogin(ctx: Context, user: User) {
 export async function login(ctx: Context) {
   try {
     const { username, password } = ctx.request.body as any;
-    if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
+    if (
+      typeof username !== 'string' ||
+      !username.trim() ||
+      typeof password !== 'string' ||
+      !password
+    ) {
       ctx.status = 400;
       ctx.body = { error: '请输入账号和密码' };
       return;
@@ -144,7 +176,7 @@ export async function loginWithEmailCode(ctx: Context) {
       return;
     }
     const binding = await UserEmail.findOne({ where: { email } });
-    if (!binding || !await consumeEmailCode('login', email, code)) {
+    if (!binding || !(await consumeEmailCode('login', email, code))) {
       ctx.status = 401;
       ctx.body = { error: '邮箱或验证码错误' };
       return;
@@ -172,18 +204,18 @@ export async function getCurrentUser(ctx: Context) {
 
     // 先尝试从Redis获取
     let userData = await redisService.getUserInfo(userId);
-    
+
     if (!userData) {
       // Redis中没有，从数据库获取
-    const user = await User.findByPk(userId);
-    if (!user) {
-      ctx.status = 404;
-      ctx.body = { error: '用户不存在' };
-      return;
+      const user = await User.findByPk(userId);
+      if (!user) {
+        ctx.status = 404;
+        ctx.body = { error: '用户不存在' };
+        return;
       }
 
       userData = user.get({ plain: true });
-      
+
       // 缓存到Redis
       await redisService.setUserInfo(userId, {
         id: userData.id,
@@ -225,7 +257,9 @@ export async function updateUser(ctx: Context) {
     const userId = ctx.state.user?.userId;
     const { nickname, email, phone, avatar, bio, status } = ctx.request.body as any;
     if (email !== undefined) {
-      ctx.status = 400; ctx.body = { error: '请通过邮箱验证入口绑定邮箱' }; return;
+      ctx.status = 400;
+      ctx.body = { error: '请通过邮箱验证入口绑定邮箱' };
+      return;
     }
 
     const user = await User.findByPk(userId);
@@ -246,7 +280,7 @@ export async function updateUser(ctx: Context) {
     await user.update(updateData);
 
     const userData = user.get({ plain: true });
-    
+
     // 更新Redis缓存
     await redisService.setUserInfo(userId, {
       id: userData.id,
@@ -303,7 +337,7 @@ export async function logout(ctx: Context) {
   try {
     const { userId, sid } = ctx.state.user;
     await revokeLoginSession(userId, sid);
-    if (!await hasActiveLoginSessions(userId)) {
+    if (!(await hasActiveLoginSessions(userId))) {
       await User.update({ status: 'offline' }, { where: { id: userId } });
       await redisService.setUserStatus(userId, 'offline');
       await redisService.delUserSocket(userId);
@@ -324,7 +358,10 @@ export async function refreshToken(ctx: Context) {
     ctx.body = { error: 'refresh token 不能为空' };
     return;
   }
-  if (requestId !== undefined && (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(requestId))) {
+  if (
+    requestId !== undefined &&
+    (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(requestId))
+  ) {
     ctx.status = 400;
     ctx.body = { error: '无效的刷新 requestId' };
     return;
@@ -373,15 +410,22 @@ export async function changePassword(ctx: Context) {
 
     const binding = await UserEmail.findByPk(userId);
     if (!binding) {
-      ctx.status = 400; ctx.body = { error: '请先绑定并验证邮箱' }; return;
+      ctx.status = 400;
+      ctx.body = { error: '请先绑定并验证邮箱' };
+      return;
     }
-    if (!await consumeEmailCode('change-password', binding.email, emailCode)) {
-      ctx.status = 400; ctx.body = { error: '邮箱验证码无效或已过期' }; return;
+    if (!(await consumeEmailCode('change-password', binding.email, emailCode))) {
+      ctx.status = 400;
+      ctx.body = { error: '邮箱验证码无效或已过期' };
+      return;
     }
 
     // 更新密码
     const hashedPassword = hashPassword(newPassword);
-    await replacePasswordAndRevokeSessions(userId, hashedPassword, { password: user.password, authVersion: user.authVersion });
+    await replacePasswordAndRevokeSessions(userId, hashedPassword, {
+      password: user.password,
+      authVersion: user.authVersion,
+    });
 
     ctx.body = {
       message: '密码修改成功',

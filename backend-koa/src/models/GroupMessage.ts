@@ -14,9 +14,16 @@ export interface GroupMessageAttributes {
   updatedAt?: Date;
 }
 
-interface GroupMessageCreationAttributes extends Optional<GroupMessageAttributes, 'id' | 'messageType' | 'fileUrl' | 'fileName' | 'fileSize'> {}
+interface GroupMessageCreationAttributes
+  extends Optional<
+    GroupMessageAttributes,
+    'id' | 'messageType' | 'fileUrl' | 'fileName' | 'fileSize'
+  > {}
 
-class GroupMessage extends Model<GroupMessageAttributes, GroupMessageCreationAttributes> implements GroupMessageAttributes {
+class GroupMessage
+  extends Model<GroupMessageAttributes, GroupMessageCreationAttributes>
+  implements GroupMessageAttributes
+{
   declare id?: number;
   declare groupId: number;
   declare userId: number;
@@ -87,8 +94,7 @@ GroupMessage.init(
         fields: ['createdAt'],
       },
     ],
-  }
+  },
 );
 
 export default GroupMessage;
-

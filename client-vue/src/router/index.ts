@@ -16,75 +16,75 @@ const routes = [
     name: 'Login',
     path: '/login',
     component: () => import('@/views/login.vue'),
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false },
   },
   {
     name: 'Remote',
     path: '/remote',
     component: () => import('@/views/remoteShare/index.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'Profile',
     path: '/profile',
     component: () => import('@/views/profile.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'Groups',
     path: '/groups',
     component: () => import('@/views/groups.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'GroupChat',
     path: '/group-chat/:id',
     component: () => import('@/views/groupChat.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'GroupVideo',
     path: '/group-video/:id',
     component: () => import('@/views/groupVideo.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'GroupAudio',
     path: '/group-audio/:id',
     component: () => import('@/views/groupVideo.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     name: 'GroupScreen',
     path: '/group-screen/:id',
     component: () => import('@/views/groupScreen.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   //#region 测试功能路由
   {
     name: 'Chat',
     path: '/chat',
     component: () => import('@/views/chat.vue'),
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false },
   },
   {
     name: 'Socket',
     path: '/socket',
     component: () => import('@/views/socket.vue'),
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false },
   },
   {
     name: 'Share',
     path: '/share',
     component: () => import('@/views/share.vue'),
-    meta: { requiresAuth: false }
+    meta: { requiresAuth: false },
   },
   //#endregion 测试功能路由
   {
     path: '/',
-    redirect: '/remote'
-  }
-]
+    redirect: '/remote',
+  },
+];
 
 const router = createRouter({
   routes,

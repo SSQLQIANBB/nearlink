@@ -34,7 +34,10 @@ const session: GroupSession = {
 const action: AnnotationAction = {
   actionId: 'action-1',
   tool: 'pen',
-  points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }],
+  points: [
+    { x: 0.1, y: 0.2 },
+    { x: 0.3, y: 0.4 },
+  ],
   color: '#FF0000',
   lineWidth: 0.005,
   userId: 1,
@@ -45,8 +48,9 @@ describe('ScreenAnnotationService', () => {
   it('只允许当前共享者写入并让后加入者恢复历史', async () => {
     const service = new ScreenAnnotationService(new MemoryAnnotationStore());
 
-    await expect(service.complete(session, 2, action))
-      .rejects.toThrow('只有当前屏幕共享者可以标注');
+    await expect(service.complete(session, 2, action)).rejects.toThrow(
+      '只有当前屏幕共享者可以标注',
+    );
     await service.complete(session, 1, action);
 
     await expect(service.getSnapshot(session)).resolves.toEqual([action]);
@@ -77,10 +81,12 @@ describe('ScreenAnnotationService', () => {
     const service = new ScreenAnnotationService(new MemoryAnnotationStore());
     await service.complete(session, 1, action);
 
-    await expect(service.getSnapshot({
-      ...session,
-      startedAt: '2026-07-05T11:00:00.000Z',
-    })).resolves.toEqual([]);
+    await expect(
+      service.getSnapshot({
+        ...session,
+        startedAt: '2026-07-05T11:00:00.000Z',
+      }),
+    ).resolves.toEqual([]);
   });
 
   it('共享结束后删除本次共享历史', async () => {
@@ -97,27 +103,34 @@ describe('ScreenAnnotationService', () => {
   it('临时动作也校验共享者权限和输入范围', () => {
     const service = new ScreenAnnotationService(new MemoryAnnotationStore());
 
-    expect(() => service.validateDraft(session, 2, {
-      actionId: 'draft-1',
-      tool: 'pen',
-      points: [{ x: 0.2, y: 0.3 }],
-      color: '#FF0000',
-      lineWidth: 0.005,
-    })).toThrow('只有当前屏幕共享者可以标注');
+    expect(() =>
+      service.validateDraft(session, 2, {
+        actionId: 'draft-1',
+        tool: 'pen',
+        points: [{ x: 0.2, y: 0.3 }],
+        color: '#FF0000',
+        lineWidth: 0.005,
+      }),
+    ).toThrow('只有当前屏幕共享者可以标注');
 
-    expect(() => service.validateDraft(session, 1, {
-      actionId: 'draft-1',
-      tool: 'pen',
-      points: [{ x: 2, y: 0.3 }],
-      color: '#FF0000',
-      lineWidth: 0.005,
-    })).toThrow('标注坐标无效');
+    expect(() =>
+      service.validateDraft(session, 1, {
+        actionId: 'draft-1',
+        tool: 'pen',
+        points: [{ x: 2, y: 0.3 }],
+        color: '#FF0000',
+        lineWidth: 0.005,
+      }),
+    ).toThrow('标注坐标无效');
   });
 
-  it.each(['circle', 'line', 'rect'] as const)('保存 %s 的颜色线宽并供后加入的成员恢复', async tool => {
-    const service = new ScreenAnnotationService(new MemoryAnnotationStore());
-    const shape = { ...action, tool, color: '#00FF00', lineWidth: 0.012 };
-    await service.complete(session, 1, shape);
-    expect(await service.getSnapshot(session)).toEqual([shape]);
-  });
+  it.each(['circle', 'line', 'rect'] as const)(
+    '保存 %s 的颜色线宽并供后加入的成员恢复',
+    async (tool) => {
+      const service = new ScreenAnnotationService(new MemoryAnnotationStore());
+      const shape = { ...action, tool, color: '#00FF00', lineWidth: 0.012 };
+      await service.complete(session, 1, shape);
+      expect(await service.getSnapshot(session)).toEqual([shape]);
+    },
+  );
 });

@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => mocks);
-import { registerRemoteControlCleanup, stopRemoteControlLocally } from '@/services/remoteControlSafety';
-beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); mocks.isTauri.mockReturnValue(true); });
+import {
+  registerRemoteControlCleanup,
+  stopRemoteControlLocally,
+} from '@/services/remoteControlSafety';
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+  mocks.isTauri.mockReturnValue(true);
+});
 afterEach(() => vi.useRealTimers());
 
 describe('原生退出时限', () => {

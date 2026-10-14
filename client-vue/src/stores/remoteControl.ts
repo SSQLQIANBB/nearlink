@@ -1,7 +1,16 @@
 import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
-import { getRemoteControlRelease, getRemoteSessions, getRemoteTargets, type RemoteSessionRecord, type RemoteTarget } from '@/api/remoteControl';
-import { probeRemoteCapabilities, type RemoteCapabilities } from '@/services/remoteControlCapabilities';
+import {
+  getRemoteControlRelease,
+  getRemoteSessions,
+  getRemoteTargets,
+  type RemoteSessionRecord,
+  type RemoteTarget,
+} from '@/api/remoteControl';
+import {
+  probeRemoteCapabilities,
+  type RemoteCapabilities,
+} from '@/services/remoteControlCapabilities';
 import { registerRemoteControlCleanup } from '@/services/remoteControlSafety';
 
 export const useRemoteControlStore = defineStore('remoteControl', () => {
@@ -37,14 +46,20 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
     // host.start independently obtains a fresh authenticated release snapshot.
     const task = (async () => {
       let release = null;
-      try { release = await getRemoteControlRelease(); } catch { /* Fail closed on network/auth/config errors. */ }
+      try {
+        release = await getRemoteControlRelease();
+      } catch {
+        /* Fail closed on network/auth/config errors. */
+      }
       const next = await probeRemoteCapabilities(release);
       if (generation !== current) return;
       capabilities.value = next;
       loading.value = false;
     })();
     inFlight = task;
-    void task.finally(() => { if (inFlight === task) inFlight = null; });
+    void task.finally(() => {
+      if (inFlight === task) inFlight = null;
+    });
     return task;
   }
 
@@ -56,9 +71,11 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
     if (!canControl.value || !Number.isSafeInteger(userId) || userId <= 0) return;
     try {
       const result = await getRemoteTargets(userId);
-      if (generation === current && discovery === discoveryGeneration && canControl.value) targets.value = result.targets;
+      if (generation === current && discovery === discoveryGeneration && canControl.value)
+        targets.value = result.targets;
     } catch {
-      if (generation === current && discovery === discoveryGeneration) error.value = '无法获取已获协助许可的设备，请稍后重试。';
+      if (generation === current && discovery === discoveryGeneration)
+        error.value = '无法获取已获协助许可的设备，请稍后重试。';
     }
   }
 
@@ -73,5 +90,17 @@ export const useRemoteControlStore = defineStore('remoteControl', () => {
     }
   }
 
-  return { capabilities, targets, sessions, loading, error, showControllerEntry, canControl, refreshCapabilities, loadTargets, loadSessions, reset };
+  return {
+    capabilities,
+    targets,
+    sessions,
+    loading,
+    error,
+    showControllerEntry,
+    canControl,
+    refreshCapabilities,
+    loadTargets,
+    loadSessions,
+    reset,
+  };
 });

@@ -9,13 +9,20 @@ export default defineConfig(async (env) => {
     VITE_SOCKET_URL: source.VITE_SOCKET_URL,
   });
   if (env.command === 'build' && (!publicEnv.apiBaseUrl || !publicEnv.socketUrl)) {
-    throw new Error('桌面安装包必须配置 VITE_API_BASE_URL 和 VITE_SOCKET_URL，参见 .env.desktop.example');
+    throw new Error(
+      '桌面安装包必须配置 VITE_API_BASE_URL 和 VITE_SOCKET_URL，参见 .env.desktop.example',
+    );
   }
   const base = typeof webConfig === 'function' ? await webConfig(env) : await webConfig;
   return mergeConfig(base, {
     clearScreen: false,
     define: { 'import.meta.env.VITE_DESKTOP': JSON.stringify('true') },
     build: { outDir: 'dist-desktop', target: 'es2021' },
-    server: { host: '127.0.0.1', port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
+    server: {
+      host: '127.0.0.1',
+      port: 1420,
+      strictPort: true,
+      watch: { ignored: ['**/src-tauri/**'] },
+    },
   });
 });

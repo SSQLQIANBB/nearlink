@@ -4,7 +4,9 @@ export async function limitVideoBitrate(sender: RTCRtpSender, maxBitrate: number
   try {
     const parameters = sender.getParameters();
     parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
-    parameters.encodings.forEach(encoding => { encoding.maxBitrate = maxBitrate; });
+    parameters.encodings.forEach((encoding) => {
+      encoding.maxBitrate = maxBitrate;
+    });
     await sender.setParameters(parameters);
   } catch (error) {
     // Unsupported browser/codec: keep the original video path working.

@@ -10,10 +10,13 @@ describe('联系人列表与在线状态', () => {
     expect(mergeContactPresence(known, [], [], 1)).toEqual([
       { id: 2, username: 'alice', status: 'offline', socketId: '' },
     ]);
-    expect(mergeContactPresence(known, [], [
-      { id: 2, username: 'alice', status: 'busy', socketId: 'socket-2' },
-    ], 1)).toEqual([
-      { id: 2, username: 'alice', status: 'busy', socketId: 'socket-2' },
-    ]);
+    expect(
+      mergeContactPresence(
+        known,
+        [],
+        [{ id: 2, username: 'alice', status: 'busy', socketId: 'socket-2' }],
+        1,
+      ),
+    ).toEqual([{ id: 2, username: 'alice', status: 'busy', socketId: 'socket-2' }]);
   });
 });

@@ -1,16 +1,19 @@
 <template>
-  <n-config-provider :theme-overrides="designTheme" :style="{ height: '100%', overflow: showDesktopTitlebar ? 'hidden' : 'auto' }">
+  <n-config-provider
+    :theme-overrides="designTheme"
+    :style="{ height: '100%', overflow: showDesktopTitlebar ? 'hidden' : 'auto' }"
+  >
     <n-message-provider>
       <n-notification-provider>
-      <n-dialog-provider>
-        <GroupCallInvitations />
-        <GlobalPrivateCall />
-        <GlobalRemoteControl />
-        <GlobalRemoteControlHost />
-        <GlobalMessages />
-        <DesktopTitlebar v-if="showDesktopTitlebar" />
-        <div class="app-route-content"><RouterView /></div>
-      </n-dialog-provider>
+        <n-dialog-provider>
+          <GroupCallInvitations />
+          <GlobalPrivateCall />
+          <GlobalRemoteControl />
+          <GlobalRemoteControlHost />
+          <GlobalMessages />
+          <DesktopTitlebar v-if="showDesktopTitlebar" />
+          <div class="app-route-content"><RouterView /></div>
+        </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
   </n-config-provider>
@@ -35,28 +38,52 @@ import { useRemoteControlStore } from '@/stores/remoteControl';
 import { useRoute } from 'vue-router';
 import type { GlobalThemeOverrides } from 'naive-ui';
 const route = useRoute();
-const designTheme = computed<GlobalThemeOverrides>(() => ['/remote', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/') ? {
-  common: { primaryColor: '#2563eb', primaryColorHover: '#1d4ed8', primaryColorPressed: '#1e40af', errorColor: '#dc2626', errorColorHover: '#b91c1c', errorColorPressed: '#991b1b', borderRadius: '12px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-  Avatar: { borderRadius: '50%' },
-} : {});
+const designTheme = computed<GlobalThemeOverrides>(() =>
+  ['/remote', '/groups', '/profile'].includes(route.path) || route.path.startsWith('/group-chat/')
+    ? {
+        common: {
+          primaryColor: '#2563eb',
+          primaryColorHover: '#1d4ed8',
+          primaryColorPressed: '#1e40af',
+          errorColor: '#dc2626',
+          errorColorHover: '#b91c1c',
+          errorColorPressed: '#991b1b',
+          borderRadius: '12px',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        },
+        Avatar: { borderRadius: '50%' },
+      }
+    : {},
+);
 
 const authStore = useAuthStore();
 const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const notificationSettings = useNotificationSettingsStore();
 const remoteControl = useRemoteControlStore();
-const refreshRemoteCapabilities = () => { if (token.value && currentUser.value && !authStore.loggingOut) void remoteControl.refreshCapabilities(); };
+const refreshRemoteCapabilities = () => {
+  if (token.value && currentUser.value && !authStore.loggingOut)
+    void remoteControl.refreshCapabilities();
+};
 onMounted(() => window.addEventListener('focus', refreshRemoteCapabilities));
 onUnmounted(() => window.removeEventListener('focus', refreshRemoteCapabilities));
-watch(() => [currentUser.value?.id, authStore.authGeneration], () => {
-  remoteControl.reset();
-  refreshRemoteCapabilities();
-}, { immediate: true });
+watch(
+  () => [currentUser.value?.id, authStore.authGeneration],
+  () => {
+    remoteControl.reset();
+    refreshRemoteCapabilities();
+  },
+  { immediate: true },
+);
 
-watch(() => currentUser.value?.id, userId => {
-  if (userId) void notificationSettings.load(userId);
-  else notificationSettings.reset();
-}, { immediate: true });
+watch(
+  () => currentUser.value?.id,
+  (userId) => {
+    if (userId) void notificationSettings.load(userId);
+    else notificationSettings.reset();
+  },
+  { immediate: true },
+);
 
 watch(
   [token, currentUser],
@@ -108,10 +135,25 @@ select {
 }
 
 @media (max-width: 767px) {
-  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y; }
-  body { position: fixed; inset: 0; }
-  #app .n-config-provider, #app .n-scrollbar-container, .n-modal-container { overscroll-behavior: none; }
-  #app .h-screen { height: 100dvh; }
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+  }
+  body {
+    position: fixed;
+    inset: 0;
+  }
+  #app .n-config-provider,
+  #app .n-scrollbar-container,
+  .n-modal-container {
+    overscroll-behavior: none;
+  }
+  #app .h-screen {
+    height: 100dvh;
+  }
   #app .mobile-sidebar-toggle,
   #app .mobile-sidebar-close {
     min-height: 40px;
@@ -119,8 +161,12 @@ select {
     border-radius: 999px;
     box-shadow: 0 3px 12px #0f172a14;
   }
-  #app .mobile-sidebar-toggle { margin-right: 12px; }
-  #app .mobile-sidebar-close { margin: 12px; }
+  #app .mobile-sidebar-toggle {
+    margin-right: 12px;
+  }
+  #app .mobile-sidebar-close {
+    margin: 12px;
+  }
   .n-modal-container .n-card,
   .n-modal-container .n-dialog {
     max-width: calc(100vw - 24px);

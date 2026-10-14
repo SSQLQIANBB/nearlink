@@ -64,7 +64,9 @@ export function getPrivateMessages(contactUserId: number, limit = 50, offset = 0
     offset: String(offset),
   });
 
-  return http.get<{ messages: PrivateMessage[]; hasMore: boolean }>(`/api/messages/private?${query}`);
+  return http.get<{ messages: PrivateMessage[]; hasMore: boolean }>(
+    `/api/messages/private?${query}`,
+  );
 }
 
 export function getGroupMessages(groupId: number, limit = 50, offset = 0) {
@@ -73,12 +75,16 @@ export function getGroupMessages(groupId: number, limit = 50, offset = 0) {
     offset: String(offset),
   });
 
-  return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(`/api/messages/group/${groupId}?${query}`);
+  return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(
+    `/api/messages/group/${groupId}?${query}`,
+  );
 }
 
 export function getGroupMessagesAfter(groupId: number, afterId: number, limit = 100) {
   const query = new URLSearchParams({ afterId: String(afterId), limit: String(limit) });
-  return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(`/api/messages/group/${groupId}?${query}`);
+  return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(
+    `/api/messages/group/${groupId}?${query}`,
+  );
 }
 
 export function getGroupCursors() {

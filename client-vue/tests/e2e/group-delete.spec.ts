@@ -2,30 +2,38 @@ import { expect, test, type Page } from '@playwright/test';
 
 type GroupRole = 'owner' | 'admin' | 'member';
 
-async function prepareGroups(
-  page: Page,
-  options: { role: GroupRole; deleteStatus?: number },
-) {
+async function prepareGroups(page: Page, options: { role: GroupRole; deleteStatus?: number }) {
   let deleted = false;
   let deleteRequests = 0;
 
-  await page.route(/\/meeting(?:\/|\?|$)/, route => route.abort());
-  await page.route(/\/api\/auth\/me$/, route => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify({ user: { id: 1, username: 'owner', nickname: '测试用户', status: 'online' } }),
-  }));
+  await page.route(/\/meeting(?:\/|\?|$)/, (route) => route.abort());
+  await page.route(/\/api\/auth\/me$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        user: { id: 1, username: 'owner', nickname: '测试用户', status: 'online' },
+      }),
+    }),
+  );
 
   await page.addInitScript(() => {
     localStorage.setItem('token', 'group-delete-token');
-    localStorage.setItem('__STORAGE_PERSIST_AUTH_', JSON.stringify({ token: 'group-delete-token', refreshToken: 'group-delete-refresh-token' }));
-    localStorage.setItem('user', JSON.stringify({
-      id: 1,
-      username: 'owner',
-      nickname: '测试用户',
-    }));
+    localStorage.setItem(
+      '__STORAGE_PERSIST_AUTH_',
+      JSON.stringify({ token: 'group-delete-token', refreshToken: 'group-delete-refresh-token' }),
+    );
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 1,
+        username: 'owner',
+        nickname: '测试用户',
+      }),
+    );
   });
 
-  await page.route(/\/api\/groups(?:\/|\?|$)/, async route => {
+  await page.route(/\/api\/groups(?:\/|\?|$)/, async (route) => {
     const url = route.request().url();
     const method = route.request().method();
 
@@ -54,13 +62,17 @@ async function prepareGroups(
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          groups: deleted ? [] : [{
-            id: 7,
-            name: '待删除测试群组',
-            ownerId: 1,
-            role: options.role,
-            memberCount: 2,
-          }],
+          groups: deleted
+            ? []
+            : [
+                {
+                  id: 7,
+                  name: '待删除测试群组',
+                  ownerId: 1,
+                  role: options.role,
+                  memberCount: 2,
+                },
+              ],
         }),
       });
       return;
@@ -71,9 +83,7 @@ async function prepareGroups(
       contentType: 'application/json',
       body: JSON.stringify({
         group: { id: 7, name: '待删除测试群组', ownerId: 1 },
-        members: [
-          { id: 1, username: 'owner', role: options.role, canSpeak: true },
-        ],
+        members: [{ id: 1, username: 'owner', role: options.role, canSpeak: true }],
         myRole: options.role,
         myCanSpeak: true,
       }),

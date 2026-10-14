@@ -34,8 +34,7 @@ export function createMediaParticipantState() {
   }
 
   function userIds(groupId: number, type: MediaType) {
-    return [...(participants.get(key(groupId, type)) ?? [])]
-      .sort((left, right) => left - right);
+    return [...(participants.get(key(groupId, type)) ?? [])].sort((left, right) => left - right);
   }
 
   function isParticipating(groupId: number, type: MediaType, userId: number) {

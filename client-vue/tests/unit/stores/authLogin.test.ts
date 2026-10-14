@@ -31,7 +31,10 @@ describe('两种登录方式', () => {
   it('账号密码使用原接口，邮箱验证码使用新接口且保存相同会话状态', async () => {
     const store = useAuthStore();
     await store.login({ username: 'alice@example.com', password: 'old-password' });
-    expect(mocks.passwordLogin).toHaveBeenCalledWith({ username: 'alice@example.com', password: 'old-password' });
+    expect(mocks.passwordLogin).toHaveBeenCalledWith({
+      username: 'alice@example.com',
+      password: 'old-password',
+    });
     expect(mocks.emailLogin).not.toHaveBeenCalled();
 
     store.clearAuthLocal();

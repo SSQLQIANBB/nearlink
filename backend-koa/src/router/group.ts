@@ -17,4 +17,3 @@ router.post('/:id/permission', groupController.setMemberPermission);
 router.delete('/:id/leave', groupController.leaveGroup);
 
 export default router;
-

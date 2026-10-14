@@ -14,4 +14,3 @@ export function verifyPassword(password: string, hashedPassword: string): boolea
   const hash = hashPassword(password);
   return hash === hashedPassword;
 }
-

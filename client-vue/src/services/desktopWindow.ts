@@ -1,11 +1,15 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-const titleRegions = '.chat-header, .group-im-shell header, .desktop-call-header, .desktop-windows-drag-region';
-const interactive = 'button, a, input, textarea, select, [role="button"], [role="switch"], [contenteditable]:not([contenteditable="false"]), [data-no-drag]';
+const titleRegions =
+  '.chat-header, .group-im-shell header, .desktop-call-header, .desktop-windows-drag-region';
+const interactive =
+  'button, a, input, textarea, select, [role="button"], [role="switch"], [contenteditable]:not([contenteditable="false"]), [data-no-drag]';
 
 /** 标题内容可拖动，窗口事件同步全屏留白和 Windows 最大化按钮。 */
-export function installDesktopWindowControls(onMaximizedChanged?: (maximized: boolean) => void): () => void {
+export function installDesktopWindowControls(
+  onMaximizedChanged?: (maximized: boolean) => void,
+): () => void {
   if (!isTauri()) return () => {};
   const window = getCurrentWindow();
   const isWindows = /Win/.test(navigator.platform);
@@ -40,25 +44,39 @@ export function installDesktopWindowControls(onMaximizedChanged?: (maximized: bo
   }
 
   function onMouseDown(event: MouseEvent) {
-    if (fullscreen || event.defaultPrevented || event.button !== 0 || event.detail > 2 || (!isWindows && event.detail > 1)) return;
+    if (
+      fullscreen ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.detail > 2 ||
+      (!isWindows && event.detail > 1)
+    )
+      return;
     const target = event.target;
-    if (!(target instanceof Element) || !target.closest(titleRegions) || target.closest(interactive)) return;
+    if (
+      !(target instanceof Element) ||
+      !target.closest(titleRegions) ||
+      target.closest(interactive)
+    )
+      return;
     event.preventDefault();
     // 原生拖动可能接管 mouseup，和 Tauri 拖动区一样在第二次 mousedown 处理双击。
     if (event.detail === 2) {
-      void window.toggleMaximize().catch(error => console.warn('无法切换窗口大小', error));
+      void window.toggleMaximize().catch((error) => console.warn('无法切换窗口大小', error));
     } else {
-      void window.startDragging().catch(error => console.warn('无法拖动窗口', error));
+      void window.startDragging().catch((error) => console.warn('无法拖动窗口', error));
     }
   }
 
   function register(pending: Promise<() => void>) {
-    void pending.then(unlisten => {
-      if (disposed) unlisten();
-      else unlisteners.push(unlisten);
-    }).catch(error => {
-      if (!disposed) console.warn('无法监听窗口状态', error);
-    });
+    void pending
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else unlisteners.push(unlisten);
+      })
+      .catch((error) => {
+        if (!disposed) console.warn('无法监听窗口状态', error);
+      });
   }
 
   document.addEventListener('mousedown', onMouseDown);

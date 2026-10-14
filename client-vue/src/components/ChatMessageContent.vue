@@ -1,13 +1,32 @@
 <template>
-  <CallHistoryMessage v-if="messageType === 'call' && call" :record="call" :is-mine="isMine" />
-  <div v-else class="message-bubble" :class="{
-    'message-bubble--mine': isMine,
-    'message-bubble--media': (messageType === 'image' || messageType === 'voice') && media,
-    'message-bubble--image': messageType === 'image' && media,
-  }">
-    <ChatImageMessage v-if="messageType === 'image' && media" :media="media" :is-mine="isMine" />
-    <ChatVoiceMessage v-else-if="messageType === 'voice' && media" :media="media" :is-mine="isMine" />
-    <ChatTextMessage v-else :text="message" />
+  <CallHistoryMessage
+    v-if="messageType === 'call' && call"
+    :record="call"
+    :is-mine="isMine"
+  />
+  <div
+    v-else
+    class="message-bubble"
+    :class="{
+      'message-bubble--mine': isMine,
+      'message-bubble--media': (messageType === 'image' || messageType === 'voice') && media,
+      'message-bubble--image': messageType === 'image' && media,
+    }"
+  >
+    <ChatImageMessage
+      v-if="messageType === 'image' && media"
+      :media="media"
+      :is-mine="isMine"
+    />
+    <ChatVoiceMessage
+      v-else-if="messageType === 'voice' && media"
+      :media="media"
+      :is-mine="isMine"
+    />
+    <ChatTextMessage
+      v-else
+      :text="message"
+    />
   </div>
 </template>
 
@@ -35,17 +54,21 @@ defineProps<{
   border-radius: 16px;
   background: #fff;
   color: #334155;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, .06);
-  transition: box-shadow .2s ease;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.2s ease;
 }
-.message-bubble:hover { box-shadow: 0 8px 22px rgba(15, 23, 42, .09); }
+.message-bubble:hover {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.09);
+}
 .message-bubble--mine {
   border-color: #2563eb;
   background: #2563eb;
   color: #fff;
-  box-shadow: 0 7px 20px rgba(37, 99, 235, .18);
+  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.18);
 }
-.message-bubble--media { padding: 6px 7px; }
+.message-bubble--media {
+  padding: 6px 7px;
+}
 .message-bubble--image,
 .message-bubble--image:hover {
   padding: 0;
@@ -55,6 +78,8 @@ defineProps<{
   box-shadow: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .message-bubble { transition: none; }
+  .message-bubble {
+    transition: none;
+  }
 }
 </style>

@@ -21,9 +21,7 @@ export type RemotePeer = RemoteMember & {
 export class RemotePeerRegistry {
   private readonly peers = reactive(new Map<number, RemotePeer>());
 
-  constructor(
-    private readonly createConnection: (member: RemoteMember) => PeerConnectionLike,
-  ) {}
+  constructor(private readonly createConnection: (member: RemoteMember) => PeerConnectionLike) {}
 
   upsert(member: RemoteMember) {
     const existing = this.peers.get(member.id);

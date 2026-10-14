@@ -36,25 +36,37 @@ export interface RegisterParams {
  * 用户登录
  */
 export function login(params: LoginParams) {
-  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/login', params);
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>(
+    '/api/auth/login',
+    params,
+  );
 }
 
 export function loginWithEmailCode(params: EmailCodeLoginParams) {
-  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/login/email-code', params);
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>(
+    '/api/auth/login/email-code',
+    params,
+  );
 }
 
 /**
  * 用户注册
  */
 export function register(params: RegisterParams) {
-  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>('/api/auth/register', params);
+  return http.post<{ accessToken: string; refreshToken: string; user: User; message: string }>(
+    '/api/auth/register',
+    params,
+  );
 }
 
 /**
  * 刷新 access token
  */
 export function refreshAccessToken(refreshToken: string) {
-  return http.post<{ accessToken: string; refreshToken: string; message: string }>('/api/auth/refresh-token', { refreshToken });
+  return http.post<{ accessToken: string; refreshToken: string; message: string }>(
+    '/api/auth/refresh-token',
+    { refreshToken },
+  );
 }
 
 /**
@@ -112,6 +124,9 @@ export function logout(accessToken?: string) {
  * 修改密码
  */
 export function changePassword(oldPassword: string, newPassword: string, emailCode: string) {
-  return http.post<{ message: string }>('/api/auth/change-password', { oldPassword, newPassword, emailCode });
+  return http.post<{ message: string }>('/api/auth/change-password', {
+    oldPassword,
+    newPassword,
+    emailCode,
+  });
 }
-

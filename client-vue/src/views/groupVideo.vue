@@ -1,9 +1,15 @@
 <template>
   <div class="h-screen w-full bg-gray-900 flex flex-col">
     <!-- 头部控制栏 -->
-    <header class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg">
+    <header
+      class="desktop-call-header min-h-16 bg-gray-800 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 shadow-lg"
+    >
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
-        <n-avatar :size="40" :src="groupInfo?.avatar || undefined" class="ring-2 ring-white">
+        <n-avatar
+          :size="40"
+          :src="groupInfo?.avatar || undefined"
+          class="ring-2 ring-white"
+        >
           <span v-if="!groupInfo?.avatar">{{ groupInfo?.name?.charAt(0) }}</span>
         </n-avatar>
         <div class="text-white min-w-0">
@@ -23,7 +29,13 @@
               :disabled="!canSpeak"
             >
               <template #icon>
-                <n-icon><i class="iconfont" :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'" aria-hidden="true"></i></n-icon>
+                <n-icon>
+                  <i
+                    class="iconfont"
+                    :class="isMicMuted ? 'icon-microphone-off' : 'icon-microphone'"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
               </template>
             </n-button>
           </template>
@@ -39,7 +51,13 @@
               @click="toggleCamera"
             >
               <template #icon>
-                <n-icon><i class="iconfont" :class="isCameraOff ? 'icon-video-off' : 'icon-video'" aria-hidden="true"></i></n-icon>
+                <n-icon>
+                  <i
+                    class="iconfont"
+                    :class="isCameraOff ? 'icon-video-off' : 'icon-video'"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
               </template>
             </n-button>
           </template>
@@ -62,16 +80,33 @@
         />
 
         <!-- 群成员列表；成员控制操作仍仅群主可用 -->
-        <n-button circle aria-label="群成员" @click="showMemberControl = true">
+        <n-button
+          circle
+          aria-label="群成员"
+          @click="showMemberControl = true"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-users" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-users"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
         </n-button>
 
         <!-- 退出通话 -->
-        <n-button type="error" @click="handleHangup">
+        <n-button
+          type="error"
+          @click="handleHangup"
+        >
           <template #icon>
-            <n-icon><i class="iconfont icon-hangup" aria-hidden="true"></i></n-icon>
+            <n-icon>
+              <i
+                class="iconfont icon-hangup"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </template>
           <span class="hidden sm:inline">退出通话</span>
         </n-button>
@@ -80,27 +115,52 @@
 
     <!-- 视频区域 -->
     <div class="flex-1 overflow-y-auto p-2 sm:p-4">
-      <div class="min-h-full grid gap-2 sm:gap-4 auto-rows-fr" :class="videoGridClass">
+      <div
+        class="min-h-full grid gap-2 sm:gap-4 auto-rows-fr"
+        :class="videoGridClass"
+      >
         <!-- 本地视频 -->
         <div class="relative bg-gray-800 rounded-lg overflow-hidden shadow-xl">
           <MediaVideo
             :stream="localStream"
             local
-            :class="{ 'mirror': !isCameraOff }"
+            :class="{ mirror: !isCameraOff }"
           />
           <div class="absolute bottom-3 left-3 bg-black bg-opacity-60 px-3 py-1 rounded-full">
             <span class="text-white text-sm font-semibold">
               {{ currentUser?.nickname || currentUser?.username }} (我)
-              <SpeakingIndicator :stream="localStream" :muted="isMicMuted" />
+              <SpeakingIndicator
+                :stream="localStream"
+                :muted="isMicMuted"
+              />
             </span>
           </div>
-          <div v-if="isAudioCall || isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
-            <n-avatar :size="80" :src="currentUser?.avatar || undefined">
-              <span v-if="!currentUser?.avatar">{{ currentUser?.nickname?.charAt(0) || currentUser?.username?.charAt(0) }}</span>
+          <div
+            v-if="isAudioCall || isCameraOff"
+            class="absolute inset-0 flex items-center justify-center bg-gray-700"
+          >
+            <n-avatar
+              :size="80"
+              :src="currentUser?.avatar || undefined"
+            >
+              <span v-if="!currentUser?.avatar">
+                {{ currentUser?.nickname?.charAt(0) || currentUser?.username?.charAt(0) }}
+              </span>
             </n-avatar>
           </div>
-          <div v-if="isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
-            <n-icon :size="16" color="white"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
+          <div
+            v-if="isMicMuted"
+            class="absolute top-3 right-3 bg-red-500 p-2 rounded-full"
+          >
+            <n-icon
+              :size="16"
+              color="white"
+            >
+              <i
+                class="iconfont icon-microphone-off"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </div>
         </div>
 
@@ -117,20 +177,43 @@
               <SpeakingIndicator :stream="peer.stream" />
             </span>
           </div>
-          <div v-if="isAudioCall || peer.isCameraOff" class="absolute inset-0 flex items-center justify-center bg-gray-700">
-            <n-avatar :size="80" :src="peer.user?.avatar || undefined">
-              <span v-if="!peer.user?.avatar">{{ peer.user?.nickname?.charAt(0) || peer.user?.username?.charAt(0) }}</span>
+          <div
+            v-if="isAudioCall || peer.isCameraOff"
+            class="absolute inset-0 flex items-center justify-center bg-gray-700"
+          >
+            <n-avatar
+              :size="80"
+              :src="peer.user?.avatar || undefined"
+            >
+              <span v-if="!peer.user?.avatar">
+                {{ peer.user?.nickname?.charAt(0) || peer.user?.username?.charAt(0) }}
+              </span>
             </n-avatar>
           </div>
-          <div v-if="peer.isMicMuted" class="absolute top-3 right-3 bg-red-500 p-2 rounded-full">
-            <n-icon :size="16" color="white"><i class="iconfont icon-microphone-off" aria-hidden="true"></i></n-icon>
+          <div
+            v-if="peer.isMicMuted"
+            class="absolute top-3 right-3 bg-red-500 p-2 rounded-full"
+          >
+            <n-icon
+              :size="16"
+              color="white"
+            >
+              <i
+                class="iconfont icon-microphone-off"
+                aria-hidden="true"
+              ></i>
+            </n-icon>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 群成员抽屉 -->
-    <n-drawer v-model:show="showMemberControl" width="min(350px, calc(100vw - 24px))" placement="right">
+    <n-drawer
+      v-model:show="showMemberControl"
+      width="min(350px, calc(100vw - 24px))"
+      placement="right"
+    >
       <n-drawer-content title="群成员">
         <div class="space-y-3">
           <div
@@ -139,15 +222,41 @@
             class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
           >
             <div class="flex items-center gap-3">
-              <n-avatar :size="40" :src="member.avatar || undefined">
-                <span v-if="!member.avatar">{{ member.nickname?.charAt(0) || member.username?.charAt(0) }}</span>
+              <n-avatar
+                :size="40"
+                :src="member.avatar || undefined"
+              >
+                <span v-if="!member.avatar">
+                  {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
+                </span>
               </n-avatar>
               <div>
-                <div class="font-semibold">{{ member.nickname || member.username }}
-                <SpeakingIndicator :stream="member.id === currentUser?.id ? localStream : peerRegistry.get(member.id)?.stream" :muted="member.id === currentUser?.id && isMicMuted" /></div>
+                <div class="font-semibold">
+                  {{ member.nickname || member.username }}
+                  <SpeakingIndicator
+                    :stream="
+                      member.id === currentUser?.id
+                        ? localStream
+                        : peerRegistry.get(member.id)?.stream
+                    "
+                    :muted="member.id === currentUser?.id && isMicMuted"
+                  />
+                </div>
                 <div class="text-xs text-gray-500">
-                  <n-tag v-if="member.role === 'owner'" type="warning" size="tiny">群主</n-tag>
-                  <n-tag v-else-if="member.role === 'admin'" type="info" size="tiny">管理员</n-tag>
+                  <n-tag
+                    v-if="member.role === 'owner'"
+                    type="warning"
+                    size="tiny"
+                  >
+                    群主
+                  </n-tag>
+                  <n-tag
+                    v-else-if="member.role === 'admin'"
+                    type="info"
+                    size="tiny"
+                  >
+                    管理员
+                  </n-tag>
                   <n-tag
                     :type="isMemberParticipating(member.id) ? 'success' : 'default'"
                     size="tiny"
@@ -157,7 +266,10 @@
                 </div>
               </div>
             </div>
-            <div v-if="member.id !== currentUser?.id && isOwner" class="flex flex-col gap-2">
+            <div
+              v-if="member.id !== currentUser?.id && isOwner"
+              class="flex flex-col gap-2"
+            >
               <n-switch
                 :value="member.canSpeak"
                 @update:value="(val: boolean) => handleControlMemberMic(member.socketId || '', val)"
@@ -195,16 +307,13 @@ import {
   createMediaParticipantState,
   type ParticipantSnapshot,
 } from '@/services/mediaParticipantState';
-import {
-  RemotePeerRegistry,
-  type RemoteMember,
-} from '@/services/remotePeerRegistry';
+import { RemotePeerRegistry, type RemoteMember } from '@/services/remotePeerRegistry';
 
 const route = useRoute();
 const router = useRouter();
 const isAudioCall = computed(() => route.name === 'GroupAudio');
-const sessionType = computed(() => isAudioCall.value ? 'audio' as const : 'video' as const);
-const sessionDeviceType = computed(() => isAudioCall.value ? 3 : 1);
+const sessionType = computed(() => (isAudioCall.value ? ('audio' as const) : ('video' as const)));
+const sessionDeviceType = computed(() => (isAudioCall.value ? 3 : 1));
 const message = useMessage();
 const authStore = useAuthStore();
 const { currentUser } = storeToRefs(authStore);
@@ -217,13 +326,15 @@ const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { socketId?: string; online?: boolean })[]>([]);
 const peerRegistry = new RemotePeerRegistry(createPeerConnection);
 const participantState = createMediaParticipantState();
-const remotePeers = computed(() => peerRegistry.values().map(peer => ({
-  ...peer,
-  userId: peer.id,
-  user: peer,
-  isMicMuted: false,
-  isCameraOff: false,
-})));
+const remotePeers = computed(() =>
+  peerRegistry.values().map((peer) => ({
+    ...peer,
+    userId: peer.id,
+    user: peer,
+    isMicMuted: false,
+    isCameraOff: false,
+  })),
+);
 
 const isMicMuted = ref(false);
 const isCameraOff = ref(isAudioCall.value);
@@ -242,13 +353,13 @@ let stopAuthenticatedWatch: (() => void) | null = null;
 
 // 是否是群主
 const isOwner = computed(() => {
-  const myMember = members.value.find(m => m.id === currentUser.value?.id);
+  const myMember = members.value.find((m) => m.id === currentUser.value?.id);
   return myMember?.role === 'owner';
 });
 
 // 是否可以发言
 const canSpeak = computed(() => {
-  const myMember = members.value.find(m => m.id === currentUser.value?.id);
+  const myMember = members.value.find((m) => m.id === currentUser.value?.id);
   return myMember?.canSpeak !== false;
 });
 
@@ -285,7 +396,10 @@ async function initLocalStream() {
       audio: true,
     });
 
-    if (cleanedUp || !mediaClaim?.isCurrent()) { stream.getTracks().forEach(track => track.stop()); return; }
+    if (cleanedUp || !mediaClaim?.isCurrent()) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     originalLocalStream.value = stream; // 保存原始流
     localStream.value = stream; // 当前流（可能被虚拟背景处理）
   } catch (error: any) {
@@ -299,9 +413,10 @@ function handleVirtualBGUpdate(processedStream: MediaStream) {
 
   const nextVideoTrack = processedStream.getVideoTracks()[0];
   if (nextVideoTrack) {
-    remotePeers.value.forEach(peer => {
+    remotePeers.value.forEach((peer) => {
       const connection = peer.connection as RTCPeerConnection;
-      const sender = connection.getSenders()
+      const sender = connection
+        .getSenders()
         .find((item: RTCRtpSender) => item.track?.kind === 'video');
       void sender?.replaceTrack(nextVideoTrack);
     });
@@ -329,7 +444,7 @@ function initSocket() {
 
   stopAuthenticatedWatch = watch(
     authenticated,
-    ready => {
+    (ready) => {
       if (!ready) return;
       socket.value?.emit('group_call_start', {
         groupId: groupId.value,
@@ -370,21 +485,18 @@ function createPeerConnection(member: RemoteMember) {
   const pc = new RTCPeerConnection({
     iceServers: [
       {
-        urls: 'stun:turn.sycsq.top:3478'
+        urls: 'stun:turn.sycsq.top:3478',
       },
       {
-        urls: [
-          'turn:turn.sycsq.top:3478?transport=udp',
-          'turn:turn.sycsq.top:3478?transport=tcp'
-        ],
+        urls: ['turn:turn.sycsq.top:3478?transport=udp', 'turn:turn.sycsq.top:3478?transport=tcp'],
         username: 'todesk',
-        credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe'
-      }
+        credential: 'BOcYoq/Q4QEZTzhod7JmJ51S1gqSkVMe',
+      },
     ],
   });
 
   // 添加本地流
-  localStream.value?.getTracks().forEach(track => {
+  localStream.value?.getTracks().forEach((track) => {
     const sender = pc.addTrack(track, localStream.value!);
     if (track.kind === 'video') void limitVideoBitrate(sender, 900_000);
   });
@@ -428,7 +540,12 @@ async function createAndSendOffer(member: RemoteMember) {
 // 处理 offer
 async function handleOffer(data: any) {
   if (!currentSessionStartedAt || data.startedAt !== currentSessionStartedAt || cleanedUp) return;
-  if (data.groupId !== groupId.value || data.deviceType !== sessionDeviceType.value || !data.fromUser) return;
+  if (
+    data.groupId !== groupId.value ||
+    data.deviceType !== sessionDeviceType.value ||
+    !data.fromUser
+  )
+    return;
   // 如果连接不存在，创建新的
   const peer = peerRegistry.upsert({ ...data.fromUser, socketId: data.from });
   const pc = peer.connection as RTCPeerConnection;
@@ -466,20 +583,20 @@ async function handleIceCandidate(data: any) {
 }
 
 function findPeerBySocket(socketId: string) {
-  return peerRegistry.values().find(peer => peer.socketId === socketId);
+  return peerRegistry.values().find((peer) => peer.socketId === socketId);
 }
 
 function handleCallState(data: any) {
   const session = data.sessions[sessionType.value];
   if (data.groupId !== groupId.value || !session || joinedCall) return;
-  participantState.setChannel(
-    groupId.value,
-    sessionType.value,
-    session.channelId,
-  );
+  participantState.setChannel(groupId.value, sessionType.value, session.channelId);
   joinedCall = true;
   currentSessionStartedAt = session.startedAt;
-  socket.value?.emit('join_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value, startedAt: session.startedAt });
+  socket.value?.emit('join_group_call', {
+    groupId: groupId.value,
+    deviceType: sessionDeviceType.value,
+    startedAt: session.startedAt,
+  });
 }
 
 function handleCallMembers(data: any) {
@@ -519,8 +636,8 @@ function handleCallEnded(data: any) {
   joinedCall = false;
   currentSessionStartedAt = null;
   peerRegistry.clear();
-  localStream.value?.getTracks().forEach(track => track.stop());
-  originalLocalStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value?.getTracks().forEach((track) => track.stop());
+  originalLocalStream.value?.getTracks().forEach((track) => track.stop());
   participantState.clear(groupId.value, sessionType.value);
 }
 
@@ -549,14 +666,14 @@ function isMemberParticipating(userId: number) {
 }
 
 function mergeMemberSocket(member: RemoteMember) {
-  const groupMember = members.value.find(item => item.id === member.id);
+  const groupMember = members.value.find((item) => item.id === member.id);
   if (groupMember) groupMember.socketId = member.socketId;
 }
 
 function handleMemberMicChanged(data: any) {
   const peer = findPeerBySocket(data.socketId);
   if (peer) {
-    const viewPeer = remotePeers.value.find(item => item.id === peer.id);
+    const viewPeer = remotePeers.value.find((item) => item.id === peer.id);
     if (viewPeer) viewPeer.isMicMuted = data.muted;
   }
 }
@@ -565,7 +682,9 @@ function handleMicPermissionChanged(data: any) {
   if (data.groupId !== groupId.value) return;
   if (!data.canSpeak) {
     isMicMuted.value = true;
-    localStream.value?.getAudioTracks().forEach(track => { track.enabled = false; });
+    localStream.value?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
     message.warning('您已被群主禁言');
   } else {
     message.success('您已被允许发言');
@@ -580,7 +699,7 @@ function toggleMic() {
   }
 
   isMicMuted.value = !isMicMuted.value;
-  localStream.value?.getAudioTracks().forEach(track => {
+  localStream.value?.getAudioTracks().forEach((track) => {
     track.enabled = !isMicMuted.value;
   });
 
@@ -593,7 +712,7 @@ function toggleMic() {
 // 切换摄像头
 function toggleCamera() {
   isCameraOff.value = !isCameraOff.value;
-  localStream.value?.getVideoTracks().forEach(track => {
+  localStream.value?.getVideoTracks().forEach((track) => {
     track.enabled = !isCameraOff.value;
   });
 }
@@ -607,7 +726,7 @@ function handleControlMemberMic(socketId: string, canSpeak: boolean) {
   });
 
   // 更新本地数据
-  const member = members.value.find(m => m.socketId === socketId);
+  const member = members.value.find((m) => m.socketId === socketId);
   if (member) {
     member.canSpeak = canSpeak;
   }
@@ -629,9 +748,9 @@ function cleanupCall(endOwnedSession: boolean) {
   if (!ownedMedia) return;
 
   // 停止本地流
-  localStream.value?.getTracks().forEach(track => track.stop());
+  localStream.value?.getTracks().forEach((track) => track.stop());
   if (originalLocalStream.value !== localStream.value) {
-    originalLocalStream.value?.getTracks().forEach(track => track.stop());
+    originalLocalStream.value?.getTracks().forEach((track) => track.stop());
   }
 
   // 关闭所有对等连接
@@ -641,9 +760,15 @@ function cleanupCall(endOwnedSession: boolean) {
   // 通知服务器
   // 服务端会校验会话所有者；即使“开始”仍在异步创建中，也要发送结束事件以取消待广播的邀请。
   if (endOwnedSession) {
-    socket.value?.emit('group_call_end', { groupId: groupId.value, deviceType: sessionDeviceType.value });
+    socket.value?.emit('group_call_end', {
+      groupId: groupId.value,
+      deviceType: sessionDeviceType.value,
+    });
   }
-  socket.value?.emit('leave_group_call', { groupId: groupId.value, deviceType: sessionDeviceType.value });
+  socket.value?.emit('leave_group_call', {
+    groupId: groupId.value,
+    deviceType: sessionDeviceType.value,
+  });
   stopAuthenticatedWatch?.();
   stopAuthenticatedWatch = null;
   unbindSocketEvents();
@@ -669,7 +794,11 @@ function unbindSocketEvents() {
 
 onMounted(async () => {
   mediaClaim = mediaOccupancy.acquire('group-call', mediaOwner, () => cleanupCall(true));
-  if (!mediaClaim) { message.warning('请先结束当前通话或远程控制'); await router.replace(`/group-chat/${groupId.value}`); return; }
+  if (!mediaClaim) {
+    message.warning('请先结束当前通话或远程控制');
+    await router.replace(`/group-chat/${groupId.value}`);
+    return;
+  }
   await loadGroupDetail();
   if (cleanedUp || !mediaClaim?.isCurrent()) return;
   await initLocalStream();

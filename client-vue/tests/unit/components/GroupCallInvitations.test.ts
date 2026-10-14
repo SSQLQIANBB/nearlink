@@ -6,23 +6,40 @@ const mocks = vi.hoisted(() => ({
   info: vi.fn(),
   push: vi.fn(),
   destroy: vi.fn(),
-  startRingtone: vi.fn(), stopRingtone: vi.fn(),
+  startRingtone: vi.fn(),
+  stopRingtone: vi.fn(),
 }));
 vi.mock('naive-ui', () => ({ useDialog: () => ({ info: mocks.info }) }));
-vi.mock('vue-router', () => ({ useRouter: () => ({
-  push: mocks.push, currentRoute: { value: { path: '/remote' } },
-}) }));
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: mocks.push,
+    currentRoute: { value: { path: '/remote' } },
+  }),
+}));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { id: 2 } }) }));
-vi.mock('@/stores/socket', () => ({ useSocketStore: () => ({ socket: {
-  on: (event: string, handler: Function) => mocks.handlers.set(event, handler),
-  off: (event: string) => mocks.handlers.delete(event),
-} }) }));
-vi.mock('@/services/notificationService', () => ({ default: {
-  showCall: vi.fn(), startCallRingtone: mocks.startRingtone, stopCallRingtone: mocks.stopRingtone,
-} }));
+vi.mock('@/stores/socket', () => ({
+  useSocketStore: () => ({
+    socket: {
+      on: (event: string, handler: Function) => mocks.handlers.set(event, handler),
+      off: (event: string) => mocks.handlers.delete(event),
+    },
+  }),
+}));
+vi.mock('@/services/notificationService', () => ({
+  default: {
+    showCall: vi.fn(),
+    startCallRingtone: mocks.startRingtone,
+    stopCallRingtone: mocks.stopRingtone,
+  },
+}));
 import GroupCallInvitations from '../../../src/components/GroupCallInvitations.vue';
 
-const session = { groupId: 7, ownerUserId: 1, startedAt: '2026-09-12', user: { nickname: 'Alice' } };
+const session = {
+  groupId: 7,
+  ownerUserId: 1,
+  startedAt: '2026-09-12',
+  user: { nickname: 'Alice' },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,7 +48,7 @@ beforeEach(() => {
 });
 
 describe('群组通话全局邀请', () => {
-  it.each(['video', 'audio', 'screen'])('在其他页面收到 %s 邀请，接受后进入对应会话', type => {
+  it.each(['video', 'audio', 'screen'])('在其他页面收到 %s 邀请，接受后进入对应会话', (type) => {
     const wrapper = mount(GroupCallInvitations);
     mocks.handlers.get('group_call_started')!({ ...session, type });
     expect(mocks.info).toHaveBeenCalledOnce();

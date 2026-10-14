@@ -16,7 +16,8 @@ export interface FileAttributes {
   updatedAt?: Date;
 }
 
-interface FileCreationAttributes extends Optional<FileAttributes, 'id' | 'groupId' | 'downloadCount'> {}
+interface FileCreationAttributes
+  extends Optional<FileAttributes, 'id' | 'groupId' | 'downloadCount'> {}
 
 class File extends Model<FileAttributes, FileCreationAttributes> implements FileAttributes {
   declare id?: number;
@@ -101,8 +102,7 @@ File.init(
         fields: ['createdAt'],
       },
     ],
-  }
+  },
 );
 
 export default File;
-

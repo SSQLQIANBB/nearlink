@@ -8,10 +8,20 @@ if (testUrl && !/^todesk_auth_test_[a-zA-Z0-9_]+$/.test(new URL(testUrl).pathnam
 }
 vi.mock('../../src/config/database', async () => {
   const { Sequelize } = await import('sequelize');
-  return { default: new Sequelize(process.env.AUTH_TEST_MYSQL_URL || 'mysql://root@127.0.0.1/todesk_auth_test_disabled', { logging: false, dialectOptions: { multipleStatements: true } }) };
+  return {
+    default: new Sequelize(
+      process.env.AUTH_TEST_MYSQL_URL || 'mysql://root@127.0.0.1/todesk_auth_test_disabled',
+      { logging: false, dialectOptions: { multipleStatements: true } },
+    ),
+  };
 });
 import db from '../../src/config/database';
-import { RemoteDevice, AssistanceGrant, RemoteSessionRecord, RemoteSessionEvent } from '../../src/models/RemoteControl';
+import {
+  RemoteDevice,
+  AssistanceGrant,
+  RemoteSessionRecord,
+  RemoteSessionEvent,
+} from '../../src/models/RemoteControl';
 
 const suite = testUrl ? describe : describe.skip;
 suite('remote-control migration (real MySQL)', () => {
@@ -30,25 +40,61 @@ suite('remote-control migration (real MySQL)', () => {
   it('reapplies idempotently, matches ORM fields and retains revocations/history on rollback', async () => {
     await apply('20260925-remote-control.up.sql');
     await apply('20260926-remote-lifecycle.up.sql');
-    const device = await RemoteDevice.create({ id: randomUUID(), ownerUserId: 7, publicKey: 'test-public-key',
-      fingerprint: 'a'.repeat(64), alias: '测试 Mac', platform: 'macos' });
+    const device = await RemoteDevice.create({
+      id: randomUUID(),
+      ownerUserId: 7,
+      publicKey: 'test-public-key',
+      fingerprint: 'a'.repeat(64),
+      alias: '测试 Mac',
+      platform: 'macos',
+    });
     expect(device.keyVersion).toBe(1);
     expect(device.revokedAt).toBeNull();
     const sid = randomUUID();
-    const grant = await AssistanceGrant.create({ id: randomUUID(), hostDeviceId: device.id, createdBySid: sid,
-      controllerUserId: 8, expiresAt: new Date(Date.now() + 600_000) });
-    const record = await RemoteSessionRecord.create({ sessionId: randomUUID(), controllerUserId: 8, hostUserId: 7,
-      controllerSid: randomUUID(), hostSid: sid, hostDeviceId: device.id, grantId: grant.id,
-      scope: 'view', state: 'ended', revision: 3, endedAt: new Date(), endReason: 'USER_ENDED' });
+    const grant = await AssistanceGrant.create({
+      id: randomUUID(),
+      hostDeviceId: device.id,
+      createdBySid: sid,
+      controllerUserId: 8,
+      expiresAt: new Date(Date.now() + 600_000),
+    });
+    const record = await RemoteSessionRecord.create({
+      sessionId: randomUUID(),
+      controllerUserId: 8,
+      hostUserId: 7,
+      controllerSid: randomUUID(),
+      hostSid: sid,
+      hostDeviceId: device.id,
+      grantId: grant.id,
+      scope: 'view',
+      state: 'ended',
+      revision: 3,
+      endedAt: new Date(),
+      endReason: 'USER_ENDED',
+    });
     await device.update({ revokedAt: new Date() });
     await apply('20260925-remote-control.up.sql');
     await apply('20260925-remote-control.rollback.sql');
     expect((await RemoteDevice.findByPk(device.id))!.revokedAt).not.toBeNull();
     expect((await AssistanceGrant.findByPk(grant.id))!.createdBySid).toBe(sid);
     expect((await RemoteSessionRecord.findByPk(record.sessionId))!.endReason).toBe('USER_ENDED');
-    const indexRows = await db.getQueryInterface().showIndex('remote_sessions') as { fields: { attribute: string }[] }[];
-    expect(indexRows.some(index => index.fields.map(field => field.attribute).join(',') === 'controllerSid')).toBe(true);
-    await expect(RemoteDevice.create({ id: randomUUID(), ownerUserId: 9, publicKey: 'other-key',
-      fingerprint: device.fingerprint, alias: '重复设备密钥', platform: 'windows' })).rejects.toThrow();
+    const indexRows = (await db.getQueryInterface().showIndex('remote_sessions')) as {
+      fields: { attribute: string }[];
+    }[];
+    expect(
+      indexRows.some(
+        (index) => index.fields.map((field) => field.attribute).join(',') === 'controllerSid',
+      ),
+    ).toBe(true);
+    await expect(
+      RemoteDevice.create({
+        id: randomUUID(),
+        ownerUserId: 9,
+        publicKey: 'other-key',
+        fingerprint: device.fingerprint,
+        alias: '重复设备密钥',
+        platform: 'windows',
+      }),
+    ).rejects.toThrow();
   });
 });

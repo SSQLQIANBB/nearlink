@@ -49,8 +49,7 @@ Group.init(
     sequelize,
     tableName: 'groups',
     timestamps: true,
-  }
+  },
 );
 
 export default Group;
-

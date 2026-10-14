@@ -12,7 +12,7 @@ export function applyMessageAck<T extends DeliveryMessage>(
   ack: MessageAck,
 ): T[] {
   let matched = false;
-  const updated = messages.map(item => {
+  const updated = messages.map((item) => {
     if (item.clientMessageId !== clientMessageId) return item;
     matched = true;
     return {

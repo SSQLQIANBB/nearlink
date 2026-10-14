@@ -14,11 +14,19 @@ export function validateDesktopRelease(config, cargo, tag) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   checkProductVersion();
-  const config = JSON.parse(readFileSync(new URL('../client-vue/src-tauri/tauri.conf.json', import.meta.url)));
-  const cargo = readFileSync(new URL('../client-vue/src-tauri/Cargo.toml', import.meta.url), 'utf8');
+  const config = JSON.parse(
+    readFileSync(new URL('../client-vue/src-tauri/tauri.conf.json', import.meta.url)),
+  );
+  const cargo = readFileSync(
+    new URL('../client-vue/src-tauri/Cargo.toml', import.meta.url),
+    'utf8',
+  );
   const result = validateDesktopRelease(config, cargo, process.argv[2]);
   console.log(`桌面版本校验通过：${result.version}`);
   if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `version=${result.version}\nprerelease=${result.prerelease}\n`);
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `version=${result.version}\nprerelease=${result.prerelease}\n`,
+    );
   }
 }

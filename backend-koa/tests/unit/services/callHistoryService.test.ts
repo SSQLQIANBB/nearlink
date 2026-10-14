@@ -65,7 +65,9 @@ describe('通话历史', () => {
       status: 'completed',
       durationSeconds: 3661,
     });
-    expect(message).toBe('__TODESK_CALL_HISTORY__:{"type":"screen","status":"completed","durationSeconds":3661}');
+    expect(message).toBe(
+      '__TODESK_CALL_HISTORY__:{"type":"screen","status":"completed","durationSeconds":3661}',
+    );
     expect(parseCallHistoryMessage(message)).toEqual({
       type: 'screen',
       status: 'completed',

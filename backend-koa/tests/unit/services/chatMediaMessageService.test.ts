@@ -26,13 +26,17 @@ describe('聊天媒体消息', () => {
   });
 
   it('校验语音时长、类型和资源地址', () => {
-    expect(() => createChatMediaMessage({
-      type: 'voice',
-      media: { url: '/uploads/voice.webm', mimeType: 'audio/webm', durationSeconds: 61 },
-    })).toThrow('媒体消息无效');
-    expect(() => createChatMediaMessage({
-      type: 'image',
-      media: { url: 'javascript:alert(1)', mimeType: 'image/png' },
-    })).toThrow('媒体消息无效');
+    expect(() =>
+      createChatMediaMessage({
+        type: 'voice',
+        media: { url: '/uploads/voice.webm', mimeType: 'audio/webm', durationSeconds: 61 },
+      }),
+    ).toThrow('媒体消息无效');
+    expect(() =>
+      createChatMediaMessage({
+        type: 'image',
+        media: { url: 'javascript:alert(1)', mimeType: 'image/png' },
+      }),
+    ).toThrow('媒体消息无效');
   });
 });

@@ -46,10 +46,10 @@ export class ScreenAnnotationService {
 
   validateAction(action: AnnotationAction) {
     if (
-      !action.actionId
-      || !TOOLS.has(action.tool)
-      || action.points.length === 0
-      || action.points.length > MAX_POINTS
+      !action.actionId ||
+      !TOOLS.has(action.tool) ||
+      action.points.length === 0 ||
+      action.points.length > MAX_POINTS
     ) {
       throw new Error('标注数据无效');
     }
@@ -59,14 +59,17 @@ export class ScreenAnnotationService {
     if (action.text && action.text.length > 500) {
       throw new Error('标注文字过长');
     }
-    if (action.points.some(point => (
-      !Number.isFinite(point.x)
-      || !Number.isFinite(point.y)
-      || point.x < 0
-      || point.x > 1
-      || point.y < 0
-      || point.y > 1
-    ))) {
+    if (
+      action.points.some(
+        (point) =>
+          !Number.isFinite(point.x) ||
+          !Number.isFinite(point.y) ||
+          point.x < 0 ||
+          point.x > 1 ||
+          point.y < 0 ||
+          point.y > 1,
+      )
+    ) {
       throw new Error('标注坐标无效');
     }
   }
@@ -89,7 +92,7 @@ export class ScreenAnnotationService {
     this.assertOwner(session, userId);
     this.validateAction(action);
     const actions = await this.getSnapshot(session);
-    const existing = actions.find(item => item.actionId === action.actionId);
+    const existing = actions.find((item) => item.actionId === action.actionId);
     if (existing) return existing;
     if (actions.length >= MAX_ACTIONS) {
       throw new Error('标注数量已达上限，请先清空');

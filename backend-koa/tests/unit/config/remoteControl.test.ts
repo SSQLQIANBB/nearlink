@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({ validate: vi.fn() }));
-vi.mock('../../../src/services/loginSessionService', () => ({ validateAuthenticatedSession: mock.validate }));
-vi.mock('../../../src/services/remoteControlContext', () => ({ getRemoteControlContext: () => ({
-  authority: null, coordinator: null, service: { subscribe: () => () => {} }, store: {}, history: {},
-}) }));
+vi.mock('../../../src/services/loginSessionService', () => ({
+  validateAuthenticatedSession: mock.validate,
+}));
+vi.mock('../../../src/services/remoteControlContext', () => ({
+  getRemoteControlContext: () => ({
+    authority: null,
+    coordinator: null,
+    service: { subscribe: () => () => {} },
+    store: {},
+    history: {},
+  }),
+}));
 vi.mock('../../../src/models/RemoteControl', () => ({ AssistanceGrant: {} }));
 import { initializeRemoteControl } from '../../../src/config/remoteControl';
 import { getRemoteControlCapabilities } from '../../../src/services/remoteControlPolicy';
@@ -16,9 +24,21 @@ describe('未验收原生引擎的发布门禁', () => {
     expect(of).toHaveBeenCalledWith('/remote-control');
     mock.validate.mockResolvedValue({ userId: 1, sid: 'login' });
     const next = vi.fn();
-    await use.mock.calls[0][0]({ handshake: { auth: { token: 'valid', role: 'host', engineReady: true, canInjectInput: true } } }, next);
+    await use.mock.calls[0][0](
+      {
+        handshake: {
+          auth: { token: 'valid', role: 'host', engineReady: true, canInjectInput: true },
+        },
+      },
+      next,
+    );
     expect(next.mock.calls[0][0].data.code).toBe('NATIVE_VALIDATION_PENDING');
-    expect(getRemoteControlCapabilities()).toMatchObject({ desktopHostEnabled: false, desktopControllerEnabled: false, webControllerReleaseEnabled: false, releasedPlatforms: [] });
+    expect(getRemoteControlCapabilities()).toMatchObject({
+      desktopHostEnabled: false,
+      desktopControllerEnabled: false,
+      webControllerReleaseEnabled: false,
+      releasedPlatforms: [],
+    });
   });
   it('旧sid/缺少凭据均拒绝，不作为匿名功能协商放行', async () => {
     const use = vi.fn();

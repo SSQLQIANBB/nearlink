@@ -7,6 +7,8 @@ export function initializeRemoteControlRuntime(server: Server) {
   const { store, history, service } = getRemoteControlContext();
   const runtime = new RemoteControlRuntime(service, store, history);
   runtime.start();
-  server.once('close', () => { void runtime.stop(); });
+  server.once('close', () => {
+    void runtime.stop();
+  });
   return runtime;
 }

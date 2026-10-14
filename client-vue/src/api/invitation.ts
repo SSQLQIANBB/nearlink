@@ -33,4 +33,3 @@ export function acceptInvitation(invitationId: number) {
 export function rejectInvitation(invitationId: number) {
   return http.post<{ message: string }>(`/api/invitations/${invitationId}/reject`);
 }
-

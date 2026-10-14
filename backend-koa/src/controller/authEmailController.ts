@@ -6,7 +6,10 @@ import { hashPassword } from '../utils/crypto';
 import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '../utils/passwordPolicy';
 import { replacePasswordAndRevokeSessions } from '../services/loginSessionService';
 import {
-  consumeEmailCode, isMailConfigured, issueEmailCode, normalizeEmail,
+  consumeEmailCode,
+  isMailConfigured,
+  issueEmailCode,
+  normalizeEmail,
   type EmailCodePurpose,
 } from '../services/emailVerificationService';
 
@@ -21,35 +24,61 @@ async function limitRequests(ctx: Context) {
 
 async function issue(ctx: Context, purpose: EmailCodePurpose) {
   const email = normalizeEmail((ctx.request.body as any)?.email);
-  if (!email) { ctx.status = 400; ctx.body = { error: '请输入有效邮箱' }; return; }
-  if (!isMailConfigured()) { ctx.status = 503; ctx.body = { error: '邮件服务未配置' }; return; }
-  if (!await limitRequests(ctx)) { ctx.status = 429; ctx.body = { error: '请求过于频繁，请稍后再试' }; return; }
+  if (!email) {
+    ctx.status = 400;
+    ctx.body = { error: '请输入有效邮箱' };
+    return;
+  }
+  if (!isMailConfigured()) {
+    ctx.status = 503;
+    ctx.body = { error: '邮件服务未配置' };
+    return;
+  }
+  if (!(await limitRequests(ctx))) {
+    ctx.status = 429;
+    ctx.body = { error: '请求过于频繁，请稍后再试' };
+    return;
+  }
 
   try {
     const binding = await UserEmail.findOne({ where: { email } });
     const anonymousPurpose = purpose === 'reset' || purpose === 'login';
     if (anonymousPurpose && !binding) {
-      ctx.status = 404; ctx.body = { error: '该邮箱未注册' }; return;
+      ctx.status = 404;
+      ctx.body = { error: '该邮箱未注册' };
+      return;
     }
     if (purpose === 'register' && binding) {
-      ctx.status = 409; ctx.body = { error: '该邮箱已绑定其他账号' }; return;
+      ctx.status = 409;
+      ctx.body = { error: '该邮箱已绑定其他账号' };
+      return;
     }
     if (purpose === 'bind') {
       const userId = ctx.state.user.userId as number;
       if (await UserEmail.findByPk(userId)) {
-        ctx.status = 409; ctx.body = { error: '账号已绑定邮箱' }; return;
+        ctx.status = 409;
+        ctx.body = { error: '账号已绑定邮箱' };
+        return;
       }
-      if (binding) { ctx.status = 409; ctx.body = { error: '该邮箱已绑定其他账号' }; return; }
+      if (binding) {
+        ctx.status = 409;
+        ctx.body = { error: '该邮箱已绑定其他账号' };
+        return;
+      }
     }
     if (purpose === 'change-password') {
       const userId = ctx.state.user.userId as number;
-      if (!await UserEmail.findOne({ where: { userId, email } })) {
-        ctx.status = 400; ctx.body = { error: '请输入已绑定邮箱' }; return;
+      if (!(await UserEmail.findOne({ where: { userId, email } }))) {
+        ctx.status = 400;
+        ctx.body = { error: '请输入已绑定邮箱' };
+        return;
       }
     }
     const result = await issueEmailCode(purpose, email);
     if (result === 'cooldown' && !anonymousPurpose) {
-      ctx.status = 429; ctx.body = { error: '请稍后再发送验证码' }; return;
+      ctx.status = 429;
+      ctx.body = { error: '请稍后再发送验证码' };
+      return;
     }
     ctx.body = { message: CODE_SENT_MESSAGE };
   } catch (error) {
@@ -58,7 +87,8 @@ async function issue(ctx: Context, purpose: EmailCodePurpose) {
       ctx.body = { message: CODE_SENT_MESSAGE };
       return;
     }
-    ctx.status = 502; ctx.body = { error: '邮件发送失败，请稍后重试' };
+    ctx.status = 502;
+    ctx.body = { error: '邮件发送失败，请稍后重试' };
   }
 }
 
@@ -77,15 +107,25 @@ export async function bindEmail(ctx: Context) {
   const userId = ctx.state.user.userId as number;
   const email = normalizeEmail((ctx.request.body as any)?.email);
   const code = (ctx.request.body as any)?.code;
-  if (!email) { ctx.status = 400; ctx.body = { error: '请输入有效邮箱' }; return; }
+  if (!email) {
+    ctx.status = 400;
+    ctx.body = { error: '请输入有效邮箱' };
+    return;
+  }
   if (await UserEmail.findByPk(userId)) {
-    ctx.status = 409; ctx.body = { error: '账号已绑定邮箱' }; return;
+    ctx.status = 409;
+    ctx.body = { error: '账号已绑定邮箱' };
+    return;
   }
   if (await UserEmail.findOne({ where: { email } })) {
-    ctx.status = 409; ctx.body = { error: '该邮箱已绑定其他账号' }; return;
+    ctx.status = 409;
+    ctx.body = { error: '该邮箱已绑定其他账号' };
+    return;
   }
-  if (!await consumeEmailCode('bind', email, code)) {
-    ctx.status = 400; ctx.body = { error: '验证码无效或已过期' }; return;
+  if (!(await consumeEmailCode('bind', email, code))) {
+    ctx.status = 400;
+    ctx.body = { error: '验证码无效或已过期' };
+    return;
   }
   try {
     const transaction = await User.sequelize!.transaction();
@@ -101,7 +141,8 @@ export async function bindEmail(ctx: Context) {
     ctx.body = { email, message: '邮箱绑定成功' };
   } catch (error) {
     console.error('绑定邮箱失败:', error);
-    ctx.status = 409; ctx.body = { error: '邮箱已绑定或绑定失败' };
+    ctx.status = 409;
+    ctx.body = { error: '邮箱已绑定或绑定失败' };
   }
 }
 
@@ -109,17 +150,29 @@ export async function resetPassword(ctx: Context) {
   const email = normalizeEmail((ctx.request.body as any)?.email);
   const { code, newPassword } = ctx.request.body as any;
   if (!email) {
-    ctx.status = 400; ctx.body = { error: '请输入有效邮箱' }; return;
+    ctx.status = 400;
+    ctx.body = { error: '请输入有效邮箱' };
+    return;
   }
   if (!isValidNewPassword(newPassword)) {
-    ctx.status = 400; ctx.body = { error: PASSWORD_RULE_MESSAGE }; return;
+    ctx.status = 400;
+    ctx.body = { error: PASSWORD_RULE_MESSAGE };
+    return;
   }
   const binding = await UserEmail.findOne({ where: { email } });
-  if (!binding || !await consumeEmailCode('reset', email, code)) {
-    ctx.status = 400; ctx.body = { error: '验证码无效或已过期' }; return;
+  if (!binding || !(await consumeEmailCode('reset', email, code))) {
+    ctx.status = 400;
+    ctx.body = { error: '验证码无效或已过期' };
+    return;
   }
   const user = await User.findByPk(binding.userId);
-  if (!user) { ctx.status = 404; ctx.body = { error: '账号不存在' }; return; }
-  await replacePasswordAndRevokeSessions(user.id, hashPassword(newPassword), { authVersion: user.authVersion });
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { error: '账号不存在' };
+    return;
+  }
+  await replacePasswordAndRevokeSessions(user.id, hashPassword(newPassword), {
+    authVersion: user.authVersion,
+  });
   ctx.body = { message: '密码已重置，请重新登录' };
 }

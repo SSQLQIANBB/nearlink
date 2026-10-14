@@ -15,7 +15,9 @@ suite('explicit authentication SQL migration', () => {
   };
   beforeAll(async () => {
     db = new Sequelize(testUrl!, { logging: false, dialectOptions: { multipleStatements: true } });
-    await db.query('CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(50) NOT NULL) ENGINE=InnoDB');
+    await db.query(
+      'CREATE TABLE users (id INT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(50) NOT NULL) ENGINE=InnoDB',
+    );
     await db.query("INSERT INTO users (username) VALUES ('existing')");
   });
   afterAll(async () => {
@@ -29,9 +31,11 @@ suite('explicit authentication SQL migration', () => {
     const previous = (before as { authVersion: string }[])[0].authVersion;
     expect(previous).toMatch(/^[a-f0-9-]{36}$/);
     await expect(db.query('UPDATE users SET authVersion = NULL')).rejects.toThrow();
-    await db.query(`INSERT INTO login_sessions (id, userId, authVersion, refreshHash, expiresAt, createdAt, updatedAt)
+    await db.query(
+      `INSERT INTO login_sessions (id, userId, authVersion, refreshHash, expiresAt, createdAt, updatedAt)
       VALUES (UUID(), 1, :version, REPEAT('a',64), DATE_ADD(NOW(), INTERVAL 1 DAY), NOW(), NOW())`,
-    { replacements: { version: previous } });
+      { replacements: { version: previous } },
+    );
     await apply('20260925-login-sessions.rollback.sql');
     const [after] = await db.query('SELECT authVersion FROM users');
     expect((after as { authVersion: string }[])[0].authVersion).not.toBe(previous);

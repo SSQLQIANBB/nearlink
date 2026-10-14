@@ -26,7 +26,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }));
 
-vi.mock('naive-ui', async importOriginal => {
+vi.mock('naive-ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('naive-ui')>();
   return {
     ...actual,
@@ -61,10 +61,11 @@ const InputStub = defineComponent({
   props: { value: String },
   emits: ['update:value'],
   setup(props, { emit }) {
-    return () => h('input', {
-      value: props.value,
-      onInput: (event: Event) => emit('update:value', (event.target as HTMLInputElement).value),
-    });
+    return () =>
+      h('input', {
+        value: props.value,
+        onInput: (event: Event) => emit('update:value', (event.target as HTMLInputElement).value),
+      });
   },
 });
 
@@ -87,15 +88,18 @@ function mountLogin() {
 
 describe('login button state', () => {
   beforeEach(() => {
-    Object.values(mocks).forEach(mock => mock.mockReset());
+    Object.values(mocks).forEach((mock) => mock.mockReset());
     window.localStorage.clear();
   });
 
   it('请求期间按钮 loading 且禁用，重复点击不会发送第二次请求', async () => {
     let resolveLogin!: (value: any) => void;
-    mocks.login.mockImplementation(() => new Promise(resolve => {
-      resolveLogin = resolve;
-    }));
+    mocks.login.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLogin = resolve;
+        }),
+    );
     const wrapper = mountLogin();
     const button = wrapper.findAll('button')[0]!;
 
@@ -137,10 +141,17 @@ describe('login button state', () => {
       message: '登录成功',
     });
     const wrapper = mountLogin();
-    expect(wrapper.findAll('button').some(button => button.text() === '返回账号密码登录')).toBe(false);
-    await wrapper.findAll('button').find(button => button.text() === '验证码免密登录')!.trigger('click');
+    expect(wrapper.findAll('button').some((button) => button.text() === '返回账号密码登录')).toBe(
+      false,
+    );
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '验证码免密登录')!
+      .trigger('click');
     const emailForm = wrapper.findAll('form')[0]!;
-    expect(emailForm.findAll('button').some(button => button.text() === '返回账号密码登录')).toBe(true);
+    expect(emailForm.findAll('button').some((button) => button.text() === '返回账号密码登录')).toBe(
+      true,
+    );
     const inputs = emailForm.findAll('input');
     await inputs[0]!.setValue('alice@example.com');
     await emailForm.findAll('button')[0]!.trigger('click');
@@ -153,8 +164,13 @@ describe('login button state', () => {
     await flushPromises();
     expect(mocks.login).toHaveBeenCalledWith({ email: 'alice@example.com', code: '123456' });
     expect(mocks.replace).toHaveBeenCalledWith('/remote');
-    await emailForm.findAll('button').find(button => button.text() === '返回账号密码登录')!.trigger('click');
-    expect(wrapper.findAll('button').some(button => button.text() === '验证码免密登录')).toBe(true);
+    await emailForm
+      .findAll('button')
+      .find((button) => button.text() === '返回账号密码登录')!
+      .trigger('click');
+    expect(wrapper.findAll('button').some((button) => button.text() === '验证码免密登录')).toBe(
+      true,
+    );
     wrapper.unmount();
   });
 });

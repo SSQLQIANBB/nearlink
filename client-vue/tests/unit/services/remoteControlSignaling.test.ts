@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RemoteSignalClient, type RemoteSignalAck, type RemoteSignalEnvelope } from '@/services/remoteControlSignaling';
+import {
+  RemoteSignalClient,
+  type RemoteSignalAck,
+  type RemoteSignalEnvelope,
+} from '@/services/remoteControlSignaling';
 let acknowledgements: Array<(value: unknown) => void>;
 let envelopes: RemoteSignalEnvelope[];
 const stop = vi.fn();
@@ -7,15 +11,37 @@ const state = vi.fn();
 const disconnect = vi.fn();
 let client: RemoteSignalClient;
 const ack: RemoteSignalAck = { ok: true, sessionId: 'session-1', revision: 0, state: 'pending' };
-const snapshot = { sessionId: 'session-1', revision: 1, state: 'active', scope: 'control', authorizationRevision: 1, controlEpoch: 1 };
+const snapshot = {
+  sessionId: 'session-1',
+  revision: 1,
+  state: 'active',
+  scope: 'control',
+  authorizationRevision: 1,
+  controlEpoch: 1,
+};
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   acknowledgements = [];
   envelopes = [];
-  client = new RemoteSignalClient({ connected: true, disconnect, emit: (_event, envelope, acknowledge) => { envelopes.push(envelope); acknowledgements.push(acknowledge); } }, 1, stop, state);
+  client = new RemoteSignalClient(
+    {
+      connected: true,
+      disconnect,
+      emit: (_event, envelope, acknowledge) => {
+        envelopes.push(envelope);
+        acknowledgements.push(acknowledge);
+      },
+    },
+    1,
+    stop,
+    state,
+  );
 });
-afterEach(() => { client.invalidate('TEST_END'); vi.useRealTimers(); });
+afterEach(() => {
+  client.invalidate('TEST_END');
+  vi.useRealTimers();
+});
 async function requested() {
   const pending = client.command('remote:request', { targetDeviceId: 'target', scope: 'view' });
   acknowledgements[0]!(ack);
@@ -25,7 +51,11 @@ async function requested() {
 describe('远控信令基础', () => {
   it('使用独立envelope，ACK本身不提升本地控制权限', async () => {
     await requested();
-    expect(envelopes[0]).toMatchObject({ protocolVersion: 1, connectionGeneration: 1, payload: { targetDeviceId: 'target', scope: 'view' } });
+    expect(envelopes[0]).toMatchObject({
+      protocolVersion: 1,
+      connectionGeneration: 1,
+      payload: { targetDeviceId: 'target', scope: 'view' },
+    });
     expect(envelopes[0]?.requestId).toBeTruthy();
     expect(state).not.toHaveBeenCalled();
     expect(stop).not.toHaveBeenCalled();
@@ -41,7 +71,9 @@ describe('远控信令基础', () => {
     await cancel;
   });
   it('connectionGeneration必须是正整数，状态CAS冲突失败关闭', async () => {
-    expect(() => new RemoteSignalClient({ connected: true, disconnect, emit: vi.fn() }, 0, stop, state)).toThrow('REMOTE_INVALID_CONFIGURATION');
+    expect(
+      () => new RemoteSignalClient({ connected: true, disconnect, emit: vi.fn() }, 0, stop, state),
+    ).toThrow('REMOTE_INVALID_CONFIGURATION');
     await requested();
     const pause = client.command('remote:pause', {});
     acknowledgements[1]!({ ok: false, code: 'REVISION_CONFLICT' });

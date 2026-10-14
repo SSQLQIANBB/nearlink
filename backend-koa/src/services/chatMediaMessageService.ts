@@ -30,13 +30,28 @@ function parsePayload(value: unknown): ChatMediaMessage | null {
 
   const media = record.media;
   if (typeof media.url !== 'string' || !isAllowedUrl(media.url)) return null;
-  if (media.fileId !== undefined && (!Number.isSafeInteger(media.fileId) || media.fileId < 1)) return null;
+  if (media.fileId !== undefined && (!Number.isSafeInteger(media.fileId) || media.fileId < 1))
+    return null;
   if (typeof media.mimeType !== 'string') return null;
   if (record.type === 'image' && !media.mimeType.startsWith('image/')) return null;
   if (record.type === 'voice' && !media.mimeType.startsWith('audio/')) return null;
-  if (media.fileName !== undefined && (typeof media.fileName !== 'string' || media.fileName.length > 255)) return null;
-  if (media.fileSize !== undefined && (!Number.isSafeInteger(media.fileSize) || media.fileSize <= 0 || media.fileSize > MAX_FILE_SIZE)) return null;
-  if (record.type === 'voice' && (!Number.isSafeInteger(media.durationSeconds) || media.durationSeconds! < 1 || media.durationSeconds! > MAX_VOICE_DURATION_SECONDS)) return null;
+  if (
+    media.fileName !== undefined &&
+    (typeof media.fileName !== 'string' || media.fileName.length > 255)
+  )
+    return null;
+  if (
+    media.fileSize !== undefined &&
+    (!Number.isSafeInteger(media.fileSize) || media.fileSize <= 0 || media.fileSize > MAX_FILE_SIZE)
+  )
+    return null;
+  if (
+    record.type === 'voice' &&
+    (!Number.isSafeInteger(media.durationSeconds) ||
+      media.durationSeconds! < 1 ||
+      media.durationSeconds! > MAX_VOICE_DURATION_SECONDS)
+  )
+    return null;
 
   return { type: record.type, media };
 }

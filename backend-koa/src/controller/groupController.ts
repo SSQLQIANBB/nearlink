@@ -3,10 +3,7 @@ import { runGroupOperation, revokeGroupAccess } from '../services/groupAccessCoo
 import { Group, GroupMember, User, GroupInvitation, GroupMessage } from '../models';
 import sequelize from '../config/database';
 import redisService from '../services/redisService';
-import {
-  GroupDeletionError,
-  GroupDeletionService,
-} from '../services/groupDeletionService';
+import { GroupDeletionError, GroupDeletionService } from '../services/groupDeletionService';
 
 /**
  * 创建群组
@@ -89,7 +86,7 @@ export async function getMyGroups(ctx: Context) {
           canSpeak: gmData.canSpeak,
           memberCount,
         };
-      })
+      }),
     );
 
     ctx.body = { groups };
@@ -234,7 +231,7 @@ export async function inviteToGroup(ctx: Context) {
         });
 
         return { userId: inviteUserId, success: true, message: '邀请已发送' };
-      })
+      }),
     );
 
     ctx.body = {
@@ -257,7 +254,9 @@ async function setMemberPermissionLocked(ctx: Context) {
     const userId = ctx.state.user?.userId;
     const { targetUserId, canSpeak } = ctx.request.body as any;
     if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0 || typeof canSpeak !== 'boolean') {
-      ctx.status = 400; ctx.body = { error: '无效的成员权限' }; return;
+      ctx.status = 400;
+      ctx.body = { error: '无效的成员权限' };
+      return;
     }
 
     // 检查是否有权限
@@ -394,27 +393,32 @@ async function deleteGroupLocked(ctx: Context) {
   }
 
   const service = new GroupDeletionService({
-    findMembership: (id, memberUserId) => GroupMember.findOne({
-      where: { groupId: id, userId: memberUserId },
-    }),
-    findGroup: id => Group.findByPk(id),
-    transaction: callback => sequelize.transaction(transaction => callback(transaction)),
-    deleteMessages: (id, transaction) => GroupMessage.destroy({
-      where: { groupId: id },
-      transaction: transaction as any,
-    }),
-    deleteInvitations: (id, transaction) => GroupInvitation.destroy({
-      where: { groupId: id },
-      transaction: transaction as any,
-    }),
-    deleteMembers: (id, transaction) => GroupMember.destroy({
-      where: { groupId: id },
-      transaction: transaction as any,
-    }),
-    deleteGroup: (id, transaction) => Group.destroy({
-      where: { id },
-      transaction: transaction as any,
-    }),
+    findMembership: (id, memberUserId) =>
+      GroupMember.findOne({
+        where: { groupId: id, userId: memberUserId },
+      }),
+    findGroup: (id) => Group.findByPk(id),
+    transaction: (callback) => sequelize.transaction((transaction) => callback(transaction)),
+    deleteMessages: (id, transaction) =>
+      GroupMessage.destroy({
+        where: { groupId: id },
+        transaction: transaction as any,
+      }),
+    deleteInvitations: (id, transaction) =>
+      GroupInvitation.destroy({
+        where: { groupId: id },
+        transaction: transaction as any,
+      }),
+    deleteMembers: (id, transaction) =>
+      GroupMember.destroy({
+        where: { groupId: id },
+        transaction: transaction as any,
+      }),
+    deleteGroup: (id, transaction) =>
+      Group.destroy({
+        where: { id },
+        transaction: transaction as any,
+      }),
   });
 
   try {
@@ -446,11 +450,12 @@ async function deleteGroupLocked(ctx: Context) {
   }
 }
 
-
 export async function leaveGroup(ctx: Context) {
   const groupId = Number(ctx.params.id);
   if (!Number.isSafeInteger(groupId) || groupId <= 0) {
-    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+    ctx.status = 400;
+    ctx.body = { error: '无效的群组ID' };
+    return;
   }
   await runGroupOperation(groupId, () => leaveGroupLocked(ctx));
 }
@@ -458,7 +463,9 @@ export async function leaveGroup(ctx: Context) {
 export async function deleteGroup(ctx: Context) {
   const groupId = Number(ctx.params.id);
   if (!Number.isSafeInteger(groupId) || groupId <= 0) {
-    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+    ctx.status = 400;
+    ctx.body = { error: '无效的群组ID' };
+    return;
   }
   await runGroupOperation(groupId, () => deleteGroupLocked(ctx));
 }
@@ -466,7 +473,9 @@ export async function deleteGroup(ctx: Context) {
 export async function setMemberPermission(ctx: Context) {
   const groupId = Number(ctx.params.id);
   if (!Number.isSafeInteger(groupId) || groupId <= 0) {
-    ctx.status = 400; ctx.body = { error: '无效的群组ID' }; return;
+    ctx.status = 400;
+    ctx.body = { error: '无效的群组ID' };
+    return;
   }
   await runGroupOperation(groupId, () => setMemberPermissionLocked(ctx));
 }

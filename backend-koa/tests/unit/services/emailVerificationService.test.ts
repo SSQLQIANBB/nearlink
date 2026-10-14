@@ -5,32 +5,41 @@ const mocks = vi.hoisted(() => ({
   sendMail: vi.fn(),
 }));
 
-vi.mock('../../../src/config/redis', () => ({ default: {
-  set: vi.fn(async (key: string, value: string, ...options: string[]) => {
-    if (options.includes('NX') && mocks.values.has(key)) return null;
-    mocks.values.set(key, value);
-    return 'OK';
-  }),
-  get: vi.fn(async (key: string) => mocks.values.get(key) || null),
-  getdel: vi.fn(async (key: string) => {
-    const value = mocks.values.get(key) || null;
-    mocks.values.delete(key);
-    return value;
-  }),
-  del: vi.fn(async (...keys: string[]) => keys.forEach(key => mocks.values.delete(key))),
-  incr: vi.fn(async (key: string) => {
-    const count = Number(mocks.values.get(key) || 0) + 1;
-    mocks.values.set(key, String(count));
-    return count;
-  }),
-  expire: vi.fn(),
-} }));
-vi.mock('nodemailer', () => ({ default: { createTransport: () => ({
-  sendMail: mocks.sendMail, close: vi.fn(),
-}) } }));
+vi.mock('../../../src/config/redis', () => ({
+  default: {
+    set: vi.fn(async (key: string, value: string, ...options: string[]) => {
+      if (options.includes('NX') && mocks.values.has(key)) return null;
+      mocks.values.set(key, value);
+      return 'OK';
+    }),
+    get: vi.fn(async (key: string) => mocks.values.get(key) || null),
+    getdel: vi.fn(async (key: string) => {
+      const value = mocks.values.get(key) || null;
+      mocks.values.delete(key);
+      return value;
+    }),
+    del: vi.fn(async (...keys: string[]) => keys.forEach((key) => mocks.values.delete(key))),
+    incr: vi.fn(async (key: string) => {
+      const count = Number(mocks.values.get(key) || 0) + 1;
+      mocks.values.set(key, String(count));
+      return count;
+    }),
+    expire: vi.fn(),
+  },
+}));
+vi.mock('nodemailer', () => ({
+  default: {
+    createTransport: () => ({
+      sendMail: mocks.sendMail,
+      close: vi.fn(),
+    }),
+  },
+}));
 
 import {
-  consumeEmailCode, issueEmailCode, normalizeEmail,
+  consumeEmailCode,
+  issueEmailCode,
+  normalizeEmail,
 } from '../../../src/services/emailVerificationService';
 
 beforeEach(() => {
@@ -57,7 +66,9 @@ describe('邮箱验证码', () => {
     await issueEmailCode('reset', email);
     const code = String(mocks.sendMail.mock.calls[0]![0].text).match(/\b\d{6}\b/)![0];
     for (let index = 0; index < 6; index++) {
-      expect(await consumeEmailCode('reset', email, '000000' === code ? '111111' : '000000')).toBe(false);
+      expect(await consumeEmailCode('reset', email, '000000' === code ? '111111' : '000000')).toBe(
+        false,
+      );
     }
     expect(await consumeEmailCode('reset', email, code)).toBe(false);
 

@@ -7,5 +7,8 @@ defineProps<{ text: string }>();
 </script>
 
 <style scoped>
-.chat-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 </style>

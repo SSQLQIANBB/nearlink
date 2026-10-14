@@ -8,20 +8,26 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/common', () => ({ uploadFile: mocks.uploadFile }));
-vi.mock('naive-ui', async importOriginal => ({
-  ...await importOriginal<typeof import('naive-ui')>(),
+vi.mock('naive-ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('naive-ui')>()),
   useMessage: () => ({ error: vi.fn(), warning: vi.fn() }),
 }));
 
 class FakeMediaRecorder {
-  static isTypeSupported() { return true; }
+  static isTypeSupported() {
+    return true;
+  }
   state: RecordingState = 'inactive';
   mimeType = 'audio/webm';
   ondataavailable: ((event: BlobEvent) => void) | null = null;
   onstop: (() => void) | null = null;
 
-  constructor() { mocks.recorder = this; }
-  start() { this.state = 'recording'; }
+  constructor() {
+    mocks.recorder = this;
+  }
+  start() {
+    this.state = 'recording';
+  }
   stop() {
     this.state = 'inactive';
     this.ondataavailable?.({ data: new Blob(['voice'], { type: this.mimeType }) } as BlobEvent);
@@ -36,22 +42,31 @@ beforeEach(() => {
   mocks.recorder = null;
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
-    value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: mocks.stopTrack }] }) },
+    value: {
+      getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: mocks.stopTrack }] }),
+    },
   });
   vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
-  mocks.uploadFile.mockResolvedValue({ file: {
-    id: 1,
-    fileUrl: 'https://files.example.com/voice.webm',
-    mimeType: 'audio/webm',
-    originalName: 'voice.webm',
-    fileSize: 5,
-  } });
+  mocks.uploadFile.mockResolvedValue({
+    file: {
+      id: 1,
+      fileUrl: 'https://files.example.com/voice.webm',
+      mimeType: 'audio/webm',
+      originalName: 'voice.webm',
+      fileSize: 5,
+    },
+  });
 });
 
 describe('聊天语音录制', () => {
   it('按住开始录音，松开后上传并发送语音', async () => {
     const wrapper = mount(ChatMediaComposer, {
-      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
+      global: {
+        stubs: {
+          NButton: { template: '<button><slot /></button>' },
+          AudioWaveform: { template: '<span><slot /></span>' },
+        },
+      },
     });
     const button = wrapper.find('.hold-to-talk');
 
@@ -72,9 +87,18 @@ describe('聊天语音录制', () => {
 
   it('麦克风授权完成前松手时不再启动录音', async () => {
     let allowMicrophone!: (stream: MediaStream) => void;
-    vi.mocked(navigator.mediaDevices.getUserMedia).mockReturnValueOnce(new Promise(resolve => { allowMicrophone = resolve; }) as Promise<MediaStream>);
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockReturnValueOnce(
+      new Promise((resolve) => {
+        allowMicrophone = resolve;
+      }) as Promise<MediaStream>,
+    );
     const wrapper = mount(ChatMediaComposer, {
-      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
+      global: {
+        stubs: {
+          NButton: { template: '<button><slot /></button>' },
+          AudioWaveform: { template: '<span><slot /></span>' },
+        },
+      },
     });
     const button = wrapper.find('.hold-to-talk');
 
@@ -90,12 +114,16 @@ describe('聊天语音录制', () => {
   });
 });
 
-
 for (const moveBack of [false, true]) {
   it(moveBack ? '移回后恢复发送提示，卸载取消录音' : '上滑后松手取消发送', async () => {
     const wrapper = mount(ChatMediaComposer, {
       props: { compact: true },
-      global: { stubs: { NButton: { template: '<button><slot /></button>' }, AudioWaveform: { template: '<span><slot /></span>' } } },
+      global: {
+        stubs: {
+          NButton: { template: '<button><slot /></button>' },
+          AudioWaveform: { template: '<span><slot /></span>' },
+        },
+      },
     });
     await wrapper.get('.voice-mode-toggle').trigger('click');
     const button = wrapper.get('.hold-to-talk');
@@ -124,10 +152,10 @@ for (const moveBack of [false, true]) {
   });
 }
 
-
 it('点击麦克风只切换模式，不申请权限，再次点击恢复文字草稿', async () => {
   const wrapper = mount(ChatMediaComposer, {
-    props: { compact: true }, slots: { default: '<input value="保留的草稿" />' },
+    props: { compact: true },
+    slots: { default: '<input value="保留的草稿" />' },
     global: { stubs: { NButton: { template: '<button><slot /></button>' } } },
   });
   expect(wrapper.find('.hold-to-talk').exists()).toBe(false);

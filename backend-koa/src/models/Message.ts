@@ -13,7 +13,10 @@ export interface MessageAttributes {
 
 interface MessageCreationAttributes extends Optional<MessageAttributes, 'id' | 'isRead'> {}
 
-class Message extends Model<MessageAttributes, MessageCreationAttributes> implements MessageAttributes {
+class Message
+  extends Model<MessageAttributes, MessageCreationAttributes>
+  implements MessageAttributes
+{
   declare id?: number;
   declare fromUserId: number;
   declare toUserId: number;
@@ -63,8 +66,7 @@ Message.init(
         fields: ['toUserId', 'isRead', 'createdAt'],
       },
     ],
-  }
+  },
 );
 
 export default Message;
-

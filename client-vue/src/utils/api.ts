@@ -17,7 +17,7 @@ export const chatApi = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message }),
     });
 
     if (!response.ok) {
@@ -36,7 +36,7 @@ export const chatApi = {
     const url = new URL(`${API_BASE_URL}/chat/stream`, window.location.origin);
     url.searchParams.append('message', message);
     return new EventSource(url.toString());
-  }
+  },
 };
 
 /**
@@ -52,7 +52,7 @@ export const sseUtils = {
   async readStream(
     response: Response,
     onMessage: (data: any) => void,
-    onError?: (error: Error) => void
+    onError?: (error: Error) => void,
   ): Promise<void> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -93,5 +93,5 @@ export const sseUtils = {
         throw error;
       }
     }
-  }
+  },
 };

@@ -14,25 +14,55 @@ export function options(argv) {
   const tauri = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--bundle') {
-      if (bundle !== null || !argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error('--bundle requires exactly one path');
+      if (bundle !== null || !argv[i + 1] || argv[i + 1].startsWith('--'))
+        throw new Error('--bundle requires exactly one path');
       bundle = path.resolve(argv[++i]);
     } else if (argv[i] === '--plan') plan = true;
-    else if (argv[i] === '--') { tauri.push(...argv.slice(i + 1)); break; }
-    else throw new Error(`Unknown wrapper option: ${argv[i]}`);
+    else if (argv[i] === '--') {
+      tauri.push(...argv.slice(i + 1));
+      break;
+    } else throw new Error(`Unknown wrapper option: ${argv[i]}`);
   }
-  if (tauri.some(arg => arg === '--config' || arg.startsWith('--config=') || arg === '-c' || arg.startsWith('-c=') || arg.includes('remote-control-harness'))) {
-    throw new Error('The wrapper owns the resource config and cannot build the development harness');
+  if (
+    tauri.some(
+      (arg) =>
+        arg === '--config' ||
+        arg.startsWith('--config=') ||
+        arg === '-c' ||
+        arg.startsWith('-c=') ||
+        arg.includes('remote-control-harness'),
+    )
+  ) {
+    throw new Error(
+      'The wrapper owns the resource config and cannot build the development harness',
+    );
   }
   return { bundle, plan, tauri };
 }
 function run(command, args, env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: path.join(repository, 'client-vue'), env, stdio: 'inherit' });
-    const onSignal = signal => { child.kill(signal); };
-    process.on('SIGINT', onSignal); process.on('SIGTERM', onSignal);
-    const finish = () => { process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); };
-    child.once('error', error => { finish(); reject(error); });
-    child.once('exit', (code, signal) => { finish(); code === 0 ? resolve() : reject(new Error(`Desktop build ${signal ?? `exited ${code}`}`)); });
+    const child = spawn(command, args, {
+      cwd: path.join(repository, 'client-vue'),
+      env,
+      stdio: 'inherit',
+    });
+    const onSignal = (signal) => {
+      child.kill(signal);
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+    const finish = () => {
+      process.off('SIGINT', onSignal);
+      process.off('SIGTERM', onSignal);
+    };
+    child.once('error', (error) => {
+      finish();
+      reject(error);
+    });
+    child.once('exit', (code, signal) => {
+      finish();
+      code === 0 ? resolve() : reject(new Error(`Desktop build ${signal ?? `exited ${code}`}`));
+    });
   });
 }
 async function main() {
@@ -47,18 +77,41 @@ async function main() {
     const bytes = await readFile(path.join(selected.bundle, 'manifest.json'));
     if (bytes.length > 16 * 1024 * 1024) throw new Error('Engine manifest exceeds the size limit');
     const manifest = JSON.parse(bytes);
-    if (manifest.format !== 'todesk-engine-bundle-v1' || manifest.target !== 'aarch64-apple-darwin' || manifest.entrypoint !== 'bin/remote-control-engine') throw new Error('Unsupported engine manifest');
+    if (
+      manifest.format !== 'todesk-engine-bundle-v1' ||
+      manifest.target !== 'aarch64-apple-darwin' ||
+      manifest.entrypoint !== 'bin/remote-control-engine'
+    )
+      throw new Error('Unsupported engine manifest');
     digest = createHash('sha256').update(bytes).digest('hex');
-    config = { bundle: { resources: { [`${selected.bundle}${path.sep}`]: 'remote-control-engine/' } } };
+    config = {
+      bundle: { resources: { [`${selected.bundle}${path.sep}`]: 'remote-control-engine/' } },
+    };
     env.TODE_REMOTE_ENGINE_BUNDLE = selected.bundle;
   }
   if (selected.plan) {
-    console.log(JSON.stringify({ bundle: selected.bundle, manifestSha256: digest, config, tauriArgs: selected.tauri, capabilitiesEnabled: false }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          bundle: selected.bundle,
+          manifestSha256: digest,
+          config,
+          tauriArgs: selected.tauri,
+          capabilitiesEnabled: false,
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
   const temporary = await mkdtemp(path.join(tmpdir(), 'todesk-engine-build-'));
   try {
-    await run(process.execPath, [path.join(repository, 'scripts/product-version.mjs'), 'check'], env);
+    await run(
+      process.execPath,
+      [path.join(repository, 'scripts/product-version.mjs'), 'check'],
+      env,
+    );
     const args = ['exec', 'tauri', 'build'];
     if (config) {
       const configPath = path.join(temporary, 'engine-resources.json');
@@ -67,8 +120,13 @@ async function main() {
     }
     args.push(...selected.tauri);
     await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args, env);
-  } finally { await rm(temporary, { recursive: true, force: true }); }
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
 }

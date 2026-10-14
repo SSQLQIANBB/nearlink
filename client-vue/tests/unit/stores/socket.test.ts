@@ -10,10 +10,13 @@ vi.mock('socket.io-client', () => ({
   io: (_url: string, options: any) => {
     mock.options = options;
     return {
-      id: 'self-socket', connected: true,
+      id: 'self-socket',
+      connected: true,
       on: (event: string, handler: Function) => mock.handlers.set(event, handler),
       off: (event: string) => mock.handlers.delete(event),
-      connect: vi.fn(), disconnect: vi.fn(), emit: vi.fn(),
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      emit: vi.fn(),
     };
   },
 }));
@@ -38,18 +41,30 @@ describe('在线联系人同步', () => {
       { id: 1, socketId: 'self-socket', username: 'me', status: 'online' },
       { id: 2, socketId: 'other-socket', username: 'alice', status: 'online' },
     ]);
-    expect(store.userList.map(user => user.id)).toEqual([2]);
+    expect(store.userList.map((user) => user.id)).toEqual([2]);
 
-    mock.handlers.get('user_presence')!({ userId: 2, user: {
-      id: 2, socketId: 'other-socket', username: 'alice', status: 'busy',
-    } });
+    mock.handlers.get('user_presence')!({
+      userId: 2,
+      user: {
+        id: 2,
+        socketId: 'other-socket',
+        username: 'alice',
+        status: 'busy',
+      },
+    });
     expect(store.userList[0]?.status).toBe('busy');
 
     mock.handlers.get('user_presence')!({ userId: 2 });
     expect(store.userList).toEqual([]);
-    mock.handlers.get('user_presence')!({ userId: 1, user: {
-      id: 1, socketId: 'self-socket', username: 'me', status: 'online',
-    } });
+    mock.handlers.get('user_presence')!({
+      userId: 1,
+      user: {
+        id: 1,
+        socketId: 'self-socket',
+        username: 'me',
+        status: 'online',
+      },
+    });
     expect(store.userList).toEqual([]);
   });
 });
@@ -61,7 +76,14 @@ describe('群组撤销订阅', () => {
     store.connect('token', { id: 1, username: 'me' });
     mock.handlers.get('authenticated')!();
     store.setSubscribedGroups([7, 8]);
-    groupSessionState.applyStarted({ groupId: 7, type: 'video', channelId: 'group:7:video', ownerUserId: 1, ownerSocketId: 's', startedAt: 'now' });
+    groupSessionState.applyStarted({
+      groupId: 7,
+      type: 'video',
+      channelId: 'group:7:video',
+      ownerUserId: 1,
+      ownerSocketId: 's',
+      startedAt: 'now',
+    });
     mock.handlers.get('group_access_revoked')!({ groupId: 7 });
     expect(groupSessionState.getSession(7, 'video')).toBeNull();
     vi.mocked(store.socket!.emit).mockClear();

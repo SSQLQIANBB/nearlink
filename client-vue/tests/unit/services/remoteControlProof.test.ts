@@ -3,55 +3,177 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { generateKeyPairSync, sign, webcrypto } from 'node:crypto';
-import { verifyRemoteProof, type RemotePeerBinding, type RemoteProofClaims } from '@/services/remoteControlProof';
+import {
+  verifyRemoteProof,
+  type RemotePeerBinding,
+  type RemoteProofClaims,
+} from '@/services/remoteControlProof';
 const keyPair = generateKeyPairSync('ed25519');
-const key = { keyId: 'test:key', publicKey: keyPair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url'), notBefore: 0, notAfter: 100000 };
-const endpoint = { userId: 1, sid: '11111111-1111-4111-8111-111111111111', authVersion: '22222222-2222-4222-8222-222222222222', endpointId: 'device', connectionId: 'connection', generation: 1 };
-const binding: RemotePeerBinding = { sessionId: '33333333-3333-4333-8333-333333333333', host: endpoint, controller: { ...endpoint, userId: 2 }, negotiationId: '44444444-4444-4444-8444-444444444444', hostFingerprint: 'A'.repeat(64), controllerFingerprint: 'B'.repeat(64), consentNonce: Buffer.alloc(32, 1).toString('base64url'), screenId: 'screen' };
-const claims: RemoteProofClaims = { ...binding, protocolVersion: 1, issuer: 'todesk-remote-control', audience: 'todesk-remote-peer', purpose: 'lease', scope: 'control', authorizationRevision: 1, controlEpoch: 1, issuedAt: 1000, expiresAt: 16000, leaseSeq: 1, challenge: Buffer.alloc(32, 2).toString('base64url') };
+const key = {
+  keyId: 'test:key',
+  publicKey: keyPair.publicKey
+    .export({ type: 'spki', format: 'der' })
+    .subarray(-32)
+    .toString('base64url'),
+  notBefore: 0,
+  notAfter: 100000,
+};
+const endpoint = {
+  userId: 1,
+  sid: '11111111-1111-4111-8111-111111111111',
+  authVersion: '22222222-2222-4222-8222-222222222222',
+  endpointId: 'device',
+  connectionId: 'connection',
+  generation: 1,
+};
+const binding: RemotePeerBinding = {
+  sessionId: '33333333-3333-4333-8333-333333333333',
+  host: endpoint,
+  controller: { ...endpoint, userId: 2 },
+  negotiationId: '44444444-4444-4444-8444-444444444444',
+  hostFingerprint: 'A'.repeat(64),
+  controllerFingerprint: 'B'.repeat(64),
+  consentNonce: Buffer.alloc(32, 1).toString('base64url'),
+  screenId: 'screen',
+};
+const claims: RemoteProofClaims = {
+  ...binding,
+  protocolVersion: 1,
+  issuer: 'todesk-remote-control',
+  audience: 'todesk-remote-peer',
+  purpose: 'lease',
+  scope: 'control',
+  authorizationRevision: 1,
+  controlEpoch: 1,
+  issuedAt: 1000,
+  expiresAt: 16000,
+  leaseSeq: 1,
+  challenge: Buffer.alloc(32, 2).toString('base64url'),
+};
 function envelope(values: object = claims) {
   const payload = Buffer.from(JSON.stringify(values)).toString('base64url');
-  return { format: 'rc-signed-v1' as const, keyId: key.keyId, payload, signature: sign(null, Buffer.from(`todesk-remote-control/v1\n${key.keyId}\n${payload}`), keyPair.privateKey).toString('base64url') };
+  return {
+    format: 'rc-signed-v1' as const,
+    keyId: key.keyId,
+    payload,
+    signature: sign(
+      null,
+      Buffer.from(`todesk-remote-control/v1\n${key.keyId}\n${payload}`),
+      keyPair.privateKey,
+    ).toString('base64url'),
+  };
 }
 beforeEach(() => vi.stubGlobal('crypto', webcrypto));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('主控验签与DTLS绑定', () => {
   it('使用真实Ed25519验签；迟到租约按签名过期时间缩短本地截止', async () => {
-    const proof = await verifyRemoteProof(envelope(), [key], binding, 'lease', { wall: 15000, monotonic: 500 });
+    const proof = await verifyRemoteProof(envelope(), [key], binding, 'lease', {
+      wall: 15000,
+      monotonic: 500,
+    });
     expect(proof.deadline).toBe(1500);
   });
   it('payload篡改、未知keyId和不同用途全部拒绝', async () => {
     const signed = envelope();
-    await expect(verifyRemoteProof({ ...signed, payload: envelope({ ...claims, scope: 'view' }).payload }, [key], binding, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_SIGNATURE');
-    await expect(verifyRemoteProof({ ...signed, keyId: 'unknown' }, [key], binding, 'lease')).rejects.toThrow('REMOTE_PROOF_KEY');
-    await expect(verifyRemoteProof(signed, [key], binding, 'connection', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_PURPOSE');
+    await expect(
+      verifyRemoteProof(
+        { ...signed, payload: envelope({ ...claims, scope: 'view' }).payload },
+        [key],
+        binding,
+        'lease',
+        { wall: 1000, monotonic: 0 },
+      ),
+    ).rejects.toThrow('REMOTE_PROOF_SIGNATURE');
+    await expect(
+      verifyRemoteProof({ ...signed, keyId: 'unknown' }, [key], binding, 'lease'),
+    ).rejects.toThrow('REMOTE_PROOF_KEY');
+    await expect(
+      verifyRemoteProof(signed, [key], binding, 'connection', { wall: 1000, monotonic: 0 }),
+    ).rejects.toThrow('REMOTE_PROOF_PURPOSE');
   });
   it('绑定另一DTLS端点、会话或连接代次的有效签名仍然拒绝', async () => {
-    for (const changed of [{ ...binding, hostFingerprint: 'C'.repeat(64) }, { ...binding, sessionId: 'other' }, { ...binding, host: { ...endpoint, generation: 2 } }]) {
-      await expect(verifyRemoteProof(envelope(), [key], changed, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_BINDING');
+    for (const changed of [
+      { ...binding, hostFingerprint: 'C'.repeat(64) },
+      { ...binding, sessionId: 'other' },
+      { ...binding, host: { ...endpoint, generation: 2 } },
+    ]) {
+      await expect(
+        verifyRemoteProof(envelope(), [key], changed, 'lease', { wall: 1000, monotonic: 0 }),
+      ).rejects.toThrow('REMOTE_PROOF_BINDING');
     }
   });
   it('拒绝超过15秒的租约、过期凭据和无challenge租约', async () => {
-    await expect(verifyRemoteProof(envelope({ ...claims, expiresAt: 16001 }), [key], binding, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_EXPIRED');
-    await expect(verifyRemoteProof(envelope(), [key], binding, 'lease', { wall: 16000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_EXPIRED');
-    await expect(verifyRemoteProof(envelope({ ...claims, challenge: undefined }), [key], binding, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_CHALLENGE');
+    await expect(
+      verifyRemoteProof(envelope({ ...claims, expiresAt: 16001 }), [key], binding, 'lease', {
+        wall: 1000,
+        monotonic: 0,
+      }),
+    ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
+    await expect(
+      verifyRemoteProof(envelope(), [key], binding, 'lease', { wall: 16000, monotonic: 0 }),
+    ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
+    await expect(
+      verifyRemoteProof(envelope({ ...claims, challenge: undefined }), [key], binding, 'lease', {
+        wall: 1000,
+        monotonic: 0,
+      }),
+    ).rejects.toThrow('REMOTE_PROOF_CHALLENGE');
   });
   it('拒绝合法签名下的未知字段、未来时间、key有效期外及连接租约混用', async () => {
     for (const invalid of [
-      { ...claims, extra: true }, { ...claims, host: { ...claims.host, extra: true } },
-      { ...claims, issuedAt: 1001 }, { ...claims, authorizationRevision: 0 },
+      { ...claims, extra: true },
+      { ...claims, host: { ...claims.host, extra: true } },
+      { ...claims, issuedAt: 1001 },
+      { ...claims, authorizationRevision: 0 },
       { ...claims, purpose: 'connection' },
-    ]) await expect(verifyRemoteProof(envelope(invalid), [key], binding, invalid.purpose as 'connection' | 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow();
-    await expect(verifyRemoteProof(envelope(), [{ ...key, notBefore: 1001 }], binding, 'lease', { wall: 2000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_EXPIRED');
-    await expect(verifyRemoteProof(envelope(), [{ ...key, notAfter: 15000 }], binding, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_EXPIRED');
-    await expect(verifyRemoteProof({ ...envelope(), url: 'https://untrusted.invalid' }, [key], binding, 'lease', { wall: 1000, monotonic: 0 })).rejects.toThrow('REMOTE_PROOF_FORMAT');
+    ])
+      await expect(
+        verifyRemoteProof(
+          envelope(invalid),
+          [key],
+          binding,
+          invalid.purpose as 'connection' | 'lease',
+          { wall: 1000, monotonic: 0 },
+        ),
+      ).rejects.toThrow();
+    await expect(
+      verifyRemoteProof(envelope(), [{ ...key, notBefore: 1001 }], binding, 'lease', {
+        wall: 2000,
+        monotonic: 0,
+      }),
+    ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
+    await expect(
+      verifyRemoteProof(envelope(), [{ ...key, notAfter: 15000 }], binding, 'lease', {
+        wall: 1000,
+        monotonic: 0,
+      }),
+    ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
+    await expect(
+      verifyRemoteProof(
+        { ...envelope(), url: 'https://untrusted.invalid' },
+        [key],
+        binding,
+        'lease',
+        { wall: 1000, monotonic: 0 },
+      ),
+    ).rejects.toThrow('REMOTE_PROOF_FORMAT');
   });
   it('可验证后端生成的共享Ed25519互通样例', async () => {
-    const fixture = JSON.parse(readFileSync(resolve(process.cwd(), '../fixtures/remote-control-credentials-v1.json'), 'utf8'));
-    const proof = await verifyRemoteProof(fixture.connection, [fixture.key], fixture.claims, 'connection', { wall: fixture.now, monotonic: 50 });
+    const fixture = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '../fixtures/remote-control-credentials-v1.json'),
+        'utf8',
+      ),
+    );
+    const proof = await verifyRemoteProof(
+      fixture.connection,
+      [fixture.key],
+      fixture.claims,
+      'connection',
+      { wall: fixture.now, monotonic: 50 },
+    );
     expect(proof.deadline).toBe(30050);
     expect(proof.claims).toEqual(fixture.claims);
   });
-
 });

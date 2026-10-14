@@ -1,12 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-const mocks = vi.hoisted(() => ({ logout: vi.fn(), stop: vi.fn(), clear: vi.fn(), login: vi.fn() }));
-vi.mock('@/api/auth', () => ({ logout: mocks.logout, login: mocks.login, loginWithEmailCode: vi.fn(), getCurrentUser: vi.fn() }));
-vi.mock('@/services/remoteControlSafety', () => ({ stopRemoteControlLocally: mocks.stop, clearRemoteControlLocally: mocks.clear }));
+const mocks = vi.hoisted(() => ({
+  logout: vi.fn(),
+  stop: vi.fn(),
+  clear: vi.fn(),
+  login: vi.fn(),
+}));
+vi.mock('@/api/auth', () => ({
+  logout: mocks.logout,
+  login: mocks.login,
+  loginWithEmailCode: vi.fn(),
+  getCurrentUser: vi.fn(),
+}));
+vi.mock('@/services/remoteControlSafety', () => ({
+  stopRemoteControlLocally: mocks.stop,
+  clearRemoteControlLocally: mocks.clear,
+}));
 import { useAuthStore } from '@/stores/auth';
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(done => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 beforeEach(() => {
@@ -66,7 +81,11 @@ describe('远控退出与身份隔离', () => {
     const auth = useAuthStore();
     const pending = auth.login({ username: 'old', password: 'test' });
     await auth.logout({ callApi: false });
-    response.resolve({ accessToken: 'stale', refreshToken: 'stale', user: { id: 1, username: 'old' } });
+    response.resolve({
+      accessToken: 'stale',
+      refreshToken: 'stale',
+      user: { id: 1, username: 'old' },
+    });
     await expect(pending).rejects.toThrow('Authentication changed during login');
     expect(auth.token).toBeNull();
   });

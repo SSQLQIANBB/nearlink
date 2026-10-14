@@ -33,25 +33,24 @@ redis.on('reconnecting', () => {
 
 // Redis缓存键前缀
 export const REDIS_KEYS = {
-  USER_INFO: 'user:info:',           // 用户信息 user:info:{userId}
-  USER_STATUS: 'user:status:',       // 用户在线状态 user:status:{userId}
-  USER_SOCKET: 'user:socket:',       // 用户Socket映射 user:socket:{userId}
-  GROUP_INFO: 'group:info:',         // 群组信息 group:info:{groupId}
-  GROUP_MEMBERS: 'group:members:',   // 群组成员列表 group:members:{groupId}
-  ONLINE_USERS: 'online:users',      // 在线用户集合
-  SESSION: 'session:',               // 会话信息 session:{token}
-  REFRESH_TOKEN: 'refresh:token:',   // refresh token refresh:token:{userId}
+  USER_INFO: 'user:info:', // 用户信息 user:info:{userId}
+  USER_STATUS: 'user:status:', // 用户在线状态 user:status:{userId}
+  USER_SOCKET: 'user:socket:', // 用户Socket映射 user:socket:{userId}
+  GROUP_INFO: 'group:info:', // 群组信息 group:info:{groupId}
+  GROUP_MEMBERS: 'group:members:', // 群组成员列表 group:members:{groupId}
+  ONLINE_USERS: 'online:users', // 在线用户集合
+  SESSION: 'session:', // 会话信息 session:{token}
+  REFRESH_TOKEN: 'refresh:token:', // refresh token refresh:token:{userId}
 };
 
 // Redis缓存过期时间（秒）
 export const REDIS_TTL = {
-  USER_INFO: 3600,           // 用户信息 1小时
-  USER_STATUS: 1800,         // 用户状态 30分钟
-  GROUP_INFO: 3600,          // 群组信息 1小时
-  GROUP_MEMBERS: 1800,       // 群组成员 30分钟
-  SESSION: 86400,            // 会话 24小时
-  REFRESH_TOKEN: 86400,      // refresh token 24小时
+  USER_INFO: 3600, // 用户信息 1小时
+  USER_STATUS: 1800, // 用户状态 30分钟
+  GROUP_INFO: 3600, // 群组信息 1小时
+  GROUP_MEMBERS: 1800, // 群组成员 30分钟
+  SESSION: 86400, // 会话 24小时
+  REFRESH_TOKEN: 86400, // refresh token 24小时
 };
 
 export default redis;
-

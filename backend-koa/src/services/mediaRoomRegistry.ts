@@ -34,8 +34,9 @@ export class MediaRoomRegistry {
   }
 
   getUserIds(channelId: string) {
-    return [...new Set(this.rooms.get(channelId)?.values() ?? [])]
-      .sort((left, right) => left - right);
+    return [...new Set(this.rooms.get(channelId)?.values() ?? [])].sort(
+      (left, right) => left - right,
+    );
   }
 
   clear(channelId: string) {

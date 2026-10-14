@@ -76,7 +76,11 @@ export class GroupSessionService {
     const key = this.getKey(groupId, type);
     const session = await this.store.get(key);
     if (!session || session.ownerUserId !== userId) return false;
-    if (expected && (session.startedAt !== expected.startedAt || session.ownerSocketId !== expected.ownerSocketId)) return false;
+    if (
+      expected &&
+      (session.startedAt !== expected.startedAt || session.ownerSocketId !== expected.ownerSocketId)
+    )
+      return false;
     return this.store.delete(key, session);
   }
 }

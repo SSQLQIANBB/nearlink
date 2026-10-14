@@ -16,15 +16,23 @@ export interface JwtPayload {
   jti?: string;
 }
 
-export interface TokenPair { accessToken: string; refreshToken: string }
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
 
 function sign(payload: JwtPayload, type: 'access' | 'refresh'): string {
   // Never carry an old token's timestamps or ID into a rotation.
   const { userId, username, sid, authVersion } = payload;
-  return jwt.sign({ userId, username, sid, authVersion, type },
+  return jwt.sign(
+    { userId, username, sid, authVersion, type },
     type === 'access' ? env.auth.jwtSecret : env.auth.refreshTokenSecret,
-    { algorithm: 'HS256', expiresIn: type === 'access' ? ACCESS_TOKEN_LIFETIME_SECONDS : REFRESH_TOKEN_LIFETIME_SECONDS,
-      jwtid: randomUUID() });
+    {
+      algorithm: 'HS256',
+      expiresIn: type === 'access' ? ACCESS_TOKEN_LIFETIME_SECONDS : REFRESH_TOKEN_LIFETIME_SECONDS,
+      jwtid: randomUUID(),
+    },
+  );
 }
 
 export const generateAccessToken = (payload: JwtPayload) => sign(payload, 'access');
@@ -35,10 +43,21 @@ export function generateTokenPair(payload: JwtPayload): TokenPair {
 
 function verify(token: string, type: 'access' | 'refresh', ignoreExpiration = false): JwtPayload {
   try {
-    const value = jwt.verify(token, type === 'access' ? env.auth.jwtSecret : env.auth.refreshTokenSecret,
-      { algorithms: ['HS256'], ignoreExpiration });
-    if (typeof value === 'string' || value.type !== type || !Number.isSafeInteger(value.userId) || value.userId <= 0
-      || typeof value.username !== 'string' || !value.username || !Number.isSafeInteger(value.exp)) throw new Error();
+    const value = jwt.verify(
+      token,
+      type === 'access' ? env.auth.jwtSecret : env.auth.refreshTokenSecret,
+      { algorithms: ['HS256'], ignoreExpiration },
+    );
+    if (
+      typeof value === 'string' ||
+      value.type !== type ||
+      !Number.isSafeInteger(value.userId) ||
+      value.userId <= 0 ||
+      typeof value.username !== 'string' ||
+      !value.username ||
+      !Number.isSafeInteger(value.exp)
+    )
+      throw new Error();
     return value as JwtPayload;
   } catch {
     throw new Error(`无效的${type} token`);

@@ -5,9 +5,9 @@ import { publicEnv } from '@/config/env';
 // 定义连接状态枚举
 export enum SocketStatus {
   Disconnected = 'disconnected', // 未连接
-  Connecting = 'connecting',     // 连接中
-  Connected = 'connected',       // 已连接
-  Error = 'error'                // 错误
+  Connecting = 'connecting', // 连接中
+  Connected = 'connected', // 已连接
+  Error = 'error', // 错误
 }
 
 export default function useSocket(
@@ -16,7 +16,7 @@ export default function useSocket(
     url?: string;
     managerOptions?: Partial<ManagerOptions>;
     socketOptions?: Partial<SocketOptions>;
-  } = {}
+  } = {},
 ) {
   // 响应式状态（使用枚举类型约束）
   const socket: Ref<Socket | null> = ref(null);
@@ -30,18 +30,19 @@ export default function useSocket(
       url?: string;
       managerOptions?: Partial<ManagerOptions>;
       socketOptions?: Partial<SocketOptions>;
-    } = {}
+    } = {},
   ) {
     // 避免重复连接（使用枚举成员判断）
     if (status.value === SocketStatus.Connecting || status.value === SocketStatus.Connected) return;
 
     // 合并配置（自定义配置优先级更高）
-    const url = customOptions.url || defaultOptions.url || publicEnv.socketUrl || window.location.origin;
+    const url =
+      customOptions.url || defaultOptions.url || publicEnv.socketUrl || window.location.origin;
     const managerOptions = { ...defaultOptions.managerOptions, ...customOptions.managerOptions };
-    const socketOptions = { 
+    const socketOptions = {
       path: '/connect', // 默认路径（可被覆盖）
-      ...defaultOptions.socketOptions, 
-      ...customOptions.socketOptions 
+      ...defaultOptions.socketOptions,
+      ...customOptions.socketOptions,
     };
 
     // 更新状态为连接中（使用枚举成员）
@@ -55,7 +56,7 @@ export default function useSocket(
     socket.value.on('connect', () => {
       status.value = SocketStatus.Connected; // 更新为已连接
 
-      send('ready')
+      send('ready');
       console.log('Socket connected successfully');
     });
 
@@ -119,6 +120,6 @@ export default function useSocket(
     connect,
     disconnect,
     send,
-    SocketStatus // 导出枚举，方便组件中直接使用（如判断状态）
+    SocketStatus, // 导出枚举，方便组件中直接使用（如判断状态）
   };
 }

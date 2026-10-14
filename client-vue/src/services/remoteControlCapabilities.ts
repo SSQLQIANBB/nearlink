@@ -26,7 +26,13 @@ export interface ControllerFeatures {
   canVerifySignatures: boolean;
   supportedDesktopBrowser: boolean;
 }
-export type RemoteCapabilityReason = 'RELEASE_UNAVAILABLE' | 'NOT_RELEASED' | 'PLATFORM_UNSUPPORTED' | 'PROTOCOL_MISMATCH' | 'CONTROLLER_UNSUPPORTED' | 'READY';
+export type RemoteCapabilityReason =
+  | 'RELEASE_UNAVAILABLE'
+  | 'NOT_RELEASED'
+  | 'PLATFORM_UNSUPPORTED'
+  | 'PROTOCOL_MISMATCH'
+  | 'CONTROLLER_UNSUPPORTED'
+  | 'READY';
 export interface RemoteCapabilities {
   runtime: 'web' | 'tauri';
   native: NativeRemoteCapabilities | null;
@@ -53,25 +59,56 @@ export function deriveRemoteCapabilities(
   native: NativeRemoteCapabilities | null,
   features: ControllerFeatures,
 ): RemoteCapabilities {
-  const result: RemoteCapabilities = { runtime, native, showControllerEntry: false, showHostEntry: false, canControl: false, canHostView: false, canHostControl: false, reason: 'RELEASE_UNAVAILABLE' };
+  const result: RemoteCapabilities = {
+    runtime,
+    native,
+    showControllerEntry: false,
+    showHostEntry: false,
+    canControl: false,
+    canHostView: false,
+    canHostControl: false,
+    reason: 'RELEASE_UNAVAILABLE',
+  };
   if (!release || !Array.isArray(release.releasedPlatforms)) return result;
-  if (release.protocolVersion !== 1 || (runtime === 'tauri' && native && native.protocolVersion !== 1)) return { ...result, reason: 'PROTOCOL_MISMATCH' };
-  const desktopPlatformReleased = !!native && release.releasedPlatforms.includes(native.platform as RemotePlatform);
-  const controllerReleased = runtime === 'tauri'
-    ? release.desktopControllerEnabled === true && desktopPlatformReleased
-    : release.webControllerReleaseEnabled === true && features.supportedDesktopBrowser;
-  const hostReleased = runtime === 'tauri' && desktopPlatformReleased && release.desktopHostEnabled === true;
-  const controllerSupported = features.secureContext && features.canDecodeVideo && features.canUseDataChannel && features.canSendInput && features.canVerifySignatures;
+  if (
+    release.protocolVersion !== 1 ||
+    (runtime === 'tauri' && native && native.protocolVersion !== 1)
+  )
+    return { ...result, reason: 'PROTOCOL_MISMATCH' };
+  const desktopPlatformReleased =
+    !!native && release.releasedPlatforms.includes(native.platform as RemotePlatform);
+  const controllerReleased =
+    runtime === 'tauri'
+      ? release.desktopControllerEnabled === true && desktopPlatformReleased
+      : release.webControllerReleaseEnabled === true && features.supportedDesktopBrowser;
+  const hostReleased =
+    runtime === 'tauri' && desktopPlatformReleased && release.desktopHostEnabled === true;
+  const controllerSupported =
+    features.secureContext &&
+    features.canDecodeVideo &&
+    features.canUseDataChannel &&
+    features.canSendInput &&
+    features.canVerifySignatures;
   result.showControllerEntry = controllerReleased;
   result.canControl = controllerReleased && controllerSupported;
-  result.canHostView = hostReleased && native?.engineReady === true && native.canCapture === true && native.permissions?.screenCapture === 'granted';
-  result.canHostControl = result.canHostView && native?.canInjectInput === true && native.permissions?.inputControl === 'granted';
+  result.canHostView =
+    hostReleased &&
+    native?.engineReady === true &&
+    native.canCapture === true &&
+    native.permissions?.screenCapture === 'granted';
+  result.canHostControl =
+    result.canHostView &&
+    native?.canInjectInput === true &&
+    native.permissions?.inputControl === 'granted';
   // Keep the permission/setup entry discoverable once a real host engine is released.
   result.showHostEntry = hostReleased && native?.engineReady === true;
-  result.reason = result.canControl ? 'READY'
-    : controllerReleased ? 'CONTROLLER_UNSUPPORTED'
-    : runtime === 'tauri' && release.desktopControllerEnabled === true && !desktopPlatformReleased ? 'PLATFORM_UNSUPPORTED'
-    : 'NOT_RELEASED';
+  result.reason = result.canControl
+    ? 'READY'
+    : controllerReleased
+      ? 'CONTROLLER_UNSUPPORTED'
+      : runtime === 'tauri' && release.desktopControllerEnabled === true && !desktopPlatformReleased
+        ? 'PLATFORM_UNSUPPORTED'
+        : 'NOT_RELEASED';
   return result;
 }
 
@@ -82,13 +119,21 @@ export function detectControllerFeatures(): ControllerFeatures {
       const peer = new RTCPeerConnection({ iceServers: [] });
       try {
         const channel = peer.createDataChannel('rc-capability-check', { ordered: true });
-        canUseDataChannel = channel.ordered && channel.maxRetransmits === null && channel.maxPacketLifeTime === null;
+        canUseDataChannel =
+          channel.ordered && channel.maxRetransmits === null && channel.maxPacketLifeTime === null;
         channel.close();
-      } finally { peer.close(); }
+      } finally {
+        peer.close();
+      }
     }
-  } catch { /* Unknown capabilities remain disabled. */ }
+  } catch {
+    /* Unknown capabilities remain disabled. */
+  }
   const video = document.createElement('video');
-  const canDecodeVideo = !!(video.canPlayType('video/webm; codecs="vp8"') || video.canPlayType('video/mp4; codecs="avc1.42E01E"'));
+  const canDecodeVideo = !!(
+    video.canPlayType('video/webm; codecs="vp8"') ||
+    video.canPlayType('video/mp4; codecs="avc1.42E01E"')
+  );
   return {
     secureContext: window.isSecureContext === true,
     canDecodeVideo,
@@ -96,21 +141,36 @@ export function detectControllerFeatures(): ControllerFeatures {
     canSendInput: typeof PointerEvent !== 'undefined' && typeof KeyboardEvent !== 'undefined',
     canVerifySignatures: false,
     // This only narrows the release audience. Real WebRTC capability is probed above.
-    supportedDesktopBrowser: /(?:Chrome|Edg)\/\d+/.test(navigator.userAgent) && !/Mobile|Android|iPhone|iPad/.test(navigator.userAgent),
+    supportedDesktopBrowser:
+      /(?:Chrome|Edg)\/\d+/.test(navigator.userAgent) &&
+      !/Mobile|Android|iPhone|iPad/.test(navigator.userAgent),
   };
 }
 
-export async function probeRemoteCapabilities(release: RemoteControlRelease | null): Promise<RemoteCapabilities> {
+export async function probeRemoteCapabilities(
+  release: RemoteControlRelease | null,
+): Promise<RemoteCapabilities> {
   const runtime = isTauri() ? 'tauri' : 'web';
   let native: NativeRemoteCapabilities | null = null;
   if (runtime === 'tauri') {
-    try { native = await invoke<NativeRemoteCapabilities>('remote_control_capabilities'); } catch { /* A desktop shell without the native command cannot be considered supported. */ }
+    try {
+      native = await invoke<NativeRemoteCapabilities>('remote_control_capabilities');
+    } catch {
+      /* A desktop shell without the native command cannot be considered supported. */
+    }
   }
   const features = detectControllerFeatures();
   try {
-    const publicKey = Uint8Array.from(atob('11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo='), char => char.charCodeAt(0));
+    const publicKey = Uint8Array.from(
+      atob('11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo='),
+      (char) => char.charCodeAt(0),
+    );
     await crypto.subtle.importKey('raw', publicKey, { name: 'Ed25519' }, false, ['verify']);
-    features.canVerifySignatures = typeof RTCDtlsTransport !== 'undefined' && typeof RTCDtlsTransport.prototype.getRemoteCertificates === 'function';
-  } catch { /* Unsupported signature/certificate APIs must not enable the controller. */ }
+    features.canVerifySignatures =
+      typeof RTCDtlsTransport !== 'undefined' &&
+      typeof RTCDtlsTransport.prototype.getRemoteCertificates === 'function';
+  } catch {
+    /* Unsupported signature/certificate APIs must not enable the controller. */
+  }
   return deriveRemoteCapabilities(runtime, release, native, features);
 }

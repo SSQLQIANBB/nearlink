@@ -29,10 +29,7 @@ describe('MediaRoomRegistry', () => {
     registry.join('group:7:screen', 'socket-a', 1);
     registry.join('group:8:video', 'socket-b', 2);
 
-    expect(registry.leaveSocket('socket-a')).toEqual([
-      'group:7:screen',
-      'group:7:video',
-    ]);
+    expect(registry.leaveSocket('socket-a')).toEqual(['group:7:screen', 'group:7:video']);
     expect(registry.getUserIds('group:8:video')).toEqual([2]);
   });
 });

@@ -12,7 +12,10 @@ export async function invalidateUserTokens(userId: number): Promise<void> {
   await revokeAllLoginSessions(userId);
 }
 
-export async function isTokenVersionCurrent(userId: number, version?: string | null): Promise<boolean> {
+export async function isTokenVersionCurrent(
+  userId: number,
+  version?: string | null,
+): Promise<boolean> {
   if (!version) return false;
-  return version === await getTokenVersion(userId);
+  return version === (await getTokenVersion(userId));
 }

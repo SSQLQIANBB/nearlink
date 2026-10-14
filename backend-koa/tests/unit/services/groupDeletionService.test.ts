@@ -10,7 +10,7 @@ function createDependencies(role: 'owner' | 'admin' | 'member' | null = 'owner')
   const dependencies: GroupDeletionDependencies = {
     findMembership: vi.fn().mockResolvedValue(role ? { role } : null),
     findGroup: vi.fn().mockResolvedValue({ id: 7 }),
-    transaction: vi.fn(async callback => callback(transaction)),
+    transaction: vi.fn(async (callback) => callback(transaction)),
     deleteMessages: vi.fn(async (_groupId, receivedTransaction) => {
       expect(receivedTransaction).toBe(transaction);
       calls.push('messages');
@@ -32,7 +32,7 @@ function createDependencies(role: 'owner' | 'admin' | 'member' | null = 'owner')
 }
 
 describe('GroupDeletionService', () => {
-  it.each(['admin', 'member'] as const)('%s 不能删除群组', async role => {
+  it.each(['admin', 'member'] as const)('%s 不能删除群组', async (role) => {
     const { dependencies } = createDependencies(role);
     const service = new GroupDeletionService(dependencies);
 

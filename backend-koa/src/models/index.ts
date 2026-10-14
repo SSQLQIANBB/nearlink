@@ -63,8 +63,23 @@ File.belongsTo(Group, { foreignKey: 'groupId', as: 'group' });
 User.hasMany(File, { foreignKey: 'userId', as: 'files' });
 Group.hasMany(File, { foreignKey: 'groupId', as: 'files' });
 
-export { User, UserEmail, MessageReceipt, Group, GroupMember, Message, GroupMessage, GroupInvitation, RefreshToken, File };
-
+export {
+  User,
+  UserEmail,
+  MessageReceipt,
+  Group,
+  GroupMember,
+  Message,
+  GroupMessage,
+  GroupInvitation,
+  RefreshToken,
+  File,
+};
 
 export { LoginSession };
-export { RemoteDevice, AssistanceGrant, RemoteSessionRecord, RemoteSessionEvent } from './RemoteControl';
+export {
+  RemoteDevice,
+  AssistanceGrant,
+  RemoteSessionRecord,
+  RemoteSessionEvent,
+} from './RemoteControl';

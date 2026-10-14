@@ -9,9 +9,13 @@ function setup(minScale = 1) {
   element.hasPointerCapture = () => false;
   const enabled = ref(true);
   const gestures = useImageGestures(ref(element), {
-    minScale, maxScale: 3, enabled: () => enabled.value, constrain: value => value,
+    minScale,
+    maxScale: 3,
+    enabled: () => enabled.value,
+    constrain: (value) => value,
   });
-  const event = (pointerId: number, x: number, y = 150) => ({ pointerId, clientX: x, clientY: y, button: 0 }) as PointerEvent;
+  const event = (pointerId: number, x: number, y = 150) =>
+    ({ pointerId, clientX: x, clientY: y, button: 0 }) as PointerEvent;
   return { ...gestures, enabled, event };
 }
 
@@ -68,7 +72,12 @@ describe('图片手势', () => {
 
   it('滚轮围绕光标缩放，上传期间禁用手势', () => {
     const { handlers, transform, enabled, event } = setup();
-    handlers.wheel({ ...event(1, 200), deltaY: -Math.log(2) / .002, deltaMode: 0, preventDefault: vi.fn() } as unknown as WheelEvent);
+    handlers.wheel({
+      ...event(1, 200),
+      deltaY: -Math.log(2) / 0.002,
+      deltaMode: 0,
+      preventDefault: vi.fn(),
+    } as unknown as WheelEvent);
     expect(transform.value).toEqual({ scale: 2, x: -50, y: 0 });
     handlers.pointerdown(event(1, 100));
     enabled.value = false;

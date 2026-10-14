@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RemoteTextCommitQueue } from '@/services/remoteTextCommit';
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0); });
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+});
 afterEach(() => vi.useRealTimers());
 describe('中文提交等待新输入票据', () => {
   it('input-armed先到不发送，当前代次票据到达后仅发送一次', async () => {

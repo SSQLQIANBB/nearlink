@@ -8,7 +8,10 @@ const startedAt = '2026-07-05T10:00:00.000Z';
 const action: AnnotationAction = {
   actionId: 'action-1',
   tool: 'pen',
-  points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }],
+  points: [
+    { x: 0.1, y: 0.2 },
+    { x: 0.3, y: 0.4 },
+  ],
   color: '#FF0000',
   lineWidth: 0.005,
   userId: 1,

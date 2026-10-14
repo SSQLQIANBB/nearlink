@@ -11,17 +11,29 @@
     >
       <template #icon>
         <n-icon size="24">
-          <i class="iconfont icon-record" aria-hidden="true"></i>
+          <i
+            class="iconfont icon-record"
+            aria-hidden="true"
+          ></i>
         </n-icon>
       </template>
     </n-button>
 
-    <n-space v-else align="center">
+    <n-space
+      v-else
+      align="center"
+    >
       <!-- 录制时间 -->
-      <n-tag type="error" size="large">
+      <n-tag
+        type="error"
+        size="large"
+      >
         <template #icon>
           <n-icon>
-            <i class="iconfont icon-record" aria-hidden="true"></i>
+            <i
+              class="iconfont icon-record"
+              aria-hidden="true"
+            ></i>
           </n-icon>
         </template>
         {{ formatTime(recordingTime) }}
@@ -34,11 +46,23 @@
         circle
       >
         <template #icon>
-          <n-icon v-if="isPaused" size="20">
-            <i class="iconfont icon-play" aria-hidden="true"></i>
+          <n-icon
+            v-if="isPaused"
+            size="20"
+          >
+            <i
+              class="iconfont icon-play"
+              aria-hidden="true"
+            ></i>
           </n-icon>
-          <n-icon v-else size="20">
-            <i class="iconfont icon-pause" aria-hidden="true"></i>
+          <n-icon
+            v-else
+            size="20"
+          >
+            <i
+              class="iconfont icon-pause"
+              aria-hidden="true"
+            ></i>
           </n-icon>
         </template>
       </n-button>
@@ -51,7 +75,10 @@
       >
         <template #icon>
           <n-icon size="20">
-            <i class="iconfont icon-stop" aria-hidden="true"></i>
+            <i
+              class="iconfont icon-stop"
+              aria-hidden="true"
+            ></i>
           </n-icon>
         </template>
       </n-button>
@@ -94,11 +121,23 @@
 
       <template #footer>
         <n-space justify="end">
-          <n-button :disabled="saving" @click="discardRecording">丢弃</n-button>
-          <n-button type="primary" :loading="saving" @click="downloadRecording">
+          <n-button
+            :disabled="saving"
+            @click="discardRecording"
+          >
+            丢弃
+          </n-button>
+          <n-button
+            type="primary"
+            :loading="saving"
+            @click="downloadRecording"
+          >
             <template #icon>
               <n-icon>
-                <i class="iconfont icon-download" aria-hidden="true"></i>
+                <i
+                  class="iconfont icon-download"
+                  aria-hidden="true"
+                ></i>
               </n-icon>
             </template>
             下载
@@ -148,7 +187,9 @@ let timerInterval: number | null = null;
 
 // 是否可以录制
 const recordingMimeType = computed(() => selectVideoMimeType(props.mimeType));
-const recordingExtension = computed(() => getVideoFileExtension(recordedBlob.value?.type || recordingMimeType.value));
+const recordingExtension = computed(() =>
+  getVideoFileExtension(recordedBlob.value?.type || recordingMimeType.value),
+);
 const canRecord = computed(() => {
   return props.stream && !!recordingMimeType.value;
 });
@@ -241,11 +282,13 @@ function togglePause() {
 // 处理录制停止
 function handleRecordingStop() {
   // 创建 Blob
-  recordedBlob.value = new Blob(recordedChunks.value, { type: mediaRecorder?.mimeType || recordingMimeType.value });
-  
+  recordedBlob.value = new Blob(recordedChunks.value, {
+    type: mediaRecorder?.mimeType || recordingMimeType.value,
+  });
+
   // 创建预览 URL
   recordedUrl.value = URL.createObjectURL(recordedBlob.value);
-  
+
   // 显示保存对话框
   showSaveDialog.value = true;
 
@@ -258,7 +301,8 @@ async function downloadRecording() {
   if (!recordedBlob.value || saving.value) return;
   saving.value = true;
   try {
-    if (!await saveFile(recordedBlob.value, `${fileName.value}.${recordingExtension.value}`)) return;
+    if (!(await saveFile(recordedBlob.value, `${fileName.value}.${recordingExtension.value}`)))
+      return;
     message.success('保存成功');
     showSaveDialog.value = false;
     resetRecording();
@@ -359,4 +403,3 @@ defineExpose({
   background: #000;
 }
 </style>
-

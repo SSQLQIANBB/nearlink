@@ -79,18 +79,13 @@ export async function initDatabase() {
     });
 
     console.log(
-      database.syncAlter
-        ? '✓ 数据库表同步完成，已启用 alter'
-        : '✓ 数据库表同步完成，未启用 alter',
+      database.syncAlter ? '✓ 数据库表同步完成，已启用 alter' : '✓ 数据库表同步完成，未启用 alter',
     );
 
     // 5. 显示已创建的表
     const [tables]: any = await sequelize.query('SHOW TABLES');
 
-    console.log(
-      '✓ 当前数据库表:',
-      tables.map((item: any) => Object.values(item)[0]).join(', '),
-    );
+    console.log('✓ 当前数据库表:', tables.map((item: any) => Object.values(item)[0]).join(', '));
   } catch (error: any) {
     console.error('✗ 数据库初始化失败:', error.message);
 

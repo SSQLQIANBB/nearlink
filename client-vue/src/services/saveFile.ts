@@ -5,7 +5,10 @@ export async function saveFile(blob: Blob, filename: string): Promise<boolean> {
   if (isTauri()) {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const mp4 = blob.type.includes('mp4');
-    const path = await save({ defaultPath: filename, filters: [{ name: mp4 ? 'MP4 视频' : 'WebM 视频', extensions: [mp4 ? 'mp4' : 'webm'] }] });
+    const path = await save({
+      defaultPath: filename,
+      filters: [{ name: mp4 ? 'MP4 视频' : 'WebM 视频', extensions: [mp4 ? 'mp4' : 'webm'] }],
+    });
     if (!path) return false;
     const { writeFile } = await import('@tauri-apps/plugin-fs');
     // dialog 插件只为用户选中的路径授权，无需向 WebView 开放整个文件系统。

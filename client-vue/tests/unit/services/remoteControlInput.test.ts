@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { bindRemoteInputSafety, RemoteInputSender, remoteVideoCoordinates, remoteWheelPixels, type RemoteInputMessage } from '@/services/remoteControlInput';
+import {
+  bindRemoteInputSafety,
+  RemoteInputSender,
+  remoteVideoCoordinates,
+  remoteWheelPixels,
+  type RemoteInputMessage,
+} from '@/services/remoteControlInput';
 import type { RemoteControlGeometry } from '@/services/remoteControlGeometry';
 
 const context = { sessionId: 'session', controlEpoch: 1, inputEpoch: 2, layoutVersion: 3 };
@@ -10,7 +16,10 @@ const stop = vi.fn();
 const transport = { readyState: 'open', bufferedAmount: 0, send };
 let sender: RemoteInputSender;
 const move = (x: number) => ({ type: 'move' as const, payload: { x, y: 0.5 } });
-const button = { type: 'button' as const, payload: { x: 0.9, y: 0.5, button: 0 as const, down: true } };
+const button = {
+  type: 'button' as const,
+  payload: { x: 0.9, y: 0.5, button: 0 as const, down: true },
+};
 const sent = () => send.mock.calls.map(([data]) => JSON.parse(data) as RemoteInputMessage);
 
 beforeEach(() => {
@@ -23,7 +32,10 @@ beforeEach(() => {
   sender.arm(context);
   sender.acceptWindow(windowTicket);
 });
-afterEach(() => { sender.dispose(); vi.useRealTimers(); });
+afterEach(() => {
+  sender.dispose();
+  vi.useRealTimers();
+});
 
 describe('远控可靠输入协议', () => {
   it('合并移动但离散点击前必须发送最新坐标，并在实际发送时分配连续序号', () => {
@@ -32,8 +44,8 @@ describe('远控可靠输入协议', () => {
     sender.enqueue(move(0.2));
     sender.enqueue(move(0.9));
     sender.enqueue(button);
-    expect(sent().map(message => message.seq)).toEqual([1, 2, 3]);
-    expect(sent().map(message => message.type)).toEqual(['move', 'move', 'button']);
+    expect(sent().map((message) => message.seq)).toEqual([1, 2, 3]);
+    expect(sent().map((message) => message.type)).toEqual(['move', 'move', 'button']);
     expect(sent()[1]?.payload).toEqual({ x: 0.9, y: 0.5 });
   });
   it('排队事件保留产生时票据，不能被新票据续命', () => {
@@ -100,11 +112,15 @@ describe('远控可靠输入协议', () => {
     expect(sender.enqueue(commit)).toBe(true);
     expect(sender.enqueue(commit)).toBe(false);
     expect(sent()).toHaveLength(1);
-    expect(sender.enqueue({ type: 'text', payload: { text: '😀'.repeat(1024), commitId: 'ime-2' } })).toBe(false);
+    expect(
+      sender.enqueue({ type: 'text', payload: { text: '😀'.repeat(1024), commitId: 'ime-2' } }),
+    ).toBe(false);
     expect(stop).toHaveBeenCalledWith('INPUT_MESSAGE_TOO_LARGE', context);
   });
   it('拒绝未知按键和越界坐标', () => {
-    expect(sender.enqueue({ type: 'key', payload: { code: 'ShellCommand', down: true } })).toBe(false);
+    expect(sender.enqueue({ type: 'key', payload: { code: 'ShellCommand', down: true } })).toBe(
+      false,
+    );
     expect(sender.enqueue(move(NaN))).toBe(false);
     expect(sender.enqueue(move(1.1))).toBe(false);
     expect(send).not.toHaveBeenCalled();
@@ -114,13 +130,36 @@ describe('远控可靠输入协议', () => {
 describe('远控画面坐标', () => {
   it('映射contain后的真实画面而非黑边，并与编码尺寸比例一致', () => {
     const rect = { left: 10, top: 20, width: 1000, height: 1000 };
-    const geometry = (width: number, height: number): RemoteControlGeometry => ({ displayId: 1, coordinateSpace: 'quartz-global-logical', displayBounds: { x: 0, y: 0, width: 1920, height: 1080 }, displayPixels: { width: 1920, height: 1080 }, rotationDegrees: 0, encodedSize: { width, height }, contentRect: { x: 0, y: 0, width, height } });
-    expect(remoteVideoCoordinates(510, 520, rect, 1920, 1080, geometry(1920, 1080))).toEqual({ x: 0.5, y: 0.5 });
+    const geometry = (width: number, height: number): RemoteControlGeometry => ({
+      displayId: 1,
+      coordinateSpace: 'quartz-global-logical',
+      displayBounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      displayPixels: { width: 1920, height: 1080 },
+      rotationDegrees: 0,
+      encodedSize: { width, height },
+      contentRect: { x: 0, y: 0, width, height },
+    });
+    expect(remoteVideoCoordinates(510, 520, rect, 1920, 1080, geometry(1920, 1080))).toEqual({
+      x: 0.5,
+      y: 0.5,
+    });
     expect(remoteVideoCoordinates(510, 100, rect, 1920, 1080, geometry(1920, 1080))).toBeNull();
-    expect(remoteVideoCoordinates(510, 520, rect, 1280, 720, geometry(1280, 720))).toEqual({ x: 0.5, y: 0.5 });
+    expect(remoteVideoCoordinates(510, 520, rect, 1280, 720, geometry(1280, 720))).toEqual({
+      x: 0.5,
+      y: 0.5,
+    });
     expect(remoteVideoCoordinates(510, 520, rect, 0, 0, geometry(1280, 720))).toBeNull();
     // A 150% surface scrolled left/up must still target the same remote pixel.
-    expect(remoteVideoCoordinates(460, 440, { left: -500, top: -100, width: 1920, height: 1080 }, 1280, 720, geometry(1280, 720))).toEqual({ x: 0.5, y: 0.5 });
+    expect(
+      remoteVideoCoordinates(
+        460,
+        440,
+        { left: -500, top: -100, width: 1920, height: 1080 },
+        1280,
+        720,
+        geometry(1280, 720),
+      ),
+    ).toEqual({ x: 0.5, y: 0.5 });
   });
   it('转换line/page滚轮为有界CSS像素', () => {
     expect(remoteWheelPixels(3, 1, 1000)).toBe(48);

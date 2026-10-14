@@ -5,14 +5,15 @@ export function formatCallDuration(durationSeconds: number) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
-  const parts = [minutes, remainingSeconds].map(value => String(value).padStart(2, '0'));
+  const parts = [minutes, remainingSeconds].map((value) => String(value).padStart(2, '0'));
 
   if (hours > 0) parts.unshift(String(hours).padStart(2, '0'));
   return parts.join(':');
 }
 
 export function getCallHistoryPresentation(record: CallHistoryRecord, isMine: boolean) {
-  const title = record.type === 'screen' ? '屏幕共享' : record.type === 'audio' ? '语音通话' : '视频通话';
+  const title =
+    record.type === 'screen' ? '屏幕共享' : record.type === 'audio' ? '语音通话' : '视频通话';
   if (record.status === 'completed') {
     return {
       title,

@@ -38,7 +38,7 @@ export class GroupDeletionService {
     }
 
     // 关联数据必须在同一事务内完成，任何一步失败都会整体回滚。
-    await this.dependencies.transaction(async transaction => {
+    await this.dependencies.transaction(async (transaction) => {
       await this.dependencies.deleteMessages(groupId, transaction);
       await this.dependencies.deleteInvitations(groupId, transaction);
       await this.dependencies.deleteMembers(groupId, transaction);

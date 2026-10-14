@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { advanceGroupCursor, initializeGroupCursor, readGroupCursors } from '../../../src/services/groupMessageCursor';
+import {
+  advanceGroupCursor,
+  initializeGroupCursor,
+  readGroupCursors,
+} from '../../../src/services/groupMessageCursor';
 
 beforeEach(() => localStorage.clear());
 

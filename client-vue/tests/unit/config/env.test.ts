@@ -16,9 +16,7 @@ describe('前端公开环境变量', () => {
   });
 
   it('拒绝非 HTTP 协议和 URL 内嵌凭据', () => {
-    expect(() => createPublicEnv({ VITE_API_BASE_URL: '/api' })).toThrow(
-      /完整的 HTTP/,
-    );
+    expect(() => createPublicEnv({ VITE_API_BASE_URL: '/api' })).toThrow(/完整的 HTTP/);
     expect(() =>
       createPublicEnv({
         VITE_SOCKET_URL: 'https://user:password@socket.example.com',

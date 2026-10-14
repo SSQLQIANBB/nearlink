@@ -12,4 +12,4 @@ export default function setupStore(app: App<Element>) {
   app.use(pinia);
 }
 
-export { pinia }
+export { pinia };

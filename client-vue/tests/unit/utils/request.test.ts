@@ -44,11 +44,7 @@ describe('request authentication recovery', () => {
 
   it('多个并发 401 只刷新、清理和跳转一次', async () => {
     const auth = useAuthStore(pinia);
-    auth.setAuth(
-      { id: 1, username: 'owner' },
-      'expired-access-token',
-      'expired-refresh-token',
-    );
+    auth.setAuth({ id: 1, username: 'owner' }, 'expired-access-token', 'expired-refresh-token');
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -62,13 +58,11 @@ describe('request authentication recovery', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await Promise.allSettled([
-      request('/api/groups/my'),
-      request('/api/messages/offline'),
-    ]);
+    await Promise.allSettled([request('/api/groups/my'), request('/api/messages/offline')]);
 
-    expect(fetchMock.mock.calls.filter(([url]) =>
-      String(url).includes('/api/auth/refresh-token'))).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/auth/refresh-token')),
+    ).toHaveLength(1);
     expect(routerMocks.replace).toHaveBeenCalledTimes(1);
     expect(routerMocks.replace).toHaveBeenCalledWith({
       name: 'Login',
@@ -84,25 +78,24 @@ describe('request authentication recovery', () => {
 
   it('刷新成功后只重试原请求一次并更新 token', async () => {
     const auth = useAuthStore(pinia);
-    auth.setAuth(
-      { id: 1, username: 'owner' },
-      'expired-access-token',
-      'valid-refresh-token',
-    );
+    auth.setAuth({ id: 1, username: 'owner' }, 'expired-access-token', 'valid-refresh-token');
     let resourceRequests = 0;
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/api/auth/refresh-token')) {
-        return jsonResponse(200, {
-          accessToken: 'new-access-token',
-          refreshToken: 'new-refresh-token',
-        });
-      }
-      resourceRequests += 1;
-      return resourceRequests === 1
-        ? jsonResponse(401, { error: 'expired' })
-        : jsonResponse(200, { value: 'ok' });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/auth/refresh-token')) {
+          return jsonResponse(200, {
+            accessToken: 'new-access-token',
+            refreshToken: 'new-refresh-token',
+          });
+        }
+        resourceRequests += 1;
+        return resourceRequests === 1
+          ? jsonResponse(401, { error: 'expired' })
+          : jsonResponse(200, { value: 'ok' });
+      }),
+    );
 
     await expect(request<{ value: string }>('/api/groups/my')).resolves.toEqual({ value: 'ok' });
     expect(resourceRequests).toBe(2);
@@ -113,9 +106,7 @@ describe('request authentication recovery', () => {
   it('403 权限不足不会清除登录状态', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'valid-token', 'valid-refresh');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      jsonResponse(403, { error: '没有权限' }),
-    ));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(403, { error: '没有权限' })));
 
     await expect(request('/api/groups/7')).rejects.toThrow('没有权限');
     expect(auth.token).toBe('valid-token');
@@ -125,15 +116,15 @@ describe('request authentication recovery', () => {
   it('登录接口 401 不刷新且不产生重定向循环', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'old-token', 'old-refresh');
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(401, { error: '用户名或密码错误' }),
-    );
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(401, { error: '用户名或密码错误' }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(request('/api/auth/login', {
-      method: 'POST',
-      body: { username: 'owner', password: 'wrong' },
-    })).rejects.toThrow('用户名或密码错误');
+    await expect(
+      request('/api/auth/login', {
+        method: 'POST',
+        body: { username: 'owner', password: 'wrong' },
+      }),
+    ).rejects.toThrow('用户名或密码错误');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(routerMocks.replace).not.toHaveBeenCalled();
@@ -143,9 +134,7 @@ describe('request authentication recovery', () => {
   it('没有 refreshToken 时直接统一退出并保留原访问地址', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'expired-token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      jsonResponse(401, { error: 'expired' }),
-    ));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, { error: 'expired' })));
 
     await expect(request('/api/groups/my')).rejects.toThrow();
 
@@ -160,47 +149,65 @@ describe('request authentication recovery', () => {
   it('路由守卫恢复用户的 401 交由守卫跳转，不发起嵌套路由导航', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'expired-token');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      jsonResponse(401, { error: 'expired' }),
-    ));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, { error: 'expired' })));
 
-    await expect(request('/api/auth/me', {
-      _skipAuthRedirect: true,
-    } as any)).rejects.toThrow('expired');
+    await expect(
+      request('/api/auth/me', {
+        _skipAuthRedirect: true,
+      } as any),
+    ).rejects.toThrow('expired');
 
     expect(routerMocks.replace).not.toHaveBeenCalled();
   });
 });
 
-
 describe('刷新凭据幂等与退出竞态', () => {
-  beforeEach(() => { vi.restoreAllMocks(); resetAuth(); });
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetAuth();
+  });
 
   it('取消登记请求不会中断共享刷新，但取消的POST不再重放', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'access', 'refresh');
     let resolve!: (value: Response) => void;
-    const fetchMock = vi.fn((url: string) => url.includes('refresh-token')
-      ? new Promise<Response>(done => { resolve = done; })
-      : Promise.resolve(jsonResponse(401, { error: 'expired' })));
+    const fetchMock = vi.fn((url: string) =>
+      url.includes('refresh-token')
+        ? new Promise<Response>((done) => {
+            resolve = done;
+          })
+        : Promise.resolve(jsonResponse(401, { error: 'expired' })),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const abort = new AbortController();
-    const pending = request('/api/remote-control/devices', { method: 'POST', body: {}, signal: abort.signal });
+    const pending = request('/api/remote-control/devices', {
+      method: 'POST',
+      body: {},
+      signal: abort.signal,
+    });
     await flushPromises();
-    const shared = refreshAccessToken(); abort.abort();
+    const shared = refreshAccessToken();
+    abort.abort();
     const rejected = expect(pending).rejects.toThrow();
     resolve(jsonResponse(200, { accessToken: 'new-access', refreshToken: 'new-refresh' }));
-    expect(await shared).toBe(true); await rejected;
-    expect(auth.token).toBe('new-access'); expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await shared).toBe(true);
+    await rejected;
+    expect(auth.token).toBe('new-access');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('丢失刷新响应后使用相同requestId与旧凭据恢复，下轮使用新ID', async () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'access', 'refresh');
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockRejectedValueOnce(new TypeError('response lost'))
-      .mockResolvedValueOnce(jsonResponse(200, { accessToken: 'next-access', refreshToken: 'next-refresh' }))
-      .mockResolvedValueOnce(jsonResponse(200, { accessToken: 'last-access', refreshToken: 'last-refresh' }));
+      .mockResolvedValueOnce(
+        jsonResponse(200, { accessToken: 'next-access', refreshToken: 'next-refresh' }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, { accessToken: 'last-access', refreshToken: 'last-refresh' }),
+      );
     vi.stubGlobal('fetch', fetchMock);
     expect(await refreshAccessToken()).toBe(true);
     const first = JSON.parse(fetchMock.mock.calls[0]![1].body);
@@ -217,7 +224,12 @@ describe('刷新凭据幂等与退出竞态', () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'access', 'refresh');
     let resolve!: (response: Response) => void;
-    const fetchMock = vi.fn(() => new Promise(done => { resolve = done; }));
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     const first = refreshAccessToken();
     const second = refreshAccessToken();
@@ -232,14 +244,26 @@ describe('刷新凭据幂等与退出竞态', () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'old' }, 'old-access', 'old-refresh');
     const responses: Array<(response: Response) => void> = [];
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(done => { responses.push(done); })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((done) => {
+            responses.push(done);
+          }),
+      ),
+    );
     const old = refreshAccessToken();
     auth.setAuth({ id: 2, username: 'new' }, 'new-access', 'new-refresh');
     const current = refreshAccessToken();
     expect(old).not.toBe(current);
-    responses[0]!(jsonResponse(200, { accessToken: 'stale-access', refreshToken: 'stale-refresh' }));
+    responses[0]!(
+      jsonResponse(200, { accessToken: 'stale-access', refreshToken: 'stale-refresh' }),
+    );
     expect(await old).toBe(false);
-    responses[1]!(jsonResponse(200, { accessToken: 'valid-access', refreshToken: 'valid-refresh' }));
+    responses[1]!(
+      jsonResponse(200, { accessToken: 'valid-access', refreshToken: 'valid-refresh' }),
+    );
     expect(await current).toBe(true);
     expect(auth.token).toBe('valid-access');
     expect(auth.currentUser?.id).toBe(2);
@@ -251,11 +275,17 @@ describe('刷新凭据幂等与退出竞态', () => {
     vi.spyOn(auth, 'updateToken').mockImplementation(() => {
       auth.setAuth({ id: 2, username: 'new' }, 'new-access', 'new-refresh');
     });
-    const fetchMock = vi.fn((url: string) => Promise.resolve(url.includes('refresh-token')
-      ? jsonResponse(200, { accessToken: 'rotated', refreshToken: 'rotated-refresh' })
-      : jsonResponse(401, { error: 'expired' })));
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        url.includes('refresh-token')
+          ? jsonResponse(200, { accessToken: 'rotated', refreshToken: 'rotated-refresh' })
+          : jsonResponse(401, { error: 'expired' }),
+      ),
+    );
     vi.stubGlobal('fetch', fetchMock);
-    await expect(request('/api/messages/send', { method: 'POST', body: { text: 'old account' } })).rejects.toThrow('Authentication changed during request');
+    await expect(
+      request('/api/messages/send', { method: 'POST', body: { text: 'old account' } }),
+    ).rejects.toThrow('Authentication changed during request');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(auth.token).toBe('new-access');
   });
@@ -265,16 +295,24 @@ describe('刷新凭据幂等与退出竞态', () => {
     auth.setAuth({ id: 1, username: 'owner' }, 'access', 'refresh');
     let resolveRefresh!: (response: Response) => void;
     let resolveLogout!: (response: Response) => void;
-    vi.stubGlobal('fetch', vi.fn((url: string) => new Promise(done => {
-      if (url.includes('refresh-token')) resolveRefresh = done;
-      else resolveLogout = done;
-    })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (url: string) =>
+          new Promise((done) => {
+            if (url.includes('refresh-token')) resolveRefresh = done;
+            else resolveLogout = done;
+          }),
+      ),
+    );
     const refresh = refreshAccessToken();
     const logout = auth.logout();
     await Promise.resolve();
     expect(auth.token).toBe('access');
     expect(auth.loggingOut).toBe(true);
-    resolveRefresh(jsonResponse(200, { accessToken: 'stale-access', refreshToken: 'stale-refresh' }));
+    resolveRefresh(
+      jsonResponse(200, { accessToken: 'stale-access', refreshToken: 'stale-refresh' }),
+    );
     expect(await refresh).toBe(false);
     expect(auth.token).toBe('access');
     resolveLogout(jsonResponse(200, { message: 'ok' }));
@@ -286,7 +324,15 @@ describe('刷新凭据幂等与退出竞态', () => {
     const auth = useAuthStore(pinia);
     auth.setAuth({ id: 1, username: 'owner' }, 'access', 'refresh');
     let resolve!: (response: Response) => void;
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(done => { resolve = done; })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      ),
+    );
     const pending = refreshAccessToken();
     auth.clearAuthLocal();
     resolve(jsonResponse(200, { accessToken: 'stale-access', refreshToken: 'stale-refresh' }));

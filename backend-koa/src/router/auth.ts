@@ -2,7 +2,10 @@ import Router from 'koa-router';
 import * as authController from '../controller/authController';
 import * as emailController from '../controller/authEmailController';
 import { authMiddleware, logoutAuthMiddleware } from '../middleware/auth';
-import { getNotificationSettings, updateNotificationSettings } from '../controller/notificationSettingsController';
+import {
+  getNotificationSettings,
+  updateNotificationSettings,
+} from '../controller/notificationSettingsController';
 
 const router = new Router({ prefix: '/api/auth' });
 
@@ -30,4 +33,3 @@ router.post('/bind-email', authMiddleware, emailController.bindEmail);
 router.get('/users', authMiddleware, authController.getUserList);
 
 export default router;
-

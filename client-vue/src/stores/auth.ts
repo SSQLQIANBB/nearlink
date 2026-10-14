@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia';
-import { clearRemoteControlLocally, stopRemoteControlLocally } from '@/services/remoteControlSafety';
+import {
+  clearRemoteControlLocally,
+  stopRemoteControlLocally,
+} from '@/services/remoteControlSafety';
 import type { PersistenceOptions } from 'pinia-plugin-persistedstate';
 import type { LocationQueryRaw } from 'vue-router';
 import {
@@ -50,11 +53,10 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   getters: {
-    isAuthenticated: state => !!state.token && !state.loggingOut,
+    isAuthenticated: (state) => !!state.token && !state.loggingOut,
   },
 
   actions: {
-
     setAuth(user: User, authToken: string, authRefreshToken?: string) {
       this.authGeneration++;
       this.loggingOut = false;
@@ -87,7 +89,8 @@ export const useAuthStore = defineStore('auth', {
     async fetchCurrentUser() {
       const generation = this.authGeneration;
       const { user } = await getCurrentUser({ skipAuthRedirect: true });
-      if (generation !== this.authGeneration || this.loggingOut) throw new Error('Authentication changed during request');
+      if (generation !== this.authGeneration || this.loggingOut)
+        throw new Error('Authentication changed during request');
       this.currentUser = user;
       return user;
     },
@@ -97,10 +100,12 @@ export const useAuthStore = defineStore('auth', {
         // A login started during an older logout begins from an anonymous local state.
         if (this.loggingOut) this.clearAuthLocal();
         const generation = ++this.authGeneration;
-        const result = 'code' in credentials
-          ? await apiLoginWithEmailCode(credentials)
-          : await apiLogin(credentials);
-        if (generation !== this.authGeneration) throw new Error('Authentication changed during login');
+        const result =
+          'code' in credentials
+            ? await apiLoginWithEmailCode(credentials)
+            : await apiLogin(credentials);
+        if (generation !== this.authGeneration)
+          throw new Error('Authentication changed during login');
         this.setAuth(result.user, result.accessToken, result.refreshToken);
         return result;
       }
@@ -115,8 +120,11 @@ export const useAuthStore = defineStore('auth', {
       const generation = ++this.authGeneration;
       this.loggingOut = true;
       // Native stop is attempted before logout even when the network is unavailable.
-      try { await stopRemoteControlLocally('LOGOUT'); }
-      catch (error) { console.error('Native remote control stop failed:', error); }
+      try {
+        await stopRemoteControlLocally('LOGOUT');
+      } catch (error) {
+        console.error('Native remote control stop failed:', error);
+      }
 
       if (callApi && logoutToken) {
         try {

@@ -3,16 +3,25 @@ import { flushPromises } from '@vue/test-utils';
 import { installDesktopWindowControls } from '@/services/desktopWindow';
 
 const mocks = vi.hoisted(() => ({
-  isTauri: vi.fn(), isFullscreen: vi.fn(), startDragging: vi.fn(),
-  isMaximized: vi.fn(), toggleMaximize: vi.fn(),
-  onResized: vi.fn(), onFocusChanged: vi.fn(), unresize: vi.fn(), unfocus: vi.fn(),
+  isTauri: vi.fn(),
+  isFullscreen: vi.fn(),
+  startDragging: vi.fn(),
+  isMaximized: vi.fn(),
+  toggleMaximize: vi.fn(),
+  onResized: vi.fn(),
+  onFocusChanged: vi.fn(),
+  unresize: vi.fn(),
+  unfocus: vi.fn(),
 }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: mocks.isTauri }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => mocks }));
 let cleanup: (() => void) | undefined;
-const press = (selector: string, button = 0) => document.querySelector(selector)!.dispatchEvent(
-  new MouseEvent('mousedown', { bubbles: true, cancelable: true, button, detail: 1 }),
-);
+const press = (selector: string, button = 0) =>
+  document
+    .querySelector(selector)!
+    .dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button, detail: 1 }),
+    );
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -24,7 +33,8 @@ beforeEach(() => {
   mocks.toggleMaximize.mockResolvedValue(undefined);
   mocks.onResized.mockResolvedValue(mocks.unresize);
   mocks.onFocusChanged.mockResolvedValue(mocks.unfocus);
-  document.body.innerHTML = '<header class="chat-header"><span id="title">联系人</span><button><span id="action">操作</span></button><input /><a href="#">链接</a></header><main>聊天内容</main>';
+  document.body.innerHTML =
+    '<header class="chat-header"><span id="title">联系人</span><button><span id="action">操作</span></button><input /><a href="#">链接</a></header><main>聊天内容</main>';
 });
 afterEach(() => {
   cleanup?.();
@@ -77,7 +87,11 @@ describe('桌面标题与全屏状态', () => {
 
   it('卸载后清理事件并忽略迟到的全屏查询', async () => {
     let finish!: (value: boolean) => void;
-    mocks.isFullscreen.mockReturnValue(new Promise<boolean>(resolve => { finish = resolve; }));
+    mocks.isFullscreen.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+    );
     cleanup = installDesktopWindowControls();
     cleanup();
     cleanup = undefined;
@@ -104,9 +118,12 @@ describe('桌面标题与全屏状态', () => {
     cleanup = installDesktopWindowControls(changed);
     await flushPromises();
     expect(changed).toHaveBeenLastCalledWith(false);
-    const doubleClick = (selector: string) => document.querySelector(selector)!.dispatchEvent(
-      new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 2 }),
-    );
+    const doubleClick = (selector: string) =>
+      document
+        .querySelector(selector)!
+        .dispatchEvent(
+          new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, detail: 2 }),
+        );
     doubleClick('#title');
     doubleClick('#action');
     expect(mocks.toggleMaximize).toHaveBeenCalledOnce();
@@ -127,7 +144,9 @@ describe('桌面标题与全屏状态', () => {
   it('macOS 不接管双击最大化，也不查询 Windows 按钮状态', async () => {
     cleanup = installDesktopWindowControls();
     await flushPromises();
-    document.querySelector('#title')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 2 }));
+    document
+      .querySelector('#title')!
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 2 }));
     expect(mocks.toggleMaximize).not.toHaveBeenCalled();
     expect(mocks.isMaximized).not.toHaveBeenCalled();
   });

@@ -14,20 +14,28 @@ export type SoundKind = 'message' | 'call';
 export interface SoundPreferences {
   messageEnabled: boolean;
   callEnabled: boolean;
-  messageTone: typeof messageTones[number]['value'];
-  callTone: typeof callTones[number]['value'];
+  messageTone: (typeof messageTones)[number]['value'];
+  callTone: (typeof callTones)[number]['value'];
 }
 
 export function readSoundPreferences(): SoundPreferences {
   const enabled = localStorage.getItem('notification_sound_enabled') !== 'false';
-  const settings: SoundPreferences = { messageEnabled: enabled, callEnabled: enabled, messageTone: 'default', callTone: 'default' };
+  const settings: SoundPreferences = {
+    messageEnabled: enabled,
+    callEnabled: enabled,
+    messageTone: 'default',
+    callTone: 'default',
+  };
   try {
     const saved = JSON.parse(localStorage.getItem('notification_sounds') || '{}');
     if (!saved || typeof saved !== 'object') return settings;
     if (typeof saved.messageEnabled === 'boolean') settings.messageEnabled = saved.messageEnabled;
     if (typeof saved.callEnabled === 'boolean') settings.callEnabled = saved.callEnabled;
-    if (messageTones.some(tone => tone.value === saved.messageTone)) settings.messageTone = saved.messageTone;
-    if (callTones.some(tone => tone.value === saved.callTone)) settings.callTone = saved.callTone;
-  } catch { /* 本地设置损坏时保留旧版静音偏好及默认铃声。 */ }
+    if (messageTones.some((tone) => tone.value === saved.messageTone))
+      settings.messageTone = saved.messageTone;
+    if (callTones.some((tone) => tone.value === saved.callTone)) settings.callTone = saved.callTone;
+  } catch {
+    /* 本地设置损坏时保留旧版静音偏好及默认铃声。 */
+  }
   return settings;
 }

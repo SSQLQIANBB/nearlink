@@ -17,6 +17,8 @@ describe('发送时保持输入焦点', () => {
       expect(wrapper.emitted('send')).toHaveLength(1);
       document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
       expect(document.activeElement).not.toBe(editor);
-    } finally { wrapper.unmount(); }
+    } finally {
+      wrapper.unmount();
+    }
   });
 });

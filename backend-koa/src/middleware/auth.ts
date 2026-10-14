@@ -1,7 +1,13 @@
 import { Context, Next } from 'koa';
-import { AuthenticatedSessionPayload, validateAuthenticatedSession, validateLogoutSession } from '../services/loginSessionService';
+import {
+  AuthenticatedSessionPayload,
+  validateAuthenticatedSession,
+  validateLogoutSession,
+} from '../services/loginSessionService';
 
-export interface AuthState { user?: AuthenticatedSessionPayload }
+export interface AuthState {
+  user?: AuthenticatedSessionPayload;
+}
 const bearer = (ctx: Context) => /^Bearer ([^\s]+)$/i.exec(ctx.headers.authorization || '')?.[1];
 
 export async function authMiddleware(ctx: Context, next: Next) {
@@ -44,7 +50,11 @@ export async function optionalAuthMiddleware(ctx: Context, next: Next) {
   const token = bearer(ctx);
   delete ctx.state.user;
   if (token) {
-    try { ctx.state.user = await validateAuthenticatedSession(token); } catch { /* anonymous */ }
+    try {
+      ctx.state.user = await validateAuthenticatedSession(token);
+    } catch {
+      /* anonymous */
+    }
   }
   await next();
 }

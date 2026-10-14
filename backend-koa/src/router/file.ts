@@ -11,4 +11,3 @@ router.get('/:fileId/download', authMiddleware, fileController.downloadFile);
 router.delete('/:fileId', authMiddleware, fileController.deleteFile);
 
 export default router;
-

@@ -109,4 +109,3 @@ export async function rejectInvitation(ctx: Context) {
     ctx.body = { error: '拒绝邀请失败: ' + error.message };
   }
 }
-

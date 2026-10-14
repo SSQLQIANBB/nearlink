@@ -10,7 +10,11 @@ export function registerRemoteControlCleanup(cleanup: (reason: string) => void) 
 
 export function clearRemoteControlLocally(reason: string) {
   for (const cleanup of cleanupHandlers) {
-    try { cleanup(reason); } catch (error) { console.error('Remote control local cleanup failed', error); }
+    try {
+      cleanup(reason);
+    } catch (error) {
+      console.error('Remote control local cleanup failed', error);
+    }
   }
 }
 
@@ -22,8 +26,12 @@ export async function stopRemoteControlLocally(reason: string) {
     try {
       await Promise.race([
         invoke('remote_control_stop'),
-        new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error('REMOTE_LOCAL_STOP_TIMEOUT')), 1500); }),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => reject(new Error('REMOTE_LOCAL_STOP_TIMEOUT')), 1500);
+        }),
       ]);
-    } finally { if (timeout) clearTimeout(timeout); }
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 }

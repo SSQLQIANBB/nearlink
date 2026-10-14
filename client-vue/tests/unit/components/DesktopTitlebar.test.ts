@@ -4,8 +4,12 @@ import { nextTick } from 'vue';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
 
 const mocks = vi.hoisted(() => ({
-  isTauri: vi.fn(), minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(),
-  install: vi.fn(), cleanup: vi.fn(),
+  isTauri: vi.fn(),
+  minimize: vi.fn(),
+  toggleMaximize: vi.fn(),
+  close: vi.fn(),
+  install: vi.fn(),
+  cleanup: vi.fn(),
 }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ path: '/remote' }) }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: mocks.isTauri }));
@@ -16,7 +20,8 @@ let wrapper: VueWrapper;
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.isTauri.mockReturnValue(true);
-  for (const action of [mocks.minimize, mocks.toggleMaximize, mocks.close]) action.mockResolvedValue(undefined);
+  for (const action of [mocks.minimize, mocks.toggleMaximize, mocks.close])
+    action.mockResolvedValue(undefined);
   mocks.install.mockReturnValue(mocks.cleanup);
 });
 afterEach(() => {

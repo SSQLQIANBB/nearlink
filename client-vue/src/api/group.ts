@@ -48,7 +48,10 @@ export function getGroupDetail(groupId: number) {
 /**
  * 更新群组信息
  */
-export function updateGroup(groupId: number, data: { name?: string; description?: string; avatar?: string }) {
+export function updateGroup(
+  groupId: number,
+  data: { name?: string; description?: string; avatar?: string },
+) {
   return http.put<{ group: Group; message: string }>(`/api/groups/${groupId}`, data);
 }
 
@@ -56,14 +59,19 @@ export function updateGroup(groupId: number, data: { name?: string; description?
  * 邀请用户加入群组
  */
 export function inviteToGroup(groupId: number, userIds: number[]) {
-  return http.post<{ message: string; results: any[] }>(`/api/groups/${groupId}/invite`, { userIds });
+  return http.post<{ message: string; results: any[] }>(`/api/groups/${groupId}/invite`, {
+    userIds,
+  });
 }
 
 /**
  * 设置成员权限
  */
 export function setMemberPermission(groupId: number, targetUserId: number, canSpeak: boolean) {
-  return http.post<{ message: string }>(`/api/groups/${groupId}/permission`, { targetUserId, canSpeak });
+  return http.post<{ message: string }>(`/api/groups/${groupId}/permission`, {
+    targetUserId,
+    canSpeak,
+  });
 }
 
 /**
@@ -79,4 +87,3 @@ export function leaveGroup(groupId: number) {
 export function deleteGroup(groupId: number) {
   return http.delete<{ message: string }>(`/api/groups/${groupId}`);
 }
-

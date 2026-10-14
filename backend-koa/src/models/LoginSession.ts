@@ -33,21 +33,26 @@ class LoginSession extends Model<LoginSessionAttributes> implements LoginSession
   declare readonly updatedAt: Date;
 }
 
-LoginSession.init({
-  id: { type: DataTypes.UUID, primaryKey: true },
-  userId: { type: DataTypes.INTEGER, allowNull: false },
-  authVersion: { type: DataTypes.UUID, allowNull: false },
-  refreshHash: { type: DataTypes.STRING(64), allowNull: false },
-  version: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
-  expiresAt: { type: DataTypes.DATE, allowNull: false },
-  revokedAt: { type: DataTypes.DATE, allowNull: true },
-  rotationRequestId: { type: DataTypes.STRING(128), allowNull: true },
-  rotationInputHash: { type: DataTypes.STRING(64), allowNull: true },
-  rotationResponse: { type: DataTypes.TEXT, allowNull: true },
-  rotationExpiresAt: { type: DataTypes.DATE, allowNull: true },
-}, {
-  sequelize, tableName: 'login_sessions', timestamps: true,
-  indexes: [{ fields: ['userId', 'revokedAt', 'expiresAt'] }],
-});
+LoginSession.init(
+  {
+    id: { type: DataTypes.UUID, primaryKey: true },
+    userId: { type: DataTypes.INTEGER, allowNull: false },
+    authVersion: { type: DataTypes.UUID, allowNull: false },
+    refreshHash: { type: DataTypes.STRING(64), allowNull: false },
+    version: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
+    expiresAt: { type: DataTypes.DATE, allowNull: false },
+    revokedAt: { type: DataTypes.DATE, allowNull: true },
+    rotationRequestId: { type: DataTypes.STRING(128), allowNull: true },
+    rotationInputHash: { type: DataTypes.STRING(64), allowNull: true },
+    rotationResponse: { type: DataTypes.TEXT, allowNull: true },
+    rotationExpiresAt: { type: DataTypes.DATE, allowNull: true },
+  },
+  {
+    sequelize,
+    tableName: 'login_sessions',
+    timestamps: true,
+    indexes: [{ fields: ['userId', 'revokedAt', 'expiresAt'] }],
+  },
+);
 
 export default LoginSession;
