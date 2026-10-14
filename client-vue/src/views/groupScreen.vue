@@ -487,6 +487,9 @@ const participantUserIds = computed(() => {
 let joinedCall = false;
 let currentSessionStartedAt: string | null = null;
 let cleanedUp = false;
+let mediaGeneration = 0;
+let pendingMicrophone: Promise<void> | null = null;
+let startingScreenShare = false;
 let stopAuthenticatedWatch: (() => void) | null = null;
 
 // 视频质量配置
@@ -596,9 +599,40 @@ function initSocket() {
   target.on('screen_annotation_error', handleAnnotationError);
 }
 
+// 加入会话和发起共享可能同时触发，只申请并保存一份麦克风流。
+function ensureMicrophone() {
+  if (pendingMicrophone) return pendingMicrophone;
+  if (localStream.value) return Promise.resolve();
+  const generation = mediaGeneration;
+  const request = navigator.mediaDevices
+    .getUserMedia({ audio: true, video: false })
+    .then((audio) => {
+      if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) {
+        audio.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      audio.getAudioTracks().forEach((track) => {
+        track.enabled = !isMicMuted.value && canSpeak.value;
+      });
+      localStream.value = audio;
+    })
+    .catch(() => {
+      if (cleanedUp || generation !== mediaGeneration) return;
+      isMicMuted.value = true;
+      message.warning('麦克风不可用，仍可观看屏幕共享');
+    })
+    .finally(() => {
+      if (pendingMicrophone === request) pendingMicrophone = null;
+    });
+  pendingMicrophone = request;
+  return request;
+}
+
 // 开始屏幕共享
 async function startScreenShare() {
-  if (!mediaClaim?.isCurrent() || cleanedUp) return;
+  if (!mediaClaim?.isCurrent() || cleanedUp || startingScreenShare || isSharing.value) return;
+  startingScreenShare = true;
+  const generation = mediaGeneration;
   try {
     const preset = qualityPresets[currentQuality.value as keyof typeof qualityPresets];
 
@@ -614,25 +648,22 @@ async function startScreenShare() {
         audio: false,
       }));
 
+    if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    // 等待麦克风授权时，退出逻辑也必须能立即停止屏幕轨道。
+    pendingInitialScreen.value = screenStream;
+    await ensureMicrophone();
+    if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) {
+      screenStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     pendingInitialScreen.value = null;
-    if (cleanedUp || !mediaClaim?.isCurrent()) {
-      screenStream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-    // 获取音频流 (如果需要语音)
-    const audioStream = await navigator.mediaDevices
-      .getUserMedia({ audio: true, video: false })
-      .catch(() => null);
-
-    if (cleanedUp || !mediaClaim?.isCurrent()) {
-      screenStream.getTracks().forEach((track) => track.stop());
-      audioStream?.getTracks().forEach((track) => track.stop());
-      return;
-    }
     // 合并流
     localStream.value = new MediaStream([
       ...screenStream.getVideoTracks(),
-      ...(audioStream?.getAudioTracks() || []),
+      ...(localStream.value?.getAudioTracks() || []),
     ]);
 
     isSharing.value = true;
@@ -656,11 +687,17 @@ async function startScreenShare() {
     await broadcastStream();
   } catch (error: any) {
     message.error('开始屏幕共享失败: ' + error.message);
+  } finally {
+    startingScreenShare = false;
   }
 }
 
 // 停止屏幕共享
 function stopScreenShare() {
+  mediaGeneration++;
+  pendingMicrophone = null;
+  pendingInitialScreen.value?.getTracks().forEach((track) => track.stop());
+  pendingInitialScreen.value = null;
   localStream.value?.getTracks().forEach((track) => track.stop());
   localStream.value = null;
   isSharing.value = false;
@@ -811,22 +848,9 @@ async function joinScreenCall(ownerUserId: number) {
   if (session) startScreenSession(session.startedAt, session.channelId);
   if (joinedCall) return;
   joinedCall = true;
-  if (!localStream.value) {
-    try {
-      const audio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      if (!joinedCall || cleanedUp) {
-        audio.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      audio.getAudioTracks().forEach((track) => {
-        track.enabled = !isMicMuted.value && canSpeak.value;
-      });
-      localStream.value = audio;
-    } catch {
-      isMicMuted.value = true;
-      message.warning('麦克风不可用，仍可观看屏幕共享');
-    }
-  }
+  const generation = mediaGeneration;
+  await ensureMicrophone();
+  if (!joinedCall || cleanedUp || generation !== mediaGeneration) return;
   socket.value?.emit('join_group_call', {
     groupId: groupId.value,
     deviceType: 2,
@@ -851,6 +875,10 @@ function handleCallEnded(data: any) {
   sharer.value = null;
   remoteStream.value = null;
   joinedCall = false;
+  mediaGeneration++;
+  pendingMicrophone = null;
+  pendingInitialScreen.value?.getTracks().forEach((track) => track.stop());
+  pendingInitialScreen.value = null;
   isSharing.value = false;
   currentSessionStartedAt = null;
   localStream.value?.getTracks().forEach((track) => track.stop());
@@ -1086,6 +1114,8 @@ function handleExit() {
 function cleanupScreenCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  mediaGeneration++;
+  pendingMicrophone = null;
   currentSessionStartedAt = null;
   const ownedMedia = !!mediaClaim;
   mediaClaim?.release();

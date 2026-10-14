@@ -75,6 +75,7 @@ class Stream {
 class Peer {
   close = vi.fn();
   addTrack = vi.fn(() => ({}));
+  addTransceiver = vi.fn(() => ({}));
   setRemoteDescription = vi.fn(async () => undefined);
   setLocalDescription = vi.fn(async () => undefined);
   createAnswer = vi.fn(async () => ({}));
@@ -179,4 +180,40 @@ describe.each(['video', 'screen'] as const)('%s 页面授权撤销', (kind) => {
     const join = mock.emit.mock.calls.find(([event]) => event === 'join_group_call');
     expect(join?.[1]).toMatchObject({ groupId: 7, startedAt: session.startedAt });
   });
+});
+
+describe('屏幕共享资源释放', () => {
+  it('加入与发起共享并发时，退出停止所有申请过的麦克风', async () => {
+    const microphones: any[] = [];
+    mock.getUserMedia.mockImplementation(async () => {
+      const track = { kind: 'audio', stop: vi.fn(), enabled: true };
+      microphones.push(track);
+      return new Stream([track]);
+    });
+    await open('screen');
+    (wrapper!.vm as any).$.setupState.handleExit();
+    expect(mock.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(microphones.length).toBeGreaterThan(0);
+    expect(microphones.every((track) => track.stop.mock.calls.length > 0)).toBe(true);
+    expect(video.stop).toHaveBeenCalled();
+  });
+});
+
+it('退出时立即停止屏幕，并释放随后授权成功的麦克风', async () => {
+  let resolveAudio!: (stream: Stream) => void;
+  mock.getUserMedia.mockImplementation(
+    () =>
+      new Promise<Stream>((resolve) => {
+        resolveAudio = resolve;
+      }),
+  );
+  await open('screen');
+  (wrapper!.vm as any).$.setupState.handleExit();
+  expect(video.stop).toHaveBeenCalled();
+  mock.emit.mockClear();
+  resolveAudio(new Stream([audio]));
+  await flushPromises();
+  expect(audio.stop).toHaveBeenCalled();
+  expect(mock.emit).not.toHaveBeenCalledWith('group_call_start', expect.anything());
+  expect(mock.emit).not.toHaveBeenCalledWith('join_group_call', expect.anything());
 });
