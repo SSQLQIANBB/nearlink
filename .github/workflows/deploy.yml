@@ -5,18 +5,26 @@ on:
     branches:
       - master
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event_name == 'schedule' && 'monitor' || 'production' }}
   cancel-in-progress: false
 
 jobs:
   build-and-deploy:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
 
+    env:
+      DEPLOY_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
+      - name: Encode storage maintenance script
+        run: echo "STORAGE_SCRIPT=$(base64 -w0 deploy/storage.py)" >> "$GITHUB_ENV"
 
       - name: Resolve image names
         run: |
@@ -32,7 +40,7 @@ jobs:
           CADDY_IMAGE: ${{ vars.CADDY_IMAGE }}
           CERT_SYNC_IMAGE: ${{ vars.CERT_SYNC_IMAGE }}
 
-      - name: Test certificate synchronizer
+      - name: Test deployment scripts
         run: |
           python -m pip install -r deploy/requirements-cert-sync.txt
           python -m unittest discover -s deploy/tests -p 'test_*.py'
@@ -112,31 +120,20 @@ jobs:
 
       - name: Prepare remote deploy directory
         uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_REPOSITORIES: ${{ env.NAMESPACE }}/${{ env.BACKEND_IMAGE }},${{ env.NAMESPACE }}/${{ env.WEB_IMAGE }},${{ env.NAMESPACE }}/${{ env.CADDY_IMAGE }},${{ env.NAMESPACE }}/${{ env.CERT_SYNC_IMAGE }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
           port: 22
+          envs: STORAGE_SCRIPT,DEPLOY_RUN,DEPLOY_REPOSITORIES
           script: |
             set -e
-            echo 'Checking remote SCP and archive tools'
-            command -v scp
-            command -v tar
-            echo 'Checking upload and deployment filesystems'
-            df -h . /opt
-            df -i . /opt
-            ls -ld . /opt
-            mkdir -p /opt/todesk
+            command -v python3
             test -f /opt/todesk/.env.production
-            ls -ld /opt/todesk
-            # drone-scp first uploads its archive relative to the SSH working directory.
-            # Exercise the same SCP sink with a tiny file so remote errors are visible.
-            probe_dir="$(mktemp -d .nearlink-scp-check.XXXXXX)"
-            trap 'rm -f "$probe_dir/probe"; rmdir "$probe_dir"' EXIT
-            printf 'C0600 1 probe\nx\000' | scp -t "$probe_dir" >/dev/null
-            test "$(cat "$probe_dir/probe")" = x
-            test -w /opt/todesk
+            python3 -c "$(printf '%s' "$STORAGE_SCRIPT" | base64 -d)" prepare
 
       - name: Upload production files and application images
         uses: appleboy/scp-action@v1
@@ -148,19 +145,30 @@ jobs:
           port: 22
           command_timeout: 30m
           source: docker-compose.prod.yml,Caddyfile,deploy/migrate-database.sh,todesk-backend.tar.gz,todesk-web.tar.gz,todesk-caddy.tar.gz,todesk-cert-sync.tar.gz
-          target: /opt/todesk
+          target: /opt/todesk/.deploy/${{ env.DEPLOY_RUN }}
+          tar_tmp_path: /opt/todesk/.deploy/${{ env.DEPLOY_RUN }}/
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_REPOSITORIES: ${{ env.NAMESPACE }}/${{ env.BACKEND_IMAGE }},${{ env.NAMESPACE }}/${{ env.WEB_IMAGE }},${{ env.NAMESPACE }}/${{ env.CADDY_IMAGE }},${{ env.NAMESPACE }}/${{ env.CERT_SYNC_IMAGE }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
           port: 22
+          envs: STORAGE_SCRIPT,DEPLOY_RUN,DEPLOY_REPOSITORIES
+          command_timeout: 30m
           script: |
             set -e
+            set -o pipefail
             cd /opt/todesk
+            staging="/opt/todesk/.deploy/$DEPLOY_RUN"
+            cleanup() {
+              python3 -c "$(printf '%s' "$STORAGE_SCRIPT" | base64 -d)" cleanup
+            }
+            trap cleanup EXIT
             DOMAIN="$(sed -n 's/^DOMAIN=//p' .env.production | tail -n 1)"
             FILES_DOMAIN="$(sed -n 's/^FILES_DOMAIN=//p' .env.production | tail -n 1)"
             PRIVATE_FILES_DOMAIN="$(
@@ -202,19 +210,21 @@ jobs:
                 --filter health=healthy
             )"
             export DOCKERHUB_NAMESPACE="${{ env.NAMESPACE }}"
+            export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}"
+            export WEB_IMAGE="${{ env.WEB_IMAGE }}"
             export CADDY_IMAGE="${{ env.CADDY_IMAGE }}"
             export CERT_SYNC_IMAGE="${{ env.CERT_SYNC_IMAGE }}"
             export IMAGE_TAG="${{ github.sha }}"
-            gzip -dc todesk-backend.tar.gz | docker load
-            gzip -dc todesk-web.tar.gz | docker load
-            gzip -dc todesk-caddy.tar.gz | docker load
-            gzip -dc todesk-cert-sync.tar.gz | docker load
-            rm -f todesk-backend.tar.gz todesk-web.tar.gz todesk-caddy.tar.gz \
-              todesk-cert-sync.tar.gz
+            gzip -dc "$staging/todesk-backend.tar.gz" | docker load
+            gzip -dc "$staging/todesk-web.tar.gz" | docker load
+            gzip -dc "$staging/todesk-caddy.tar.gz" | docker load
+            gzip -dc "$staging/todesk-cert-sync.tar.gz" | docker load
+            cp "$staging/docker-compose.prod.yml" "$staging/Caddyfile" .
+            mkdir -p deploy
+            cp "$staging/deploy/migrate-database.sh" deploy/
             bash deploy/migrate-database.sh
             docker compose --env-file .env.production -f docker-compose.prod.yml \
               up -d --pull never --remove-orphans
-            docker image prune -f
             for i in $(seq 1 24); do
               if [ "$(
                 docker inspect --format '{{.State.Health.Status}}' \
@@ -231,6 +241,8 @@ jobs:
             for i in $(seq 1 12); do
               if curl --resolve "${DOMAIN}:443:127.0.0.1" \
                 -fsS "https://${DOMAIN}/api/health/ready" >/dev/null; then
+                cleanup
+                python3 -c "$(printf '%s' "$STORAGE_SCRIPT" | base64 -d)" success
                 exit 0
               fi
               sleep 5
@@ -239,3 +251,35 @@ jobs:
             docker compose --env-file .env.production -f docker-compose.prod.yml \
               logs --tail=100 caddy backend
             exit 1
+
+      - name: Clean this deployment upload directory
+        if: always() && env.STORAGE_SCRIPT != ''
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
+          port: 22
+          envs: STORAGE_SCRIPT,DEPLOY_RUN
+          script: |
+            python3 -c "$(printf '%s' "$STORAGE_SCRIPT" | base64 -d)" cleanup
+
+  disk-monitor:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Encode storage maintenance script
+        run: echo "STORAGE_SCRIPT=$(base64 -w0 deploy/storage.py)" >> "$GITHUB_ENV"
+      - name: Alert at 80 percent disk usage
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
+          port: 22
+          envs: STORAGE_SCRIPT
+          script: |
+            python3 -c "$(printf '%s' "$STORAGE_SCRIPT" | base64 -d)" monitor
