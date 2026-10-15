@@ -1,7 +1,7 @@
 [package]
 name = "nearlink-desktop"
 default-run = "nearlink-desktop"
-version = "0.9.0-alpha.5"
+version = "0.9.0-alpha.6"
 description = "NearLink desktop client for Windows and macOS"
 edition = "2021"
 rust-version = "1.85"

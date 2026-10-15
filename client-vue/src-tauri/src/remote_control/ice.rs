@@ -81,7 +81,6 @@ pub(super) fn verify(
         || now >= local.deadline
         || Duration::from_millis(c.session_expires_at - wall)
             > local.deadline.duration_since(now) + Duration::from_secs(1)
-        || c.ice_servers.is_empty()
         || c.ice_servers.len() > 4
     {
         return Err("REMOTE_ICE_CONFIGURATION");
@@ -114,7 +113,7 @@ pub(super) fn verify(
         }
         has_turn |= turn;
     }
-    if !has_turn {
+    if policy == CandidatePolicy::Relay && !has_turn {
         return Err("REMOTE_ICE_CONFIGURATION");
     }
     Ok((

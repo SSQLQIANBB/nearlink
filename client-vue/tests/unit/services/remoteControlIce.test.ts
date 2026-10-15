@@ -18,6 +18,9 @@ const config = (): RemoteIceConfiguration => ({
   proof: { format: 'rc-signed-v1', keyId: 'test', payload: 'test', signature: 'test' },
 });
 describe('远控ICE配置', () => {
+  it('all模式允许无中继配置', () => {
+    expect(() => validateRemoteIceConfiguration({ ...config(), iceTransportPolicy: 'all', iceServers: [] }, 60000, 0)).not.toThrow();
+  });
   it('接受覆盖会话寿命的配置，拒绝过短、超期及固定密码URL', () => {
     expect(() => validateRemoteIceConfiguration(config(), 60000, 0)).not.toThrow();
     for (const expiresAt of [60000, 360001, NaN])

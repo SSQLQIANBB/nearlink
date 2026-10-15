@@ -406,7 +406,7 @@ class EngineContractTests(unittest.TestCase):
         self.assertEqual(stun, "stun://turn.example.com:3478")
         self.assertEqual(turns, ["turn://1700000000%3Arc%3Aopaque:test%2B%2F%3D@turn.example.com:3478?transport=udp",
                                  "turns://1700000000%3Arc%3Aopaque:test%2B%2F%3D@turn.example.com:5349?transport=tcp"])
-        for field, value in [('expiresAt', 0), ('expiresAt', True), ('expiresAt', 3_900_001), ('iceTransportPolicy', 'auto'), ('iceServers', [])]:
+        for field, value in [('expiresAt', 0), ('expiresAt', True), ('expiresAt', 3_900_001), ('iceTransportPolicy', 'auto'), ('iceServers', [{}])]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 engine.ice_configuration({**config, field: value}, 0)
         for url in ['turn:user:pass@host:3478?transport=udp', 'turns:host:5349?transport=udp', 'turn:bad..host:3478?transport=tcp', 'turn:host:0?transport=tcp', 'https://host:443']:

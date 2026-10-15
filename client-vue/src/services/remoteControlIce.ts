@@ -26,7 +26,6 @@ export function validateRemoteIceConfiguration(
     value.expiresAt > sessionDeadline + 300_000 ||
     !['all', 'relay'].includes(value.iceTransportPolicy) ||
     !Array.isArray(value.iceServers) ||
-    value.iceServers.length < 1 ||
     value.iceServers.length > 4
   )
     fail();
@@ -69,7 +68,7 @@ export function validateRemoteIceConfiguration(
       hasTurn = true;
     } else if (server.username !== undefined || server.credential !== undefined) fail();
   }
-  if (!hasTurn) fail();
+  if (value.iceTransportPolicy === 'relay' && !hasTurn) fail();
 }
 
 // Native libnice consumes numeric addresses. Browser mDNS host names are skipped;

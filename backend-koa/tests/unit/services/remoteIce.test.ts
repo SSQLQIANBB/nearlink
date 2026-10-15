@@ -53,7 +53,7 @@ function fixture() {
   const settings = turnSettingsFromEnvironment({
     REMOTE_TURN_SHARED_SECRET: 'test-only-secret'.repeat(4),
   });
-  if (settings.authMode === 'static') throw new Error('Expected REST fixture');
+  if (settings.authMode === 'static' || settings.authMode === 'direct') throw new Error('Expected REST fixture');
   const service = new RemoteIceService(
     store,
     authority,
@@ -75,6 +75,23 @@ function fixture() {
   };
 }
 describe('会话TURN短期凭据', () => {
+  it('未配置中继认证时发放签名直连配置，仍保留会话校验', async () => {
+    const f = fixture();
+    const settings = turnSettingsFromEnvironment({
+      REMOTE_TURN_URLS: 'turn:turn.example.com:3478?transport=udp',
+      REMOTE_STUN_URL: '',
+    });
+    const service = new RemoteIceService(f.store, f.authority, () => settings,
+      () => f.signer, () => f.session.createdAt);
+    const result = await service.issue(f.session.id, f.session.host);
+    expect(result.iceServers).toEqual([]);
+    expect(result.iceTransportPolicy).toBe('all');
+    expect(result.proof.format).toBe('rc-signed-v1');
+    expect(f.authority.assertAuthorized).toHaveBeenCalled();
+    expect(() => turnSettingsFromEnvironment({ REMOTE_ICE_TRANSPORT_POLICY: 'relay' }))
+      .toThrow('REMOTE_ICE_UNCONFIGURED');
+  });
+
   it('仅显式静态认证模式复用旧视频TURN；仍校验会话并签名配置', async () => {
     const f = fixture();
     const settings = turnSettingsFromEnvironment({
@@ -229,7 +246,7 @@ describe('会话TURN短期凭据', () => {
     });
   });
   it('部署缺少共享密钥或签名窗口不足时明确失败，不回退到视频固定密码', async () => {
-    expect(() => turnSettingsFromEnvironment({})).toThrow('REMOTE_ICE_UNCONFIGURED');
+    expect(() => turnSettingsFromEnvironment({ REMOTE_TURN_AUTH_MODE: 'rest' })).toThrow('REMOTE_ICE_UNCONFIGURED');
     const f = fixture();
     const missing = new RemoteIceService(
       f.store,

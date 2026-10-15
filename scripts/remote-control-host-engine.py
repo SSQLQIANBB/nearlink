@@ -273,7 +273,7 @@ def ice_configuration(payload, now_ms):
     if (not isinstance(payload, dict) or set(payload) != {"iceServers", "iceTransportPolicy", "expiresAt"}
             or payload["iceTransportPolicy"] not in {"all", "relay"} or type(payload["expiresAt"]) is not int
             or not now_ms < payload["expiresAt"] <= now_ms + 3_900_000
-            or not isinstance(payload["iceServers"], list) or not 1 <= len(payload["iceServers"]) <= 4):
+            or not isinstance(payload["iceServers"], list) or not 0 <= len(payload["iceServers"]) <= 4):
         raise ValueError("INVALID_ICE_CONFIGURATION")
     stun, turns = None, []
     for server in payload["iceServers"]:
@@ -300,7 +300,7 @@ def ice_configuration(payload, now_ms):
                         raise ValueError("INVALID_ICE_CONFIGURATION")
                 turns.append(f"{scheme}://{quote(server['username'], safe='')}:{quote(server['credential'], safe='')}@{host}:{port}?transport={transport}")
         if len(kinds) != 1: raise ValueError("INVALID_ICE_CONFIGURATION")
-    if not turns: raise ValueError("INVALID_ICE_CONFIGURATION")
+    if payload["iceTransportPolicy"] == "relay" and not turns: raise ValueError("INVALID_ICE_CONFIGURATION")
     return stun, turns
 
 

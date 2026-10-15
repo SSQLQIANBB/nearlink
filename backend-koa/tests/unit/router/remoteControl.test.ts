@@ -168,6 +168,7 @@ describe('远控REST真实HTTP权限边界', () => {
     mocks.validate.mockResolvedValue({ ...session.host, sid: randomUUID() });
     expect((await read(`/sessions/${session.id}/ice`)).status).toBe(403);
     mocks.validate.mockResolvedValue(session.host);
+    vi.stubEnv('REMOTE_TURN_AUTH_MODE', 'rest');
     vi.stubEnv('REMOTE_TURN_SHARED_SECRET', '');
     const missing = await read(`/sessions/${session.id}/ice`);
     expect(missing.status).toBe(503);

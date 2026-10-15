@@ -56,23 +56,40 @@ export const iceServerSchema = z
   });
 export const iceConfigurationSchema = z
   .object({
-    iceServers: z.array(iceServerSchema).min(1).max(4),
+    iceServers: z.array(iceServerSchema).max(4),
     iceTransportPolicy: z.enum(['all', 'relay']),
     expiresAt: z.number().int().positive().safe(),
   })
   .strict()
-  .refine((value) =>
-    value.iceServers.some((server) => server.urls.some((url) => url.startsWith('turn'))),
+  .refine(
+    (value) =>
+      value.iceTransportPolicy === 'all' ||
+      value.iceServers.some((server) => server.urls.some((url) => url.startsWith('turn'))),
   );
 export type RemoteIceConfiguration = z.infer<typeof iceConfigurationSchema>;
 export type IceAuth = Pick<RemoteEndpoint, 'userId' | 'sid' | 'authVersion'>;
 export type TurnSettings = { urls: string[]; stunUrl?: string; policy: 'all' | 'relay' } & (
+  | { authMode: 'direct' }
   | { authMode?: 'rest'; secret: string }
   | { authMode: 'static'; username: string; credential: string }
 );
 
 /** Static compatibility is explicit deployment configuration, never an automatic fallback. */
 export function turnSettingsFromEnvironment(env: NodeJS.ProcessEnv = process.env): TurnSettings {
+  // Host candidates do not require TURN. Do not silently ignore a partial relay configuration.
+  if (
+    !env.REMOTE_TURN_AUTH_MODE &&
+    !env.REMOTE_TURN_SHARED_SECRET &&
+    !env.REMOTE_TURN_USERNAME &&
+    !env.REMOTE_TURN_PASSWORD &&
+    (!env.REMOTE_ICE_TRANSPORT_POLICY || env.REMOTE_ICE_TRANSPORT_POLICY === 'all')
+  ) {
+    const stunUrl = env.REMOTE_STUN_URL === '' ? undefined :
+      env.REMOTE_STUN_URL || 'stun:turn.sycsq.top:3478';
+    if (stunUrl && (!turnUrl.safeParse(stunUrl).success || !stunUrl.startsWith('stun:')))
+      throw new RemoteControlError('REMOTE_ICE_CONFIGURATION_INVALID', 503);
+    return { authMode: 'direct', urls: [], stunUrl, policy: 'all' };
+  }
   const authMode = env.REMOTE_TURN_AUTH_MODE || 'rest';
   if (!['rest', 'static'].includes(authMode))
     throw new RemoteControlError('REMOTE_ICE_CONFIGURATION_INVALID', 503);
@@ -168,10 +185,10 @@ export class RemoteIceService {
     // Fixed signed configuration expiry; static TURN passwords themselves do not expire.
     // Neither TURN mode supplies consent or replaces the native 15-second lease.
     const expiresAt = Math.floor((current!.hardDeadline + TURN_GRACE_MS) / 1000) * 1000;
-    let username: string, credential: string;
+    let username: string | undefined, credential: string | undefined;
     if (settings.authMode === 'static') {
       ({ username, credential } = settings);
-    } else {
+    } else if (settings.authMode !== 'direct') {
       const opaque = createHmac('sha256', settings.secret)
         .update(
           `todesk-turn/v1\n${id}\n${endpoint.endpointId}\n${endpoint.connectionId}\n${endpoint.generation}`,
@@ -184,7 +201,7 @@ export class RemoteIceService {
     const config = iceConfigurationSchema.parse({
       iceServers: [
         ...(settings.stunUrl && settings.policy === 'all' ? [{ urls: [settings.stunUrl] }] : []),
-        { urls: settings.urls, username, credential },
+        ...(settings.authMode === 'direct' ? [] : [{ urls: settings.urls, username, credential }]),
       ],
       iceTransportPolicy: settings.policy,
       expiresAt,
