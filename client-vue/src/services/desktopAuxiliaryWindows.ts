@@ -1,3 +1,4 @@
+import { createScreenShareApi, type ScreenShareScope } from '@/features/screenShare/api';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { watch } from 'vue';
 import type { Socket } from 'socket.io-client';
@@ -10,6 +11,7 @@ import { DesktopWindowChannel, prepareDesktopWindowChannel } from './desktopWind
 
 export type AuxiliaryContent =
   | { kind: 'image'; src: string; alt: string }
+  | { kind: 'screen'; path: string; scope: ScreenShareScope }
   | { kind: 'group'; path: string; groupId: number; deviceType: number }
   | { kind: 'private'; request?: { user: CallUser; type: 0 | 1 | 2 }; incoming?: IncomingCall };
 type IncomingCall = { from: string; callId?: string; deviceType: 0 | 1 | 2; user?: CallUser };
@@ -42,6 +44,10 @@ function endSession(session: Session) {
   if (content.kind === 'private') {
     const socketId = content.request?.user.socketId || content.incoming?.from;
     if (socketId) socket?.emit('webrtc_hangup', { to: { socketId } });
+  } else if (content.kind === 'screen') {
+    const api = createScreenShareApi(content.scope, () => socket);
+    api.send('end');
+    api.send('leave');
   } else if (content.kind === 'group') {
     const payload = { groupId: content.groupId, deviceType: content.deviceType };
     socket?.emit('group_call_end', payload);
@@ -115,7 +121,7 @@ export async function openAuxiliaryWindow(content: AuxiliaryContent) {
       : mediaOccupancy.acquire(
           content.kind === 'private'
             ? 'private-call'
-            : content.deviceType === 2
+            : content.kind === 'screen' || content.deviceType === 2
               ? 'group-screen'
               : 'group-call',
           `window:${label}`,
@@ -124,7 +130,10 @@ export async function openAuxiliaryWindow(content: AuxiliaryContent) {
   if (content.kind !== 'image' && !claim) throw new Error('请先结束当前通话或远程控制');
   const id = crypto.randomUUID();
   const channel = new DesktopWindowChannel(id, label);
-  const path = content.kind === 'group' ? content.path : `/desktop-${content.kind}`;
+  const path =
+    content.kind === 'group' || content.kind === 'screen'
+      ? content.path
+      : `/desktop-${content.kind}`;
   const child = new WebviewWindow(label, {
     url: `index.html?auxiliary=${id}#${path}`,
     title: content.kind === 'image' ? '图片预览 · NearLink' : '通话 · NearLink',
@@ -230,6 +239,14 @@ export async function openDesktopGroupWindow(path: string) {
   if (!isDesktopWindow || isAuxiliaryWindow) return false;
   const match = /^\/group-(video|audio|screen)\/(\d+)$/.exec(path);
   if (!match) return false;
+  if (match[1] === 'screen') {
+    await openAuxiliaryWindow({
+      kind: 'screen',
+      path,
+      scope: { kind: 'group', id: Number(match[2]) },
+    });
+    return true;
+  }
   await openAuxiliaryWindow({
     kind: 'group',
     path,
@@ -250,7 +267,10 @@ export function installDesktopAuxiliaryHost(onError: (error: unknown) => void) {
     else session.queue.push({ event, args });
   }
   function incoming(data: IncomingCall) {
-    if (![0, 1, 2].includes(data.deviceType)) return;
+    if (![0, 2].includes(data.deviceType)) {
+      store.socket?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
+      return;
+    }
     const session = sessions.get('media-call');
     if (session?.content.kind === 'private') return; // 已由 relay 送给当前通话处理忙线。
     if (mediaOccupancy.current.value || session) {
@@ -285,6 +305,14 @@ export function installDesktopAuxiliaryHost(onError: (error: unknown) => void) {
     (request) => {
       if (!request) return;
       calls.request = null;
+      if (request.type === 1) {
+        void openAuxiliaryWindow({
+          kind: 'screen',
+          path: `/screen-share/private/${request.user.id}`,
+          scope: { kind: 'private', peerId: request.user.id },
+        }).catch(onError);
+        return;
+      }
       void openAuxiliaryWindow({
         kind: 'private',
         request: JSON.parse(JSON.stringify(request)),

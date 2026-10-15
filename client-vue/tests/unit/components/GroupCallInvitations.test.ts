@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, Function>(),
   info: vi.fn(),
   push: vi.fn(),
+  emit: vi.fn(),
   destroy: vi.fn(),
   startRingtone: vi.fn(),
   stopRingtone: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { id: 2 } 
 vi.mock('@/stores/socket', () => ({
   useSocketStore: () => ({
     socket: {
+      emit: mocks.emit,
       on: (event: string, handler: Function) => mocks.handlers.set(event, handler),
       off: (event: string) => mocks.handlers.delete(event),
     },
@@ -48,19 +50,22 @@ beforeEach(() => {
 });
 
 describe('群组通话全局邀请', () => {
-  it.each(['video', 'audio', 'screen'])('在其他页面收到 %s 邀请，接受后进入对应会话', (type) => {
-    const wrapper = mount(GroupCallInvitations);
-    mocks.handlers.get('group_call_started')!({ ...session, type });
-    expect(mocks.info).toHaveBeenCalledOnce();
-    const options = mocks.info.mock.calls[0]![0];
-    expect(options.content).toContain('Alice');
-    expect(mocks.startRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
-    expect(mocks.push).not.toHaveBeenCalled();
-    options.onPositiveClick();
-    expect(mocks.stopRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
-    expect(mocks.push).toHaveBeenCalledWith(`/group-${type}/7`);
-    wrapper.unmount();
-  });
+  it.each(['video', 'audio', 'screen'])(
+    '在其他页面收到 %s 邀请，接受后进入对应会话',
+    async (type) => {
+      const wrapper = mount(GroupCallInvitations);
+      mocks.handlers.get('group_call_started')!({ ...session, type });
+      expect(mocks.info).toHaveBeenCalledOnce();
+      const options = mocks.info.mock.calls[0]![0];
+      expect(options.content).toContain('Alice');
+      expect(mocks.startRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
+      expect(mocks.push).not.toHaveBeenCalled();
+      await options.onPositiveClick();
+      expect(mocks.stopRingtone).toHaveBeenCalledWith(`group:7:${type}:2026-09-12`);
+      expect(mocks.push).toHaveBeenCalledWith(`/group-${type}/7`);
+      wrapper.unmount();
+    },
+  );
 
   it('不向发起人弹窗，重复事件不重复邀请，暂不加入不跳转', () => {
     const wrapper = mount(GroupCallInvitations);
@@ -84,4 +89,20 @@ describe('群组通话全局邀请', () => {
     wrapper.unmount();
     expect(mocks.handlers.size).toBe(0);
   });
+});
+
+it('个人屏幕邀请进入通用共享页，拒绝使用同一 API', async () => {
+  const wrapper = mount(GroupCallInvitations);
+  mocks.handlers.get('group_call_started')!({ ...session, groupId: 'private:1:2', type: 'screen' });
+  const options = mocks.info.mock.calls[0]![0];
+  expect(options.title).toBe('屏幕共享邀请');
+  await options.onPositiveClick();
+  expect(mocks.push).toHaveBeenCalledWith('/screen-share/private/1');
+  options.onNegativeClick();
+  expect(mocks.emit).toHaveBeenCalledWith('screen_share', {
+    scope: { kind: 'private', peerId: 1 },
+    action: 'decline',
+    payload: { startedAt: session.startedAt },
+  });
+  wrapper.unmount();
 });

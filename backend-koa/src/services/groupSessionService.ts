@@ -1,3 +1,4 @@
+import type { MediaScopeId } from './screenShareScope';
 export type GroupSessionType = 'video' | 'audio' | 'screen';
 
 export type GroupSessionOwner = {
@@ -6,7 +7,7 @@ export type GroupSessionOwner = {
 };
 
 export type GroupSession = {
-  groupId: number;
+  groupId: MediaScopeId;
   type: GroupSessionType;
   channelId: string;
   ownerUserId: number;
@@ -30,15 +31,15 @@ export class GroupSessionService {
   private lastStartedAt = 0;
   constructor(private readonly store: GroupSessionStore) {}
 
-  private getKey(groupId: number, type: GroupSessionType) {
+  private getKey(groupId: MediaScopeId, type: GroupSessionType) {
     return `group:session:${groupId}:${type}`;
   }
 
-  private getChannelId(groupId: number, type: GroupSessionType) {
+  private getChannelId(groupId: MediaScopeId, type: GroupSessionType) {
     return `group:${groupId}:${type}`;
   }
 
-  async start(groupId: number, type: GroupSessionType, owner: GroupSessionOwner) {
+  async start(groupId: MediaScopeId, type: GroupSessionType, owner: GroupSessionOwner) {
     const key = this.getKey(groupId, type);
     this.lastStartedAt = Math.max(Date.now(), this.lastStartedAt + 1);
     const session: GroupSession = {
@@ -59,11 +60,11 @@ export class GroupSessionService {
     return { created: false, session: existing };
   }
 
-  async get(groupId: number, type: GroupSessionType) {
+  async get(groupId: MediaScopeId, type: GroupSessionType) {
     return this.store.get(this.getKey(groupId, type));
   }
 
-  async getGroupState(groupId: number): Promise<GroupSessionState> {
+  async getGroupState(groupId: MediaScopeId): Promise<GroupSessionState> {
     const [video, audio, screen] = await Promise.all([
       this.get(groupId, 'video'),
       this.get(groupId, 'audio'),
@@ -72,7 +73,12 @@ export class GroupSessionService {
     return { video, audio, screen };
   }
 
-  async end(groupId: number, type: GroupSessionType, userId: number, expected?: GroupSession) {
+  async end(
+    groupId: MediaScopeId,
+    type: GroupSessionType,
+    userId: number,
+    expected?: GroupSession,
+  ) {
     const key = this.getKey(groupId, type);
     const session = await this.store.get(key);
     if (!session || session.ownerUserId !== userId) return false;

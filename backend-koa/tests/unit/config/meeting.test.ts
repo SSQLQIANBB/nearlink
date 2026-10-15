@@ -73,7 +73,13 @@ vi.mock('../../../src/services/redisGroupSessionStore', () => ({
   RedisGroupSessionStore: class {},
 }));
 vi.mock('../../../src/services/redisScreenAnnotationStore', () => ({
-  RedisScreenAnnotationStore: class {},
+  RedisScreenAnnotationStore: class {
+    async get() {
+      return [];
+    }
+    async set() {}
+    async delete() {}
+  },
 }));
 import initialMeeting from '../../../src/config/meeting';
 
@@ -698,5 +704,142 @@ describe('群组访问与媒体隔离', () => {
     complete({ role: 'owner' });
     await joining;
     expect(alice.socket.join).not.toHaveBeenCalled();
+  });
+});
+
+describe('通用屏幕共享 API', () => {
+  async function setup() {
+    initialMeeting({} as any);
+    const alice = connect(1),
+      bob = connect(2),
+      outsider = connect(3);
+    for (const [client, token] of [
+      [alice, '1'],
+      [bob, '2'],
+      [outsider, '3'],
+    ] as const)
+      await client.handlers.get('authenticate')!({ token });
+    return { alice, bob, outsider };
+  }
+  const scope = { kind: 'private', peerId: 2 };
+  async function send(
+    client: ReturnType<typeof connect>,
+    action: string,
+    target = scope,
+    payload = {},
+  ) {
+    await client.handlers.get('screen_share')!({ scope: target, action, payload });
+  }
+  it('个人与群组开始共享复用会话引擎，个人不访问群成员表', async () => {
+    const { alice } = await setup();
+    mock.member.mockClear();
+    await send(alice, 'start');
+    expect(mock.start).toHaveBeenCalledWith(
+      'private:1:2',
+      'screen',
+      expect.objectContaining({ id: 1 }),
+    );
+    expect(mock.member).not.toHaveBeenCalled();
+    expect(mock.broadcasts.find((item) => item.event === 'group_call_started')?.rooms).toEqual([
+      'socket-1',
+      'socket-2',
+    ]);
+    await alice.handlers.get('screen_share')!({ scope: { kind: 'group', id: 7 }, action: 'start' });
+    expect(mock.start).toHaveBeenCalledWith(7, 'screen', expect.objectContaining({ id: 1 }));
+    expect(mock.member).toHaveBeenCalled();
+  });
+  it('双方加入后走同一套 SDP/标注/退出，第三人不能伪造共享范围', async () => {
+    const { alice, bob, outsider } = await setup();
+    await send(alice, 'start');
+    const startedAt = mock.session.startedAt;
+    await send(alice, 'join', scope, { startedAt });
+    await send(bob, 'join', { kind: 'private', peerId: 1 }, { startedAt });
+    expect(bob.socket.join).toHaveBeenCalledWith('group:private:1:2:screen');
+    mock.broadcasts.length = 0;
+    await send(alice, 'offer', scope, { startedAt, to: bob.socket.id, offer: { sdp: 'screen' } });
+    expect(mock.broadcasts.some((item) => item.event === 'group_webrtc_offer')).toBe(true);
+    mock.broadcasts.length = 0;
+    await send(
+      outsider,
+      'offer',
+      { kind: 'private', peerId: 1 },
+      { groupId: 'private:1:2', startedAt, to: bob.socket.id, offer: {} },
+    );
+    expect(mock.get).toHaveBeenLastCalledWith('private:1:3', 'screen');
+    expect(mock.broadcasts).toHaveLength(0);
+    await send(alice, 'clear', scope, { startedAt });
+    expect(mock.broadcasts.some((item) => item.event === 'screen_annotation_clear')).toBe(true);
+    await send(bob, 'leave', { kind: 'private', peerId: 1 });
+    expect(mock.end).toHaveBeenCalledWith(
+      'private:1:2',
+      'screen',
+      1,
+      expect.objectContaining({ startedAt }),
+    );
+    expect(mock.groupMessageCreate).not.toHaveBeenCalled();
+    expect(mock.messageCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ fromUserId: 1, toUserId: 2 }),
+    );
+  });
+  it('拒绝邀请结束准确会话并记录拒绝，旧邀请不影响新共享', async () => {
+    const { alice, bob } = await setup();
+    await send(alice, 'start');
+    await send(bob, 'decline', { kind: 'private', peerId: 1 }, { startedAt: 'old' });
+    expect(mock.end).not.toHaveBeenCalled();
+    await send(
+      bob,
+      'decline',
+      { kind: 'private', peerId: 1 },
+      { startedAt: mock.session.startedAt },
+    );
+    expect(mock.end).toHaveBeenCalledOnce();
+    expect(mock.messageCreate.mock.calls[0]![0].message).toContain('rejected');
+  });
+  it('观看方断线也结束一对一共享并通知共享者', async () => {
+    const { alice, bob } = await setup();
+    await send(alice, 'start');
+    await send(alice, 'join', scope, { startedAt: mock.session.startedAt });
+    await send(bob, 'join', { kind: 'private', peerId: 1 }, { startedAt: mock.session.startedAt });
+    mock.broadcasts.length = 0;
+    await bob.handlers.get('disconnect')!();
+    expect(mock.end).toHaveBeenCalledWith('private:1:2', 'screen', 1, expect.anything());
+    expect(
+      mock.broadcasts.some(
+        (item) => item.event === 'group_call_ended' && item.rooms.includes('socket-1'),
+      ),
+    ).toBe(true);
+  });
+  it('结束操作使尚未完成用户校验的开始请求失效', async () => {
+    const { alice } = await setup();
+    let complete!: (user: unknown) => void;
+    mock.findUser.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const pending = send(alice, 'start');
+    await send(alice, 'end');
+    complete({ id: 2 });
+    await pending;
+    expect(mock.start).not.toHaveBeenCalled();
+  });
+  it('不允许同一用户从第二个端点重复加入一对一会话', async () => {
+    const { alice, bob } = await setup();
+    await send(alice, 'start');
+    await send(bob, 'join', { kind: 'private', peerId: 1 }, { startedAt: mock.session.startedAt });
+    const second = connect(22);
+    await second.handlers.get('authenticate')!({ token: '2' });
+    await send(
+      second,
+      'join',
+      { kind: 'private', peerId: 1 },
+      { startedAt: mock.session.startedAt },
+    );
+    expect(second.socket.join).not.toHaveBeenCalled();
+    expect(second.socket.emit).toHaveBeenCalledWith(
+      'group_call_error',
+      expect.objectContaining({ message: '您已在另一台设备加入共享' }),
+    );
   });
 });

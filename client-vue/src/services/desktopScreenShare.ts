@@ -1,6 +1,6 @@
 import { shallowRef } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { emitTo, listen } from '@tauri-apps/api/event';
 
 export interface DesktopShareSource {
   id: string;
@@ -8,6 +8,14 @@ export interface DesktopShareSource {
   app: string;
   kind: 'display' | 'window';
 }
+import { qualityPresets, type ShareQuality } from '@/features/screenShare/quality';
+const captureQuality = new WeakMap<MediaStreamTrack, (quality: ShareQuality) => void>();
+export function updateDesktopShareQuality(track: MediaStreamTrack, quality: ShareQuality) {
+  const update = captureQuality.get(track);
+  if (!update) throw new Error('桌面共享已结束');
+  update(quality);
+}
+
 type Selection = { id: string; smooth: boolean };
 export const screenPicker = shallowRef<{
   select: (selection: Selection) => void;
@@ -23,10 +31,14 @@ export function cancelDesktopScreenShare() {
 }
 
 /** Native frames become a normal video track; existing WebRTC and stop paths stay shared. */
-export async function captureDesktopScreen(): Promise<MediaStream> {
+export async function captureDesktopScreen(
+  initialQuality?: ShareQuality,
+  changeQuality?: (quality: string) => Promise<ShareQuality>,
+): Promise<MediaStream> {
   if (disposeCapture) throw new Error('已有共享正在启动或进行');
   desktopShareError.value = '';
   let stopped = false;
+  let quality = initialQuality;
   let token: number | undefined;
   let unlisten: (() => void) | undefined;
   let videoTrack: MediaStreamTrack | undefined;
@@ -38,6 +50,7 @@ export async function captureDesktopScreen(): Promise<MediaStream> {
     stopped = true;
     unlisten?.();
     stopTrack?.();
+    if (videoTrack) captureQuality.delete(videoTrack);
     canvas.width = canvas.height = 0;
     desktopShareStarting.value = false;
     if (token !== undefined)
@@ -85,10 +98,32 @@ export async function captureDesktopScreen(): Promise<MediaStream> {
       assertActive();
     }
     unlisten = detach;
+    if (changeQuality) {
+      const detachQuality = await listen<{ token: number; quality: string }>(
+        'desktop-share-quality',
+        async ({ payload }) => {
+          if (stopped || payload.token !== token) return;
+          const quality = await changeQuality(payload.quality);
+          if (!stopped)
+            await emitTo('share-toolbar', 'desktop-share-quality-state', { token, quality });
+        },
+      );
+      if (stopped) {
+        detachQuality();
+        assertActive();
+      }
+      unlisten = () => {
+        detach();
+        detachQuality();
+      };
+    }
     const drawFrame = async () => {
       const bytes = await invoke<ArrayBuffer>('screen_share_frame', {
         token,
         smooth: selection.smooth,
+        ...(quality
+          ? { maxEdge: qualityPresets[quality].width, frameRate: qualityPresets[quality].frameRate }
+          : {}),
       });
       assertActive();
       const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
@@ -110,8 +145,12 @@ export async function captureDesktopScreen(): Promise<MediaStream> {
     // background setTimeout / automatic canvas capture throttling.
     const stream = canvas.captureStream(0);
     videoTrack = stream.getVideoTracks()[0]!;
+    videoTrack.contentHint = selection.smooth ? 'motion' : 'detail';
     stopTrack = videoTrack.stop.bind(videoTrack);
     videoTrack.stop = dispose;
+    captureQuality.set(videoTrack, (value) => {
+      quality = value;
+    });
     (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
     await invoke('screen_share_present', { token });
     assertActive();

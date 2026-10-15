@@ -617,6 +617,7 @@
 </template>
 
 <script setup lang="ts">
+import { openScreenShare } from '@/features/screenShare';
 import { h, ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDialog, useMessage, type FormInst, type FormRules } from 'naive-ui';
@@ -635,7 +636,6 @@ import {
 import { getUserList } from '@/api/auth';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
-import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
 import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 import { groupSessionState } from '@/services/groupSessionState';
@@ -885,26 +885,10 @@ function handleVideoCall(group: Group) {
 
 // 群组屏幕共享
 async function handleScreenShare(group: Group) {
-  if (isDesktopWindow) {
-    try {
-      await openDesktopGroupWindow(`/group-screen/${group.id}`);
-    } catch (error: any) {
-      message.warning(error.message);
-    }
-    return;
-  }
-  if (groupSessionState.getSession(group.id, 'screen')) {
-    await router.push(`/group-screen/${group.id}`);
-    return;
-  }
   try {
-    await captureGroupScreen(group.id);
-    if (socketStore.authenticated)
-      socketStore.socket?.emit('group_call_start', { groupId: group.id, deviceType: 2 });
-    await router.push(`/group-screen/${group.id}`);
+    await openScreenShare({ kind: 'group', id: group.id }, router);
   } catch (error: any) {
-    discardCapturedGroupScreen(group.id);
-    if (error?.name !== 'NotAllowedError') message.error('无法开始屏幕共享: ' + error.message);
+    if (error?.name !== 'NotAllowedError') message.error(error.message);
   }
 }
 

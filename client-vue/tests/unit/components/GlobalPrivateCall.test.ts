@@ -201,7 +201,7 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     wrapper.unmount();
   });
 
-  it.each([0, 1, 2])('在任意页面收到类型 %s 并直接接听，回复实际来电者', async (type) => {
+  it.each([0, 2])('在任意页面收到类型 %s 并直接接听，回复实际来电者', async (type) => {
     const wrapper = render();
     request(type);
     await nextTick();
@@ -235,7 +235,7 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
   });
   it('来电取消会关闭邀请，其他人的挂断不影响当前来电', async () => {
     const wrapper = render();
-    request(1);
+    request(0);
     mocks.handlers.get('webrtc_hangup')!({ from: 'outsider' });
     await nextTick();
     expect(wrapper.findAllComponents(Modal)[0]!.props('show')).toBe(true);

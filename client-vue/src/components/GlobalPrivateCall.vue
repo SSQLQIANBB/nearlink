@@ -9,27 +9,6 @@
     :aria-modal="isFullscreen"
     :aria-label="callTitle"
   >
-    <header
-      v-if="connectionType === DEVICE_TYPE.SCREEN"
-      class="private-call__header"
-      @pointerdown="beginFloatingDrag"
-    >
-      <div class="private-call__title">
-        <strong>{{ callTitle }} · {{ contactUserName }}</strong>
-        <span class="private-call__status">
-          {{ connectionStatus === 'connected' ? '已连接' : '连接中' }}
-        </span>
-      </div>
-      <div class="private-call__actions">
-        <n-button
-          size="small"
-          type="error"
-          @click="hangup"
-        >
-          挂断
-        </n-button>
-      </div>
-    </header>
     <div class="private-call__stage">
       <div
         v-if="connectionType === DEVICE_TYPE.AUDIO"
@@ -101,13 +80,7 @@
           摄像头已关闭
         </div>
         <span class="private-call__caption">
-          {{
-            isLocalMain
-              ? connectionType === DEVICE_TYPE.SCREEN
-                ? '我的共享画面'
-                : '我'
-              : '对方画面'
-          }}
+          {{ isLocalMain ? '我' : '对方画面' }}
         </span>
       </div>
       <div
@@ -245,20 +218,21 @@
 <script lang="ts" setup>
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
-import { captureDesktopScreen } from '@/services/desktopScreenShare';
+import { openScreenShare } from '@/features/screenShare';
+import { useRouter } from 'vue-router';
+const router = useRouter();
 import { createRequestId } from '@/utils/requestId';
 import { isAppInBackground } from '@/services/appVisibility';
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';
 import notificationService from '@/services/notificationService';
-import { cameraConstraints, screenRecordConstraints } from '@/views/remoteShare/components/config';
+import { cameraConstraints } from '@/views/remoteShare/components/config';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
-import { useMessage, NModal, NButton, NIcon, NAvatar } from 'naive-ui';
+import { useMessage, NModal, NIcon, NAvatar } from 'naive-ui';
 
 enum DEVICE_TYPE {
   CAMERA = 0,
-  SCREEN = 1,
   AUDIO = 2,
 }
 
@@ -295,17 +269,13 @@ const connectModalShow = ref(false);
 const isFullscreen = ref(true);
 const isConnecting = ref(false);
 const isConnected = ref(false);
-const isScreenSender = ref(false);
 const showLocalMain = ref(false);
 const isMicrophoneMuted = ref(false);
 const isCameraOff = ref(false);
 const mainStreamReady = ref(false);
 const smallStreamReady = ref(false);
-const isLocalMain = computed(() =>
-  connectionType.value === DEVICE_TYPE.SCREEN ? isScreenSender.value : showLocalMain.value,
-);
+const isLocalMain = computed(() => showLocalMain.value);
 const callTitle = computed(() => {
-  if (connectionType.value === DEVICE_TYPE.SCREEN) return '屏幕共享';
   return connectionType.value === DEVICE_TYPE.AUDIO ? '语音通话' : '视频通话';
 });
 const floatingPosition = ref<{ left: number; top: number } | null>(null);
@@ -338,7 +308,6 @@ const contactUserName = computed(() => {
   return activePeer.value?.nickname || activePeer.value?.username || '对方';
 });
 const incomingCallTitle = computed(() => {
-  if (incomingCallType.value === DEVICE_TYPE.SCREEN) return '请求屏幕共享';
   return incomingCallType.value === DEVICE_TYPE.AUDIO ? '发起语音通话' : '发起视频通话';
 });
 
@@ -472,7 +441,6 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
     connectionType.value = type;
-    isScreenSender.value = type === DEVICE_TYPE.SCREEN;
 
     const attempt = generation;
     // 先获取媒体流
@@ -513,20 +481,12 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
     const stream =
       type === DEVICE_TYPE.CAMERA
         ? await mediaDevices.getUserMedia(cameraConstraints)
-        : type === DEVICE_TYPE.AUDIO
-          ? await mediaDevices.getUserMedia({ audio: true, video: false })
-          : isAuxiliaryWindow
-            ? await captureDesktopScreen()
-            : await mediaDevices.getDisplayMedia(screenRecordConstraints);
+        : await mediaDevices.getUserMedia({ audio: true, video: false });
     if (attempt !== generation || !owner?.isCurrent()) {
       stream.getTracks().forEach((track) => track.stop());
       return;
     }
     currentStream = stream;
-    if (type === DEVICE_TYPE.SCREEN)
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-        if (attempt === generation && owner.isCurrent()) hangup();
-      });
 
     await nextTick();
     syncVideos();
@@ -579,11 +539,7 @@ async function initRTC(type = RTC_TYPE.CALLER) {
     if (currentStream) {
       currentStream.getTracks().forEach((track) => {
         const sender = peer?.addTrack(track, currentStream!);
-        if (sender && track.kind === 'video')
-          void limitVideoBitrate(
-            sender,
-            connectionType.value === DEVICE_TYPE.CAMERA ? 900_000 : 1_800_000,
-          );
+        if (sender && track.kind === 'video') void limitVideoBitrate(sender, 900_000);
       });
     }
 
@@ -715,8 +671,10 @@ function handleIncomingCall(data: {
   deviceType: DEVICE_TYPE;
   user?: User;
 }) {
-  if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.SCREEN, DEVICE_TYPE.AUDIO].includes(data.deviceType))
+  if (![DEVICE_TYPE.CAMERA, DEVICE_TYPE.AUDIO].includes(data.deviceType)) {
+    socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
     return;
+  }
   if (activePeer.value || incomingCallShow.value) {
     if (activePeer.value?.socketId !== data.from) {
       socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
@@ -746,12 +704,7 @@ function handleIncomingCall(data: {
     });
   }
   if (isAppInBackground()) {
-    const type =
-      data.deviceType === DEVICE_TYPE.SCREEN
-        ? 'screen'
-        : data.deviceType === DEVICE_TYPE.AUDIO
-          ? 'audio'
-          : 'video';
+    const type = data.deviceType === DEVICE_TYPE.AUDIO ? 'audio' : 'video';
     void notificationService.showCall(incomingCallFrom.value, type, data.user?.avatar, () =>
       window.focus(),
     );
@@ -768,12 +721,9 @@ async function acceptCall() {
     connectionType.value = incomingCallType.value;
     connectModalShow.value = true;
     isFullscreen.value = true;
-    isScreenSender.value = false;
 
     const attempt = generation;
-    // 共享接收方只观看对方屏幕，无需选择自己的屏幕。
-    if (incomingCallType.value !== DEVICE_TYPE.SCREEN)
-      await initDeviceMedia(incomingCallType.value);
+    await initDeviceMedia(incomingCallType.value);
     if (attempt !== generation) return;
     await nextTick();
     syncVideos();
@@ -859,7 +809,6 @@ function cleanup() {
   isFullscreen.value = true;
   floatingPosition.value = null;
   callWindowRef.value = null;
-  isScreenSender.value = false;
   showLocalMain.value = false;
   isMicrophoneMuted.value = false;
   isCameraOff.value = false;
@@ -892,6 +841,12 @@ watch(
     callStore.request = null;
     if (activePeer.value) {
       message.warning('已有进行中的通话');
+      return;
+    }
+    if (request.type === 1) {
+      void openScreenShare({ kind: 'private', peerId: request.user.id }, router).catch((error) =>
+        message.error(error.message),
+      );
       return;
     }
     activePeer.value = request.user;
@@ -958,37 +913,6 @@ window.addEventListener('resize', clampFloatingPosition);
   flex-direction: column;
   background: #0b1220;
   color: #f8fafc;
-}
-.private-call__header {
-  min-height: 64px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 10px clamp(12px, 3vw, 32px);
-  background: #151f30;
-  border-bottom: 1px solid #334155;
-}
-.private-call__title {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-.private-call__title strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.private-call__status {
-  color: #86efac;
-  font-size: 12px;
-}
-.private-call__actions {
-  display: flex;
-  gap: 8px;
-  flex: none;
 }
 .private-call__stage {
   flex: 1;
@@ -1122,17 +1046,6 @@ window.addEventListener('resize', clampFloatingPosition);
   overflow: hidden;
   box-shadow: 0 20px 50px #0008;
 }
-.private-call--compact .private-call__header {
-  min-height: 44px;
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.private-call--compact .private-call__header:active {
-  cursor: grabbing;
-}
 .private-call--compact .private-call__stage {
   padding: 0;
 }
@@ -1150,7 +1063,6 @@ window.addEventListener('resize', clampFloatingPosition);
   width: 84px;
   border-radius: 7px;
 }
-.private-call--compact .private-call__status,
 .private-call--compact .private-call__caption {
   display: none;
 }
@@ -1227,14 +1139,6 @@ window.addEventListener('resize', clampFloatingPosition);
   color: #f8fafc;
 }
 @media (max-width: 600px) {
-  .private-call__header {
-    min-height: 56px;
-    padding: 8px 12px;
-  }
-  .private-call__title strong {
-    max-width: 40vw;
-    font-size: 13px;
-  }
   .private-call__stage {
     padding: 0;
   }

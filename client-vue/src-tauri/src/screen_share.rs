@@ -80,10 +80,15 @@ impl NativeSource {
         }
         .map_err(err)?;
         let image = DynamicImage::ImageRgba8(pixels);
-        let height = ((image.height() as u64 * width as u64 / image.width() as u64) as u32).max(1);
-        let image = image.thumbnail(width, height).to_rgb8();
+        // Keep native pixels up to the mode's longest-edge limit, including portrait displays.
+        let image = if image.width().max(image.height()) > width {
+            image.thumbnail(width, width)
+        } else {
+            image
+        }
+        .to_rgb8();
         let mut bytes = Vec::new();
-        JpegEncoder::new_with_quality(&mut bytes, 85)
+        JpegEncoder::new_with_quality(&mut bytes, if width <= 320 { 85 } else { 95 })
             .encode_image(&image)
             .map_err(err)?;
         Ok(bytes)
@@ -341,15 +346,27 @@ pub async fn screen_share_frame(
     app: tauri::AppHandle,
     token: u64,
     smooth: bool,
+    max_edge: Option<u32>,
+    frame_rate: Option<u32>,
 ) -> Result<tauri::ipc::Response> {
     media(&window)?;
     let source = source_for(&app, token)?;
     let (bytes, bounds) = tauri::async_runtime::spawn_blocking(move || {
         let deadline = std::time::Instant::now()
-            + std::time::Duration::from_millis(if smooth { 50 } else { 100 });
+            + std::time::Duration::from_millis(
+                1000 / u64::from(
+                    frame_rate
+                        .unwrap_or(if smooth { 20 } else { 10 })
+                        .clamp(1, 30),
+                ),
+            );
         let source = source.resolve()?;
         let frame = (
-            source.capture(if smooth { 1280 } else { 1600 })?,
+            source.capture(
+                max_edge
+                    .unwrap_or(if smooth { 1920 } else { 3840 })
+                    .clamp(640, 3840),
+            )?,
             source.bounds()?,
         );
         std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));

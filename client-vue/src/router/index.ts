@@ -64,6 +64,11 @@ const routes = [
     component: () => import('@/views/groupScreen.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/screen-share/:kind(private)/:id',
+    component: () => import('@/views/groupScreen.vue'),
+    meta: { requiresAuth: true },
+  },
   //#region 测试功能路由
   {
     name: 'Chat',
@@ -99,7 +104,9 @@ const router = createRouter({
 router.beforeEach(async (to, _from, next) => {
   if (
     isAuxiliaryWindow &&
-    !/^\/(desktop-(image|private)|group-(video|audio|screen)\/\d+)$/.test(to.path)
+    !/^\/(desktop-(image|private)|group-(video|audio|screen)\/\d+|screen-share\/private\/\d+)$/.test(
+      to.path,
+    )
   ) {
     closeAuxiliaryWindow();
     next(false);

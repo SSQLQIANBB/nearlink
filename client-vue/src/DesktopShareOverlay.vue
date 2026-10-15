@@ -13,6 +13,17 @@
       <span data-tauri-drag-region>正在共享屏幕</span>
       <time>{{ elapsed }}</time>
     </div>
+    <select
+      aria-label="共享清晰度"
+      :value="quality"
+      :disabled="changingQuality"
+      @change="changeQuality"
+    >
+      <option value="low">流畅</option>
+      <option value="medium">标清</option>
+      <option value="high">高清</option>
+      <option value="ultra">超清</option>
+    </select>
     <button
       class="share-toolbar__stop"
       @click="stop"
@@ -29,12 +40,51 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { emitTo, listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 const params = new URLSearchParams(location.search);
 const token = Number(params.get('token'));
 const seconds = ref(0);
 const error = ref('');
+const quality = ref('high');
+const changingQuality = ref(true);
+let disposed = false;
+let unlistenQuality: (() => void) | undefined;
+let pendingQuality = '';
+onMounted(async () => {
+  const detach = await listen<{ token: number; quality: string }>(
+    'desktop-share-quality-state',
+    ({ payload }) => {
+      if (payload.token !== token) return;
+      if (pendingQuality && pendingQuality !== payload.quality)
+        error.value = '清晰度切换失败，请重试';
+      quality.value = payload.quality;
+      changingQuality.value = false;
+    },
+  );
+  if (disposed) {
+    detach();
+    return;
+  }
+  unlistenQuality = detach;
+  await requestQuality('');
+});
+async function requestQuality(value: string) {
+  pendingQuality = value;
+  changingQuality.value = true;
+  error.value = '';
+  try {
+    await emitTo('media-call', 'desktop-share-quality', { token, quality: value });
+  } catch {
+    changingQuality.value = false;
+    error.value = '清晰度切换失败，请重试';
+  }
+}
+function changeQuality(event: Event) {
+  void requestQuality((event.target as HTMLSelectElement).value);
+}
+
 const elapsed = computed(
   () =>
     `${Math.floor(seconds.value / 60)
@@ -52,7 +102,11 @@ async function stop() {
     error.value = '停止失败，请返回通话窗口重试';
   }
 }
-onBeforeUnmount(() => clearInterval(timer));
+onBeforeUnmount(() => {
+  disposed = true;
+  unlistenQuality?.();
+  clearInterval(timer);
+});
 </script>
 <style>
 html,
@@ -97,6 +151,13 @@ body,
   font-size: 11px;
   color: #aaa;
   font-variant-numeric: tabular-nums;
+}
+.share-toolbar select {
+  background: #3b3e42;
+  color: white;
+  border: 0;
+  border-radius: 4px;
+  height: 32px;
 }
 .share-toolbar button {
   border: 0;

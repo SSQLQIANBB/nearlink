@@ -16,6 +16,9 @@ vi.mock('vue-router', () => ({
 vi.mock('naive-ui', () => ({
   useMessage: () => ({ warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() }),
 }));
+vi.mock('@/api/auth', () => ({
+  getUserList: async () => ({ users: [{ id: 2, username: 'peer' }] }),
+}));
 vi.mock('@/api/group', () => ({
   getGroupDetail: async () => ({
     group: { id: 7, name: '测试群' },
@@ -57,7 +60,7 @@ vi.mock('@/components/MediaVideo.vue', () => ({ default: { template: '<div />' }
 vi.mock('@/components/SpeakingIndicator.vue', () => ({ default: { template: '<div />' } }));
 vi.mock('@/components/ScreenAnnotation.vue', () => ({ default: { template: '<div />' } }));
 import GroupVideo from '../../../src/views/groupVideo.vue';
-import GroupScreen from '../../../src/views/groupScreen.vue';
+import GroupScreen from '../../../src/features/screenShare/ScreenShare.vue';
 import { groupSessionState } from '../../../src/services/groupSessionState';
 
 class Stream {
@@ -74,8 +77,19 @@ class Stream {
 }
 class Peer {
   close = vi.fn();
-  addTrack = vi.fn(() => ({}));
+  senders: any[] = [];
+  getSenders = () => this.senders;
+  addTrack = vi.fn((track) => {
+    const sender = {
+      track,
+      getParameters: () => ({ encodings: [{}] }),
+      setParameters: vi.fn(async () => undefined),
+    };
+    this.senders.push(sender);
+    return sender;
+  });
   addTransceiver = vi.fn(() => ({}));
+  addIceCandidate = vi.fn(async () => undefined);
   setRemoteDescription = vi.fn(async () => undefined);
   setLocalDescription = vi.fn(async () => undefined);
   createAnswer = vi.fn(async () => ({}));
@@ -95,7 +109,13 @@ const session = {
 };
 let wrapper: VueWrapper | undefined;
 let audio: { kind: string; stop: ReturnType<typeof vi.fn>; enabled: boolean };
-let video: { kind: string; stop: ReturnType<typeof vi.fn>; enabled: boolean };
+let video: {
+  kind: string;
+  stop: ReturnType<typeof vi.fn>;
+  enabled: boolean;
+  applyConstraints: ReturnType<typeof vi.fn>;
+  getConstraints: () => MediaTrackConstraints;
+};
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
@@ -103,7 +123,13 @@ beforeEach(() => {
   mock.peers.length = 0;
   groupSessionState.clearGroup(7);
   audio = { kind: 'audio', stop: vi.fn(), enabled: true };
-  video = { kind: 'video', stop: vi.fn(), enabled: true };
+  video = {
+    kind: 'video',
+    stop: vi.fn(),
+    enabled: true,
+    applyConstraints: vi.fn(async () => undefined),
+    getConstraints: () => ({}),
+  };
   mock.getUserMedia.mockResolvedValue(new Stream([audio, video]));
   mock.captured = null;
   Object.defineProperty(navigator, 'mediaDevices', {
@@ -132,12 +158,12 @@ async function open(kind: 'video' | 'screen') {
     groupSessionState.applyStarted(session);
   }
   wrapper = shallowMount(kind === 'video' ? GroupVideo : GroupScreen, {
+    props: kind === 'screen' ? { scope: { kind: 'group' as const, id: 7 } } : {},
     global: { config: { warnHandler: () => undefined } },
   });
   await flushPromises();
   const active = { ...session, type: kind, channelId: `group:7:${kind}` };
-  if (kind === 'video')
-    mock.handlers.get('group_call_state')!({ groupId: 7, sessions: { video: active } });
+  mock.handlers.get('group_call_state')!({ groupId: 7, sessions: { [kind]: active } });
   await mock.handlers.get('group_call_members')!({
     groupId: 7,
     type: kind,
@@ -158,7 +184,7 @@ describe.each(['video', 'screen'] as const)('%s 页面授权撤销', (kind) => {
       expect(audio.stop).toHaveBeenCalled();
       expect(video.stop).toHaveBeenCalled();
       expect(mock.peers.every((peer) => peer.close.mock.calls.length > 0)).toBe(true);
-      expect(mock.replace).toHaveBeenCalledWith('/groups');
+      expect(mock.replace).toHaveBeenCalledWith(kind === 'screen' ? '/group-chat/7' : '/groups');
       expect(mock.handlers.has('group_webrtc_offer')).toBe(false);
       expect(mock.handlers.has('group_call_state')).toBe(false);
     },
@@ -177,8 +203,15 @@ describe.each(['video', 'screen'] as const)('%s 页面授权撤销', (kind) => {
       offer: {},
     });
     expect(mock.peers).toHaveLength(count);
-    const join = mock.emit.mock.calls.find(([event]) => event === 'join_group_call');
-    expect(join?.[1]).toMatchObject({ groupId: 7, startedAt: session.startedAt });
+    const join = mock.emit.mock.calls.find(([event, data]) =>
+      kind === 'video'
+        ? event === 'join_group_call'
+        : event === 'screen_share' && data.action === 'join',
+    );
+    expect(kind === 'video' ? join?.[1] : join?.[1].payload).toMatchObject({
+      groupId: 7,
+      startedAt: session.startedAt,
+    });
   });
 });
 
@@ -216,4 +249,150 @@ it('退出时立即停止屏幕，并释放随后授权成功的麦克风', asyn
   expect(audio.stop).toHaveBeenCalled();
   expect(mock.emit).not.toHaveBeenCalledWith('group_call_start', expect.anything());
   expect(mock.emit).not.toHaveBeenCalledWith('join_group_call', expect.anything());
+  expect(
+    mock.emit.mock.calls.some(
+      ([event, data]) => event === 'screen_share' && ['start', 'join'].includes(data.action),
+    ),
+  ).toBe(false);
+});
+
+it('个人会话复用共享组件的采集、标注、成员和退出链路', async () => {
+  mock.captured = new Stream([video]);
+  wrapper = shallowMount(GroupScreen, {
+    props: { scope: { kind: 'private', peerId: 2 } },
+    global: { config: { warnHandler: () => undefined } },
+  });
+  await flushPromises();
+  expect(mock.emit).toHaveBeenCalledWith(
+    'screen_share',
+    expect.objectContaining({
+      scope: { kind: 'private', peerId: 2 },
+      action: 'start',
+    }),
+  );
+  const privateSession = {
+    ...session,
+    groupId: 'private:1:2',
+    channelId: 'group:private:1:2:screen',
+  };
+  mock.handlers.get('group_call_state')!({
+    groupId: 'private:1:2',
+    sessions: { screen: privateSession },
+  });
+  await flushPromises();
+  mock.handlers.get('group_call_members')!({
+    ...privateSession,
+    members: [{ id: 2, username: 'peer', socketId: 'peer' }],
+  });
+  await flushPromises();
+  expect(mock.peers).toHaveLength(1);
+  const state = (wrapper.vm as any).$.setupState;
+  state.sendAnnotationClear();
+  expect(mock.emit).toHaveBeenCalledWith(
+    'screen_share',
+    expect.objectContaining({
+      scope: { kind: 'private', peerId: 2 },
+      action: 'clear',
+      payload: expect.objectContaining({ startedAt: session.startedAt }),
+    }),
+  );
+  state.handleExit();
+  expect(mock.peers[0].close).toHaveBeenCalled();
+  expect(video.stop).toHaveBeenCalled();
+  expect(audio.stop).toHaveBeenCalled();
+  expect(mock.emit).toHaveBeenCalledWith(
+    'screen_share',
+    expect.objectContaining({ action: 'end' }),
+  );
+});
+
+it('共享连接先缓存早于 SDP 的 ICE，协商后再应用', async () => {
+  await open('screen');
+  const candidate = { candidate: 'candidate:early' };
+  await mock.handlers.get('group_webrtc_ice')!({
+    groupId: 7,
+    deviceType: 2,
+    startedAt: session.startedAt,
+    from: 'peer',
+    candidate,
+  });
+  expect(mock.peers[0].addIceCandidate).not.toHaveBeenCalled();
+  await mock.handlers.get('group_webrtc_answer')!({
+    groupId: 7,
+    deviceType: 2,
+    startedAt: session.startedAt,
+    from: 'peer',
+    answer: {},
+  });
+  expect(mock.peers[0].addIceCandidate).toHaveBeenCalledWith(candidate);
+});
+
+it('切换清晰度保留共享、麦克风、轨道和接收方连接', async () => {
+  await open('screen');
+  const state = (wrapper!.vm as any).$.setupState;
+  mock.emit.mockClear();
+  const microphoneRequests = mock.getUserMedia.mock.calls.length;
+  const peer = mock.peers[0];
+  await state.handleQualityChange('ultra');
+  expect(video.applyConstraints).toHaveBeenCalledWith({
+    width: { ideal: 2560 },
+    height: { ideal: 1440 },
+    frameRate: { ideal: 30, max: 30 },
+  });
+  expect(
+    peer.getSenders().find((sender: any) => sender.track.kind === 'video').setParameters,
+  ).toHaveBeenLastCalledWith(
+    expect.objectContaining({ encodings: [expect.objectContaining({ maxBitrate: 12_000_000 })] }),
+  );
+  expect(state.currentQuality).toBe('ultra');
+  expect(state.isSharing).toBe(true);
+  expect(mock.emit).not.toHaveBeenCalled();
+  expect(mock.getUserMedia).toHaveBeenCalledTimes(microphoneRequests);
+  expect(peer.close).not.toHaveBeenCalled();
+  expect(video.stop).not.toHaveBeenCalled();
+  expect(audio.stop).not.toHaveBeenCalled();
+});
+it('清晰度切换失败不结束共享或报告已切换', async () => {
+  await open('screen');
+  const state = (wrapper!.vm as any).$.setupState;
+  video.applyConstraints.mockRejectedValueOnce(new Error('unsupported'));
+  mock.emit.mockClear();
+  await state.handleQualityChange('ultra');
+  expect(state.currentQuality).toBe('high');
+  expect(state.isSharing).toBe(true);
+  expect(video.stop).not.toHaveBeenCalled();
+  expect(mock.emit).not.toHaveBeenCalled();
+});
+it('切换期间退出不继续修改发送端或更新质量状态', async () => {
+  await open('screen');
+  const state = (wrapper!.vm as any).$.setupState;
+  let resolve!: () => void;
+  video.applyConstraints.mockReturnValueOnce(
+    new Promise<void>((done) => {
+      resolve = done;
+    }),
+  );
+  const pending = state.handleQualityChange('ultra');
+  await state.handleQualityChange('low');
+  expect(video.applyConstraints).toHaveBeenCalledTimes(1);
+  state.handleExit();
+  resolve();
+  await pending;
+  expect(state.currentQuality).toBe('high');
+});
+
+it('发送端拒绝新参数时恢复采集和编码，不结束会话', async () => {
+  await open('screen');
+  const state = (wrapper!.vm as any).$.setupState;
+  const sender = mock.peers[0].getSenders().find((sender: any) => sender.track.kind === 'video');
+  sender.setParameters.mockRejectedValueOnce(new Error('encoding rejected'));
+  mock.emit.mockClear();
+  await state.handleQualityChange('ultra');
+  expect(state.currentQuality).toBe('high');
+  expect(video.applyConstraints).toHaveBeenLastCalledWith({});
+  expect(sender.setParameters).toHaveBeenLastCalledWith(
+    expect.objectContaining({ encodings: [expect.objectContaining({ maxBitrate: 8_000_000 })] }),
+  );
+  expect(mock.emit).not.toHaveBeenCalled();
+  expect(mock.peers[0].close).not.toHaveBeenCalled();
 });

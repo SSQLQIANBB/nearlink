@@ -1,11 +1,11 @@
 /** Single-process serialization shared by group Socket actions and HTTP revocation.
  * This is not a distributed lock; meeting remains a single active instance. */
-const queues = new Map<number, Promise<unknown>>();
+const queues = new Map<number | string, Promise<unknown>>();
 type Revocation = { groupId: number; userId?: number; reason: 'left' | 'deleted' };
 const listeners = new Set<(event: Revocation) => void | Promise<void>>();
 
 export async function runGroupOperation<T>(
-  groupId: number,
+  groupId: number | string,
   operation: () => Promise<T>,
 ): Promise<T> {
   const previous = queues.get(groupId) ?? Promise.resolve();

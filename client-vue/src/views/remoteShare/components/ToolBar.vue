@@ -52,7 +52,9 @@
   </div>
 </template>
 <script setup lang="ts">
-import { NButton } from 'naive-ui';
+import { NButton, useMessage } from 'naive-ui';
+import { openScreenShare } from '@/features/screenShare';
+const message = useMessage();
 import { computed } from 'vue';
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 const mediaBusy = computed(() => !!mediaOccupancy.current.value);
@@ -69,6 +71,13 @@ function openRemoteControl() {
   }
 }
 function start(type: 0 | 1 | 2) {
-  if (props.contactUser && !mediaBusy.value) calls.request = { user: props.contactUser, type };
+  if (!props.contactUser || mediaBusy.value) return;
+  if (type === 1) {
+    void openScreenShare({ kind: 'private', peerId: props.contactUser.id }, router).catch(
+      (error) => {
+        if (error.name !== 'NotAllowedError') message.error(error.message);
+      },
+    );
+  } else calls.request = { user: props.contactUser, type };
 }
 </script>

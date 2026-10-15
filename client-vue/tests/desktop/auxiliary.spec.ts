@@ -4,6 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function auxiliaryPage(
   page: Page,
   kind: 'image' | 'audio' | 'screen' | 'group-audio' | 'group-screen',
+  startScreen = true,
 ) {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -13,6 +14,7 @@ async function auxiliaryPage(
     route.fulfill({
       json: {
         settings: {},
+        users: [{ id: 2, username: 'peer', nickname: '测试联系人' }],
         group: { id: 7, name: '测试群组', ownerId: 1 },
         members: [{ id: 1, username: 'tester', role: 'owner', canSpeak: true }],
         myRole: 'owner',
@@ -86,6 +88,11 @@ async function auxiliaryPage(
           return;
         }
         if (command === 'plugin:event|emit_to') {
+          if (args.event.startsWith('desktop-share-quality')) {
+            runtime.__qualityMessages ??= [];
+            runtime.__qualityMessages.push({ event: args.event, payload: args.payload });
+            return;
+          }
           runtime.__windowMessages.push(args.payload.data);
           if (args.payload.data.type === 'hello') {
             const src =
@@ -96,20 +103,26 @@ async function auxiliaryPage(
             const content =
               kind === 'image'
                 ? { kind: 'image', src, alt: '测试图片' }
-                : kind.startsWith('group-')
+                : kind === 'screen'
                   ? {
-                      kind: 'group',
-                      path: `/${kind}/7`,
-                      groupId: 7,
-                      deviceType: kind === 'group-screen' ? 2 : 3,
+                      kind: 'screen',
+                      path: '/screen-share/private/2',
+                      scope: { kind: 'private', peerId: 2 },
                     }
-                  : {
-                      kind: 'private',
-                      request: {
-                        user: { id: 2, socketId: 'peer', nickname: '测试联系人' },
-                        type: kind === 'screen' ? 1 : 2,
-                      },
-                    };
+                  : kind.startsWith('group-')
+                    ? {
+                        kind: 'group',
+                        path: `/${kind}/7`,
+                        groupId: 7,
+                        deviceType: kind === 'group-screen' ? 2 : 3,
+                      }
+                    : {
+                        kind: 'private',
+                        request: {
+                          user: { id: 2, socketId: 'peer', nickname: '测试联系人' },
+                          type: 2,
+                        },
+                      };
             queueMicrotask(() =>
               runtime.__nativeEvent('nearlink-auxiliary', {
                 id: args.payload.id,
@@ -154,10 +167,15 @@ async function auxiliaryPage(
       },
     });
   }, kind);
-  const path = kind.startsWith('group-')
-    ? `/${kind}/7`
-    : `/desktop-${kind === 'image' ? 'image' : 'private'}`;
+  const path =
+    kind === 'screen'
+      ? '/screen-share/private/2'
+      : kind.startsWith('group-')
+        ? `/${kind}/7`
+        : `/desktop-${kind === 'image' ? 'image' : 'private'}`;
   await page.goto(`/?auxiliary=test-id#${path}`);
+  if (kind === 'screen' && startScreen)
+    await page.getByRole('button', { name: '开始共享', exact: true }).click();
   return { errors, sockets };
 }
 
@@ -242,18 +260,12 @@ test('独立语音窗口使用主窗口信令，原生关闭先停止音轨', as
   expect(errors).toEqual([]);
 });
 
-test('屏幕共享进入原生源选择，取消后关闭会话且不调用浏览器选择器', async ({ page }) => {
+test('个人共享复用群组源选择，取消后留在共享页且不调用浏览器选择器', async ({ page }) => {
   const { errors } = await auxiliaryPage(page, 'screen');
   await expect(page.getByRole('dialog', { name: '选择共享内容' })).toBeVisible();
   expect(await page.evaluate(() => (window as any).__displayRequests)).toBe(0);
   await page.getByRole('button', { name: '取消', exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        (window as any).__windowMessages.some((data: any) => data.type === 'closed'),
-      ),
-    )
-    .toBe(true);
+  await expect(page.getByRole('button', { name: '开始共享', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -274,9 +286,9 @@ test('原生共享源可筛选和选择，停止事件结束采集并挂断', as
   });
   await page.screenshot({ path: testInfo.outputPath('screen-picker.png') });
   await page.setViewportSize({ width: 640, height: 480 });
-  await expect(page.getByRole('button', { name: '开始共享', exact: true })).toBeInViewport();
+  await expect(picker.getByRole('button', { name: '开始共享', exact: true })).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath('screen-picker-small.png') });
-  await page.getByRole('button', { name: '开始共享', exact: true }).click();
+  await picker.getByRole('button', { name: '开始共享', exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => (window as any).__shareCommands.map((c: any) => c.command)))
     .toContain('screen_share_present');
@@ -290,7 +302,9 @@ test('原生共享源可筛选和选择，停止事件结束采集并挂断', as
   await expect
     .poll(() =>
       page.evaluate(() =>
-        (window as any).__windowMessages.some((d: any) => d.event === 'webrtc_call_request'),
+        (window as any).__windowMessages.some(
+          (d: any) => d.event === 'screen_share' && d.args[0].action === 'start',
+        ),
       ),
     )
     .toBe(true);
@@ -298,7 +312,9 @@ test('原生共享源可筛选和选择，停止事件结束采集并挂断', as
   await expect
     .poll(() =>
       page.evaluate(() =>
-        (window as any).__windowMessages.some((d: any) => d.event === 'webrtc_hangup'),
+        (window as any).__windowMessages.some(
+          (d: any) => d.event === 'screen_share' && d.args[0].action === 'end',
+        ),
       ),
     )
     .toBe(true);
@@ -313,11 +329,27 @@ test('原生共享源可筛选和选择，停止事件结束采集并挂断', as
   expect(errors).toEqual([]);
 });
 
-test('置顶共享控制条仅提供结束共享操作', async ({ page }, testInfo) => {
+test('置顶共享控制条支持清晰度和结束共享，不显示恢复窗口', async ({ page }, testInfo) => {
   await auxiliaryPage(page, 'image');
   await page.setViewportSize({ width: 400, height: 44 });
   await page.goto('/?share-overlay=toolbar&token=11');
   await expect(page.getByText('正在共享屏幕')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__qualityMessages?.length ?? 0))
+    .toBe(1);
+  await page.evaluate(() =>
+    (window as any).__nativeEvent('desktop-share-quality-state', { token: 11, quality: 'high' }),
+  );
+  await expect(page.getByRole('combobox', { name: '共享清晰度' })).toBeInViewport();
+  await page.getByRole('combobox', { name: '共享清晰度' }).selectOption('ultra');
+  expect(await page.evaluate(() => (window as any).__qualityMessages.at(-1))).toEqual({
+    event: 'desktop-share-quality',
+    payload: { token: 11, quality: 'ultra' },
+  });
+  await page.evaluate(() =>
+    (window as any).__nativeEvent('desktop-share-quality-state', { token: 11, quality: 'ultra' }),
+  );
+  await expect(page.getByRole('combobox', { name: '共享清晰度' })).toHaveValue('ultra');
   await page.screenshot({ path: testInfo.outputPath('share-toolbar.png') });
   await expect(page.getByRole('button', { name: '恢复通话窗口' })).toHaveCount(0);
   await page.getByRole('button', { name: '结束共享' }).click();
@@ -331,5 +363,107 @@ test('不可采集的窗口显示原因并禁用选择', async ({ page }) => {
   const source = page.getByRole('button', { name: /工作浏览器/ });
   await expect(source).toBeDisabled();
   await expect(source).toContainText('无法共享此窗口');
-  await expect(page.getByRole('button', { name: '开始共享', exact: true })).toBeEnabled();
+  await expect(
+    page
+      .getByRole('dialog', { name: '选择共享内容' })
+      .getByRole('button', { name: '开始共享', exact: true }),
+  ).toBeEnabled();
+});
+
+test('桌面共享通过工具条信号调整下一帧质量，保持原生会话和麦克风', async ({ page }) => {
+  const { errors } = await auxiliaryPage(page, 'screen');
+  await page
+    .getByRole('dialog', { name: '选择共享内容' })
+    .getByRole('button', { name: '开始共享', exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (window as any).__windowMessages.some(
+          (data: any) => data.event === 'screen_share' && data.args[0].action === 'start',
+        ),
+      ),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (window as any).__nativeEvent('desktop-share-quality', { token: 11, quality: 'ultra' }),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (window as any).__shareCommands.some(
+          (command: any) =>
+            command.command === 'screen_share_frame' && command.args.maxEdge === 2560,
+        ),
+      ),
+    )
+    .toBe(true);
+  const state = await page.evaluate(() => ({
+    starts: (window as any).__shareCommands.filter(
+      (command: any) => command.command === 'screen_share_start',
+    ).length,
+    stops: (window as any).__shareCommands.filter(
+      (command: any) => command.command === 'screen_share_stop',
+    ).length,
+    ended: (window as any).__windowMessages.some(
+      (data: any) => data.event === 'screen_share' && data.args[0].action === 'end',
+    ),
+    mediaStops: (window as any).__mediaStops,
+  }));
+  expect(state).toEqual({ starts: 1, stops: 0, ended: false, mediaStops: 0 });
+  await expect(page.getByRole('dialog', { name: '选择共享内容' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('桌面观看方在媒体独立窗口加入共享，不创建采集和边框', async ({ page }) => {
+  const { errors } = await auxiliaryPage(page, 'screen', false);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (window as any).__windowMessages.some(
+          (data: any) => data.event === 'screen_share' && data.args[0].action === 'state',
+        ),
+      ),
+    )
+    .toBe(true);
+  await page.evaluate(() =>
+    (window as any).__nativeEvent('nearlink-auxiliary', {
+      id: 'test-id',
+      data: {
+        type: 'signal',
+        event: 'group_call_state',
+        args: [
+          {
+            groupId: 'private:1:2',
+            sessions: {
+              screen: {
+                groupId: 'private:1:2',
+                type: 'screen',
+                channelId: 'private:1:2:screen',
+                ownerUserId: 2,
+                ownerSocketId: 'peer',
+                startedAt: '2026-10-15T10:00:00.000Z',
+              },
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (window as any).__windowMessages.some(
+          (data: any) => data.event === 'screen_share' && data.args[0].action === 'join',
+        ),
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => (window as any).__TAURI_INTERNALS__.metadata.currentWindow.label),
+  ).toBe('media-call');
+  expect(await page.evaluate(() => (window as any).__shareCommands)).toEqual([]);
+  expect(await page.evaluate(() => (window as any).__displayRequests)).toBe(0);
+  await expect(page.getByRole('dialog', { name: '选择共享内容' })).toHaveCount(0);
+  expect(errors).toEqual([]);
 });

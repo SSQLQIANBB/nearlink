@@ -3,7 +3,7 @@ import { readonly, ref } from 'vue';
 export type MediaType = 'video' | 'audio' | 'screen';
 
 export type ParticipantSnapshot = {
-  groupId: number;
+  groupId: number | string;
   type: MediaType;
   channelId: string;
   userIds: number[];
@@ -13,9 +13,9 @@ export function createMediaParticipantState() {
   const channels = new Map<string, string>();
   const participants = new Map<string, Set<number>>();
   const mutableVersion = ref(0);
-  const key = (groupId: number, type: MediaType) => `${groupId}:${type}`;
+  const key = (groupId: number | string, type: MediaType) => `${groupId}:${type}`;
 
-  function setChannel(groupId: number, type: MediaType, channelId: string) {
+  function setChannel(groupId: number | string, type: MediaType, channelId: string) {
     const stateKey = key(groupId, type);
     if (channels.get(stateKey) === channelId) return;
     channels.set(stateKey, channelId);
@@ -33,15 +33,15 @@ export function createMediaParticipantState() {
     return true;
   }
 
-  function userIds(groupId: number, type: MediaType) {
+  function userIds(groupId: number | string, type: MediaType) {
     return [...(participants.get(key(groupId, type)) ?? [])].sort((left, right) => left - right);
   }
 
-  function isParticipating(groupId: number, type: MediaType, userId: number) {
+  function isParticipating(groupId: number | string, type: MediaType, userId: number) {
     return participants.get(key(groupId, type))?.has(userId) ?? false;
   }
 
-  function clear(groupId: number, type: MediaType) {
+  function clear(groupId: number | string, type: MediaType) {
     const stateKey = key(groupId, type);
     channels.delete(stateKey);
     if (participants.delete(stateKey)) mutableVersion.value += 1;

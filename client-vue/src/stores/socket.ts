@@ -107,10 +107,12 @@ export const useSocketStore = defineStore('socket', () => {
       screen: GroupSession | null;
     };
   }) {
+    if (typeof data.groupId !== 'number') return;
     groupSessionState.applySnapshot(data.groupId, data.sessions);
   }
 
   function handleGroupCallStarted(data: GroupSessionEvent) {
+    if (typeof data.groupId !== 'number') return;
     groupSessionState.applyStarted({
       ...data,
       type: resolveSessionType(data),

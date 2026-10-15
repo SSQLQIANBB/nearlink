@@ -1,12 +1,21 @@
 /** Keep video from saturating small links while leaving audio encoding untouched. */
-export async function limitVideoBitrate(sender: RTCRtpSender, maxBitrate: number) {
+export async function limitVideoBitrate(
+  sender: RTCRtpSender,
+  maxBitrate: number,
+  desktopScreen = false,
+) {
   if (sender.track?.kind !== 'video' || !sender.getParameters || !sender.setParameters) return;
   try {
     const parameters = sender.getParameters();
     parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
     parameters.encodings.forEach((encoding) => {
-      encoding.maxBitrate = maxBitrate;
+      encoding.maxBitrate = desktopScreen ? 8_000_000 : maxBitrate;
     });
+    if (desktopScreen) {
+      // Text sharing should lose frame rate before losing readable pixels.
+      parameters.degradationPreference =
+        sender.track.contentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate';
+    }
     await sender.setParameters(parameters);
   } catch (error) {
     // Unsupported browser/codec: keep the original video path working.

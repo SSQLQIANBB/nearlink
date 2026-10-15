@@ -1,8 +1,8 @@
 import { mediaOccupancy } from './mediaOccupancy';
-const captured = new Map<number, MediaStream>();
+const captured = new Map<number | string, MediaStream>();
 
 // 在用户点击按钮的手势内申请屏幕，跨路由交给共享页使用。
-export async function captureGroupScreen(groupId: number) {
+export async function captureGroupScreen(groupId: number | string) {
   const claim = mediaOccupancy.acquire('group-screen', `group-screen:${groupId}`, () =>
     discardCapturedGroupScreen(groupId),
   );
@@ -25,12 +25,12 @@ export async function captureGroupScreen(groupId: number) {
   captured.set(groupId, stream);
   return stream;
 }
-export function takeCapturedGroupScreen(groupId: number) {
+export function takeCapturedGroupScreen(groupId: number | string) {
   const stream = captured.get(groupId) || null;
   captured.delete(groupId);
   return stream;
 }
-export function discardCapturedGroupScreen(groupId: number) {
+export function discardCapturedGroupScreen(groupId: number | string) {
   takeCapturedGroupScreen(groupId)
     ?.getTracks()
     .forEach((track) => track.stop());

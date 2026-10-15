@@ -10,6 +10,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 import {
   captureDesktopScreen,
+  updateDesktopShareQuality,
   cancelDesktopScreenShare,
   screenPicker,
   desktopShareError,
@@ -57,6 +58,16 @@ async function start() {
   return pending;
 }
 describe('desktop screen capture lifecycle', () => {
+  it.each([false, true])(
+    'marks the desktop track for the selected quality mode: smooth=%s',
+    async (smooth) => {
+      const pending = captureDesktopScreen();
+      screenPicker.value!.select({ id: 'display:1', smooth });
+      await pending;
+      expect((track as unknown as MediaStreamTrack).contentHint).toBe(smooth ? 'motion' : 'detail');
+      expect(native.invoke).toHaveBeenCalledWith('screen_share_frame', { token: 11, smooth });
+    },
+  );
   it('does not capture until a source is selected; cancel opens no native capture', async () => {
     const pending = captureDesktopScreen();
     expect(native.invoke).not.toHaveBeenCalled();
@@ -115,4 +126,38 @@ describe('desktop screen capture lifecycle', () => {
     expect(desktopShareError.value).toContain('窗口已关闭');
     expect(nativeTrackStop).toHaveBeenCalledTimes(1);
   });
+});
+
+it('同一原生会话在下一帧应用清晰度，无需重建轨道或选源', async () => {
+  let resolveFrame!: (bytes: ArrayBuffer) => void;
+  let frames = 0;
+  native.invoke.mockImplementation(async (command) => {
+    if (command === 'screen_share_start') return 11;
+    if (command === 'screen_share_frame') {
+      if (!frames++) return new ArrayBuffer(1);
+      return new Promise<ArrayBuffer>((resolve) => {
+        resolveFrame = resolve;
+      });
+    }
+  });
+  const pending = captureDesktopScreen('high');
+  screenPicker.value!.select({ id: 'display:1', smooth: false });
+  const stream = await pending;
+  updateDesktopShareQuality(stream.getVideoTracks()[0]!, 'ultra');
+  resolveFrame(new ArrayBuffer(1));
+  await flushPromises();
+  expect(native.invoke).toHaveBeenLastCalledWith('screen_share_frame', {
+    token: 11,
+    smooth: false,
+    maxEdge: 2560,
+    frameRate: 30,
+  });
+  expect(
+    native.invoke.mock.calls.filter(([command]) => command === 'screen_share_start'),
+  ).toHaveLength(1);
+  expect(
+    native.invoke.mock.calls.filter(([command]) => command === 'screen_share_stop'),
+  ).toHaveLength(0);
+  expect(nativeTrackStop).not.toHaveBeenCalled();
+  expect(screenPicker.value).toBeNull();
 });

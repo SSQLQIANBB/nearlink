@@ -308,6 +308,7 @@
 </template>
 
 <script setup lang="ts">
+import { openScreenShare } from '@/features/screenShare';
 import { isAppInBackground } from '@/services/appVisibility';
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -318,7 +319,6 @@ import { storeToRefs } from 'pinia';
 import { useSocketStore } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
 import { mediaOccupancy } from '@/services/mediaOccupancy';
-import { captureGroupScreen, discardCapturedGroupScreen } from '@/services/screenShareLaunch';
 import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
 import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 import { getGroupMessages, type ChatMediaPayload } from '@/api/message';
@@ -534,30 +534,10 @@ function handleAudioCall() {
 
 // 发起屏幕共享
 async function handleScreenShare() {
-  if (isDesktopWindow) {
-    try {
-      await openDesktopGroupWindow(`/group-screen/${groupId.value}`);
-    } catch (error: any) {
-      message.warning(error.message);
-    }
-    return;
-  }
-  if (mediaOccupancy.current.value) {
-    message.warning('请先结束当前通话或远程控制');
-    return;
-  }
-  if (groupSessionState.getSession(groupId.value, 'screen')) {
-    await router.push(`/group-screen/${groupId.value}`);
-    return;
-  }
   try {
-    await captureGroupScreen(groupId.value);
-    if (socketStore.authenticated)
-      socket.value?.emit('group_call_start', { groupId: groupId.value, deviceType: 2 });
-    await router.push(`/group-screen/${groupId.value}`);
+    await openScreenShare({ kind: 'group', id: groupId.value }, router);
   } catch (error: any) {
-    discardCapturedGroupScreen(groupId.value);
-    if (error?.name !== 'NotAllowedError') message.error('无法开始屏幕共享: ' + error.message);
+    if (error?.name !== 'NotAllowedError') message.error(error.message);
   }
 }
 

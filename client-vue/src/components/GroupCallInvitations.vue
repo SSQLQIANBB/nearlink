@@ -1,6 +1,7 @@
 <template><span v-if="false" /></template>
 
 <script setup lang="ts">
+import { openScreenShare, createScreenShareApi, type ScreenShareId } from '@/features/screenShare';
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { isAppInBackground } from '@/services/appVisibility';
 import { onBeforeUnmount, watch } from 'vue';
@@ -42,7 +43,8 @@ function dismissAll() {
 }
 
 function handleStarted(
-  data: GroupSession & {
+  data: Omit<GroupSession, 'groupId'> & {
+    groupId: ScreenShareId;
     deviceType?: number;
     user?: { nickname?: string; username?: string };
   },
@@ -50,7 +52,23 @@ function handleStarted(
   if (!authStore.currentUser || data.ownerUserId === authStore.currentUser.id) return;
   const type =
     data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video');
-  const path = `/group-${type}/${data.groupId}`;
+  const privateScreen = typeof data.groupId === 'string';
+  const scope = privateScreen
+    ? { kind: 'private' as const, peerId: data.ownerUserId }
+    : { kind: 'group' as const, id: data.groupId as number };
+  const path = privateScreen
+    ? `/screen-share/private/${data.ownerUserId}`
+    : `/group-${type}/${data.groupId}`;
+  const decline = () => {
+    if (privateScreen)
+      createScreenShareApi(scope, () => socketStore.socket).send('decline', {
+        startedAt: data.startedAt,
+      });
+  };
+  if (privateScreen && mediaOccupancy.current.value) {
+    decline();
+    return;
+  }
   if (router.currentRoute.value.path === path) return;
   const key = `${data.groupId}:${type}`;
   const eventId = `${key}:${data.startedAt}`;
@@ -64,11 +82,25 @@ function handleStarted(
     key,
     dialog.info({
       positiveButtonProps: { type: 'primary' },
-      title: `群组${label}邀请`,
-      content: `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
+      title: `${privateScreen ? '' : '群组'}${label}邀请`,
+      content: privateScreen
+        ? `${data.user?.nickname || data.user?.username || '对方'} 邀请你观看屏幕共享`
+        : `${data.user?.nickname || data.user?.username || '群成员'} 邀请你加入群组 ${data.groupId} 的${label}`,
       positiveText: '接受邀请',
       negativeText: '暂不加入',
       onPositiveClick: () => {
+        if (type === 'screen') {
+          return openScreenShare(scope, router, false)
+            .then(() => finishInvitation(key, eventId))
+            .catch((error) => {
+              dialog.warning({
+                title: '无法加入共享',
+                content: error.message,
+                positiveText: '知道了',
+              });
+              return false;
+            });
+        }
         if (isDesktopWindow) {
           return openDesktopGroupWindow(path)
             .then(() => {
@@ -97,9 +129,11 @@ function handleStarted(
         void router.push(path);
       },
       onNegativeClick: () => {
+        decline();
         finishInvitation(key, eventId);
       },
       onClose: () => {
+        decline();
         finishInvitation(key, eventId);
       },
       maskClosable: false,
@@ -115,8 +149,14 @@ function handleStarted(
     );
 }
 
-function handleEnded(data: { groupId: number; type?: string; deviceType?: number }) {
+function handleEnded(data: {
+  groupId: ScreenShareId;
+  type?: string;
+  deviceType?: number;
+  startedAt?: string;
+}) {
   const key = `${data.groupId}:${data.type || (data.deviceType === 2 ? 'screen' : data.deviceType === 3 ? 'audio' : 'video')}`;
+  if (data.startedAt && ringtoneKeys.get(key) !== `${key}:${data.startedAt}`) return;
   pending.get(key)?.destroy();
   pending.delete(key);
   stopRingtone(key);
