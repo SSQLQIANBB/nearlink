@@ -120,10 +120,25 @@ jobs:
           port: 22
           script: |
             set -e
+            echo 'Checking remote SCP and archive tools'
+            command -v scp
+            command -v tar
+            echo 'Checking upload and deployment filesystems'
+            df -h . /opt
+            df -i . /opt
+            ls -ld . /opt
             mkdir -p /opt/todesk
             test -f /opt/todesk/.env.production
+            ls -ld /opt/todesk
+            # drone-scp first uploads its archive relative to the SSH working directory.
+            # Exercise the same SCP sink with a tiny file so remote errors are visible.
+            probe_dir="$(mktemp -d .nearlink-scp-check.XXXXXX)"
+            trap 'rm -f "$probe_dir/probe"; rmdir "$probe_dir"' EXIT
+            printf 'C0600 1 probe\nx\000' | scp -t "$probe_dir" >/dev/null
+            test "$(cat "$probe_dir/probe")" = x
+            test -w /opt/todesk
 
-      - name: Upload production compose file
+      - name: Upload production files and application images
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
