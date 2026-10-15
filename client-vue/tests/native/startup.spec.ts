@@ -61,7 +61,8 @@ test('Windows 客户端启动、原生 IPC、刷新与单实例', async ({}, tes
     await expect.poll(() => windowState('is_maximized')).toBe(true);
     await page.getByRole('button', { name: '还原', exact: true }).click();
     await expect.poll(() => windowState('is_maximized')).toBe(false);
-    await page.locator('.desktop-windows-drag-region').dblclick({ position: { x: 200, y: 16 } });
+    // 透明拖动标记不接收指针事件；模拟用户在顶部空白处双击，由 document 处理。
+    await page.mouse.dblclick(200, 16);
     await expect.poll(() => windowState('is_maximized')).toBe(true);
     await page.getByRole('button', { name: '还原', exact: true }).click();
     await expect.poll(() => windowState('is_maximized')).toBe(false);
