@@ -441,7 +441,7 @@ fn desktop_stop_drains_the_real_supervisor_and_local_consent() {
     start(&mut f, "control", 7000);
     key_down(&mut f);
     let state = super::super::RemoteControlState {
-        engine_ready: std::sync::OnceLock::new(),
+        engine_ready: Default::default(),
         consent_memory_epoch: Default::default(),
         identity: f.host.identity.clone(),
         host: Mutex::new(Some(HostSupervisor::spawn(f.host))),

@@ -101,7 +101,7 @@ describe('login button state', () => {
         }),
     );
     const wrapper = mountLogin();
-    const button = wrapper.findAll('button')[0]!;
+    const button = wrapper.findAll('button').find((item) => item.text() === '登录')!;
 
     await button.trigger('click');
     await flushPromises();
@@ -122,7 +122,7 @@ describe('login button state', () => {
   it('登录失败或异常后恢复按钮状态', async () => {
     mocks.login.mockRejectedValue(new Error('登录失败'));
     const wrapper = mountLogin();
-    const button = wrapper.findAll('button')[0]!;
+    const button = wrapper.findAll('button').find((item) => item.text() === '登录')!;
 
     await button.trigger('click');
     await flushPromises();

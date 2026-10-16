@@ -208,10 +208,10 @@ impl ProcessMediaDriver {
         session_id: &str,
     ) -> HostResult<(Self, Receiver<IpcMessage>)> {
         let bundle = super::engine_bundle::TrustedEngineBundle::from_app(app)
-            .map_err(|_| "REMOTE_ENGINE_BUNDLE_REJECTED")?;
+            .map_err(|reason| super::engine_bundle::presence_error(&reason))?;
         let command = bundle
             .command()
-            .map_err(|_| "REMOTE_ENGINE_BUNDLE_REJECTED")?;
+            .map_err(|reason| super::engine_bundle::presence_error(&reason))?;
         Self::spawn_command(command, session_id, Some(bundle))
     }
     #[cfg(feature = "remote-control-harness")]

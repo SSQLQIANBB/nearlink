@@ -80,6 +80,7 @@ import { useRemoteControlStore } from '@/stores/remoteControl';
 import { useRemoteControlHostStore } from '@/stores/remoteControlHost';
 import { useRemoteControlSessionStore } from '@/stores/remoteControlSession';
 import { useRemoteDevicesStore } from '@/stores/remoteDevices';
+import { engineReadinessMessage } from '@/services/remoteEngineDiagnostics';
 import { remoteCapabilityMessages } from '@/services/remoteControlCapabilities';
 
 const remote = useRemoteControlStore(), host = useRemoteControlHostStore();
@@ -100,7 +101,7 @@ const capabilityMessage = computed(() => {
   if (capability?.runtime === 'tauri' && !capability.native) return '无法读取本机远控能力，请重新启动桌面客户端后重试。';
   if (capability?.native?.reason === 'PLATFORM_UNSUPPORTED') return '本机被控当前支持 Windows 11 x64 或 macOS 13 及以上的 Apple 芯片设备。';
   if (capability?.native?.reason === 'REMOTE_ENGINE_NOT_CONFIGURED') return '此桌面程序未编入远控引擎，需要使用包含对应平台引擎的版本并重新启动。刷新页面无法加载引擎。';
-  if (capability?.native && !capability.native.engineReady) return '本机远控引擎未就绪，请重新启动包含引擎的桌面版本；若仍失败，请检查引擎资源与启动状态。';
+  if (capability?.native && !capability.native.engineReady) return engineReadinessMessage(capability.native.reason);
   if (capability?.native?.permissions?.screenCapture !== 'granted' && capability?.runtime === 'tauri')
     return capability.native?.platform === 'macos' ? '请开启屏幕录制权限，再刷新权限状态。' : '请解锁电脑并返回正常桌面后重试。';
   return remoteCapabilityMessages[capability?.reason ?? 'RELEASE_UNAVAILABLE'];

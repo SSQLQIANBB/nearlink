@@ -8,6 +8,7 @@ mod consent_memory;
 mod controller_identity;
 mod device_store;
 mod engine_bundle;
+mod engine_readiness;
 mod engine_bundle_format;
 mod guard;
 #[cfg(feature = "remote-control-harness")]
@@ -36,7 +37,7 @@ mod windows_process;
 compile_error!("remote-control-harness is a debug-only development binary; never enable it in a packaged release");
 
 use serde::Serialize;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
@@ -73,7 +74,7 @@ pub struct RemoteControlState {
     host: Mutex<Option<host_runtime::HostSupervisor>>,
     identity: Arc<Mutex<identity::IdentityState>>,
     bridge: Mutex<Option<native_host::NativeHostBridge>>,
-    engine_ready: OnceLock<Result<(), &'static str>>,
+    engine_ready: engine_readiness::EngineReadiness,
     consent_memory_epoch: Arc<Mutex<u64>>,
 }
 
@@ -242,7 +243,7 @@ pub async fn remote_control_capabilities(
     require_main_window(window.label())?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<RemoteControlState>();
-        let readiness = *state.engine_ready.get_or_init(|| {
+        let readiness = state.engine_ready.check(|| {
             if !platform::probe().candidate_platform {
                 return Err("PLATFORM_UNSUPPORTED");
             }
