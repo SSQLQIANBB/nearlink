@@ -5,6 +5,11 @@
       <n-switch :value="host.phase !== 'offline'" :loading="preparing || host.phase === 'starting'"
         :disabled="preparing || devices.busy || (host.phase === 'offline' && !remote.capabilities?.canHostView)"
         aria-label="开启本机协助" @update:value="toggleHost" />
+      <n-button v-if="!remote.capabilities?.canHostView" class="refresh-capabilities" text type="primary"
+        :disabled="remote.loading" :aria-busy="remote.loading" @click="remote.refreshCapabilities()">
+        <template #icon><i class="iconfont icon-refresh" :class="{ 'is-refreshing': remote.loading }" aria-hidden="true" /></template>
+        刷新可用状态
+      </n-button>
     </header>
     <div class="credentials-card">
       <div class="credential-field">
@@ -36,7 +41,6 @@
     <p v-if="host.error || devices.error" role="alert" class="error">{{ host.error || devices.error }}</p>
     <div v-if="!remote.capabilities?.canHostView" class="hint" role="status">
       <p>{{ capabilityMessage }}</p>
-      <n-button text :loading="remote.loading" @click="remote.refreshCapabilities()">刷新可用状态</n-button>
     </div>
     <div v-if="remote.capabilities?.native?.platform === 'macos'" class="permission-actions">
       <n-button text @click="openPermission('screenCapture')">屏幕录制权限</n-button>
@@ -49,7 +53,7 @@
     </div>
     <form class="connection-form" @submit.prevent="connect">
       <h2>远程控制设备</h2>
-      <p v-if="!remote.canControl" class="hint">{{ remote.loading ? '正在获取远控状态…' : remoteCapabilityMessages[remote.capabilities?.reason ?? 'RELEASE_UNAVAILABLE'] }}</p>
+      <p v-if="!remote.capabilities?.canControl" class="hint">{{ remote.loading && !remote.capabilities ? '正在获取远控状态…' : remoteCapabilityMessages[remote.capabilities?.reason ?? 'RELEASE_UNAVAILABLE'] }}</p>
       <div class="connection-fields">
         <n-input v-model:value="deviceCode" aria-label="对方设备代码" placeholder="请输入对方设备代码" :maxlength="11" :disabled="session.visible" />
         <n-input v-model:value="temporaryPassword" type="password" show-password-on="click" aria-label="对方临时密码" placeholder="请输入临时密码" :maxlength="10" :disabled="session.visible" autocomplete="off" />
@@ -91,7 +95,8 @@ const canConnect = computed(() => remote.canControl && !session.visible && !conn
   /^\d{9}$/.test(normalizedCode.value) && /^[a-z2-9]{10}$/.test(temporaryPassword.value));
 const capabilityMessage = computed(() => {
   const capability = remote.capabilities;
-  if (remote.loading) return '正在获取远控状态…';
+  // 焦点刷新沿用已有能力说明，避免临时 loading 改变内容高度；连接门禁仍使用 canControl。
+  if (remote.loading && !capability) return '正在获取远控状态…';
   if (capability?.runtime === 'tauri' && !capability.native) return '无法读取本机远控能力，请重新启动桌面客户端后重试。';
   if (capability?.native?.reason === 'PLATFORM_UNSUPPORTED') return '本机被控当前支持 Windows 11 x64 或 macOS 13 及以上的 Apple 芯片设备。';
   if (capability?.native?.reason === 'REMOTE_ENGINE_NOT_CONFIGURED') return '此桌面程序未编入远控引擎，需要使用包含对应平台引擎的版本并重新启动。刷新页面无法加载引擎。';
@@ -156,6 +161,12 @@ onUnmounted(() => { disposed = true; if (preparing.value) devices.cancel(); clea
 <style scoped>
 .remote-workbench { box-sizing: border-box; padding: clamp(24px, 5vw, 72px); color: #202936; background: #fff; min-width: 0; overflow: auto; height: 100%; }
 .workbench-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 24px 0; }
+/* 只旋转原图标，避免按钮内置 loading 与原图标在切换动画中同时显示。 */
+.refresh-capabilities { flex: none; height: 32px; }
+.refresh-capabilities .iconfont { display: inline-block; width: 18px; height: 18px; line-height: 18px; font-size: 18px; }
+.refresh-capabilities .is-refreshing { animation: refresh-capabilities-spin 1s linear infinite; }
+@keyframes refresh-capabilities-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refresh-capabilities .is-refreshing { animation: none; } }
 h2 { font-size: 24px; font-weight: 700; margin: 0; }
 .credentials-card { display: grid; grid-template-columns: 1fr 1fr; background: #f5f6f8; border-radius: 20px; padding: 28px; gap: 28px; }
 .credential-field { min-width: 0; }
