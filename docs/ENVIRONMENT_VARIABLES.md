@@ -57,7 +57,7 @@ mkcert -install
 mkcert -cert-file .certs/local-dev.pem -key-file .certs/local-dev-key.pem localhost 127.0.0.1 host 192.168.1.100
 ```
 
-证书的 SAN 必须覆盖实际访问的主机名或 IP；主机名还需要能在访问方解析到开发机。仓库仅保留 `.certs/local-dev.pem` 和 `.certs/local-dev-rootCA.crt` 两个公开测试证书，其余 `.certs/` 文件（包括私钥）均被 Git 忽略。其他开发机需自行生成匹配的证书与私钥；HTTPS 配置保留 Vite 默认文件保护，并拒绝通过开发服务器读取 `.certs/` 及配置的证书、私钥文件（包括自定义扩展名）。不要把证书或私钥放进 `public/`，该目录不受 Vite 文件拒绝规则保护。
+证书的 SAN 必须覆盖实际访问的主机名或 IP；主机名还需要能在访问方解析到开发机。仓库不提供证书或私钥，整个 `.certs/` 目录均被 Git 忽略。每台开发机需自行生成匹配的证书与私钥；HTTPS 配置保留 Vite 默认文件保护，并拒绝通过开发服务器读取 `.certs/` 及配置的证书、私钥文件（包括自定义扩展名）。不要把证书或私钥放进 `public/`，该目录不受 Vite 文件拒绝规则保护。
 
 在 `client-vue/.env.local` 中设置：
 
@@ -78,9 +78,9 @@ pnpm client
 
 API 和 Socket 地址留空后，浏览器使用当前 HTTPS/WSS 源；Vite 沿用 `/api`、`/uploads` 和 `/meeting` 的代理，将请求转发到开发机的 `http://localhost:3000`。如果给这两个公开变量填写 HTTP 后端地址，会绕过同源代理并产生混合内容问题。
 
-另一台 Mac 需要信任开发机签发证书的 CA。当前 `.certs/local-dev.pem` 对应的根证书文件是 `.certs/local-dev-rootCA.crt`，将它导入该 Mac 的钥匙串并设置信任即可；Vite 启动只读取服务器证书和私钥，不需要加载根证书。重命名根证书文件不会改变其内容或信任关系。
+另一台 Mac 需要信任当前开发机签发证书的 CA；Vite 启动只读取服务器证书和私钥，不需要加载根证书。仓库不再附带根证书，应从实际签发证书的开发机获取。
 
-如果重新通过 mkcert 生成证书，在开发机执行 `mkcert -CAROOT`，仅复制该目录中的 `rootCA.pem` 到 Mac 的单独目录，再按官方说明把 `CAROOT` 指向该目录执行 `mkcert -install`。不要分发 `rootCA-key.pem`、`.certs/local-dev-key.pem` 或其他私钥。
+使用上述 mkcert 生成证书后，在开发机执行 `mkcert -CAROOT`，仅复制该目录中的 `rootCA.pem` 到 Mac 的单独目录，再按官方说明把 `CAROOT` 指向该目录执行 `mkcert -install`。不要分发 `rootCA-key.pem`、`.certs/local-dev-key.pem` 或其他私钥。
 
 在该 Mac 的受支持 Chrome/Edge 中打开 `https://host:实际端口`，也可以使用证书覆盖的局域网 IP；端口以 Vite 启动输出为准，默认是 `5173`。确认浏览器信任证书且 `window.isSecureContext` 为 `true` 后，刷新远控状态。
 
