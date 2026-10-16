@@ -1,3 +1,4 @@
+import './MessageDeletion';
 import User from './User';
 import Group from './Group';
 import GroupMember from './GroupMember';

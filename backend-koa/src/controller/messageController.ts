@@ -1,3 +1,4 @@
+import { visibleMessages } from '../services/messageActions';
 import { Context } from 'koa';
 import { Op, fn, col } from 'sequelize';
 import { GroupMember, GroupMessage, Message, User } from '../models';
@@ -15,6 +16,7 @@ export async function getOfflineMessages(ctx: Context) {
 
     const messages = await Message.findAll({
       where: {
+        id: visibleMessages(userId, 'private'),
         toUserId: userId,
         isRead: false,
         createdAt: { [Op.gte]: getMessageCacheStartDate() },
@@ -72,6 +74,7 @@ export async function getUnreadCount(ctx: Context) {
 
     const count = await Message.count({
       where: {
+        id: visibleMessages(userId, 'private'),
         toUserId: userId,
         isRead: false,
         createdAt: { [Op.gte]: getMessageCacheStartDate() },
@@ -100,6 +103,7 @@ export async function getPrivateMessages(ctx: Context) {
 
     const messages = await Message.findAll({
       where: {
+        id: visibleMessages(userId, 'private'),
         createdAt: { [Op.gte]: getMessageCacheStartDate() },
         [Op.or]: [
           { fromUserId: userId, toUserId: contactId },
@@ -161,8 +165,13 @@ export async function getGroupMessages(ctx: Context) {
 
     const whereClause: any = {
       groupId: parsedGroupId,
+      id: visibleMessages(ctx.state.user.userId, 'group'),
     };
-    if (afterId !== undefined) whereClause.id = { [Op.gt]: Number(afterId) };
+    if (afterId !== undefined)
+      whereClause.id = {
+        ...visibleMessages(ctx.state.user.userId, 'group'),
+        [Op.gt]: Number(afterId),
+      };
     else whereClause.createdAt = { [Op.gte]: getMessageCacheStartDate() };
 
     if (search) {
@@ -237,7 +246,12 @@ export async function saveGroupMessage(ctx: Context) {
       fileSize,
     } = ctx.request.body as any;
 
-    if (!groupId || !message) {
+    if (
+      !groupId ||
+      typeof message !== 'string' ||
+      !message.trim() ||
+      message.trim().startsWith('__NEARLINK_REPLY__:')
+    ) {
       ctx.status = 400;
       ctx.body = { error: 'groupId and message are required' };
       return;
@@ -293,6 +307,7 @@ export async function searchMessages(ctx: Context) {
     if (type === 'all' || type === 'private') {
       results.privateMessages = await Message.findAll({
         where: {
+          id: visibleMessages(userId, 'private'),
           createdAt: { [Op.gte]: getMessageCacheStartDate() },
           [Op.or]: [{ fromUserId: userId }, { toUserId: userId }],
           message: {
@@ -317,8 +332,11 @@ export async function searchMessages(ctx: Context) {
     }
 
     if (type === 'all' || type === 'group') {
+      const memberships = await GroupMember.findAll({ where: { userId } });
       results.groupMessages = await GroupMessage.findAll({
         where: {
+          id: visibleMessages(userId, 'group'),
+          groupId: { [Op.in]: memberships.map((member) => member.groupId) },
           createdAt: { [Op.gte]: getMessageCacheStartDate() },
           message: {
             [Op.like]: `%${keyword}%`,
@@ -336,7 +354,10 @@ export async function searchMessages(ctx: Context) {
       });
     }
 
-    ctx.body = results;
+    ctx.body = {
+      privateMessages: results.privateMessages.map(serializeChatMessage),
+      groupMessages: results.groupMessages.map(serializeChatMessage),
+    };
   } catch (error: any) {
     console.error('search messages failed:', error);
     ctx.status = 500;

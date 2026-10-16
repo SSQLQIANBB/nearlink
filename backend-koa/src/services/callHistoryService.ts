@@ -1,4 +1,5 @@
 import { formatChatMediaMessage, parseChatMediaMessage } from './chatMediaMessageService';
+import { decodeReply } from './messageQuote';
 import { qiniuStorage } from './qiniuStorageService';
 
 export type CallHistoryType = 'video' | 'audio' | 'screen';
@@ -88,6 +89,9 @@ export function parseCallHistoryMessage(message: string): CallHistoryRecord | nu
 
 export function serializeChatMessage(record: any) {
   const message = typeof record?.toJSON === 'function' ? record.toJSON() : record;
+  const reply = decodeReply(message.message);
+  if (reply)
+    return { ...serializeChatMessage({ ...message, message: reply.content }), quote: reply.quote };
   const call = parseCallHistoryMessage(message.message);
   if (call)
     return { ...message, message: formatCallHistoryMessage(call), messageType: 'call', call };

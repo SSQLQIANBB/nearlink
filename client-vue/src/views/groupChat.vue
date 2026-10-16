@@ -221,16 +221,26 @@
             <ul class="space-y-4">
               <li
                 v-for="(msg, index) in messages"
-                :key="index"
+                :key="msg.id || msg.clientMessageId || index"
                 class="flex flex-col"
+                @click.capture="actions?.click($event, actionMessage(msg))"
+                :data-selecting="actions?.selecting"
                 :class="msg.isMine ? 'items-end' : 'items-start'"
               >
+                <input
+                  v-if="actions?.selecting && msg.id"
+                  class="message-selection"
+                  type="checkbox"
+                  :checked="actions.selectedIds.includes(msg.id)"
+                  @change="actions.changeSelection($event, msg.id)"
+                  aria-label="选择消息"
+                />
                 <div
                   class="group-message-row flex items-start gap-2 max-w-[88%] sm:max-w-[70%]"
                   :title="msg.time"
                 >
                   <n-avatar
-                    v-if="!msg.isMine"
+                    v-if="!actions?.selecting && !msg.isMine"
                     class="group-message-avatar shrink-0"
                     :size="32"
                     :src="msg.user?.avatar || undefined"
@@ -251,14 +261,25 @@
                     >
                       {{ msg.user?.nickname || msg.user?.username || '未知用户' }}
                     </div>
-                    <ChatMessageContent
-                      class="group-message-bubble"
-                      :message="msg.message"
-                      :message-type="msg.messageType"
-                      :media="msg.media"
-                      :call="msg.call"
-                      :is-mine="msg.isMine"
-                    />
+                    <div
+                      class="message-action-target"
+                      @contextmenu="actions?.open($event, actionMessage(msg))"
+                      @pointerdown="actions?.pointerDown($event, actionMessage(msg))"
+                      @pointermove="actions?.pointerMove($event)"
+                      @pointerup="actions?.cancelPress()"
+                      @pointercancel="actions?.cancelPress()"
+                      @pointerleave="actions?.cancelPress()"
+                    >
+                      <ChatMessageContent
+                        class="group-message-bubble"
+                        :message="msg.message"
+                        :quote="msg.quote"
+                        :message-type="msg.messageType"
+                        :media="msg.media"
+                        :call="msg.call"
+                        :is-mine="msg.isMine"
+                      />
+                    </div>
                     <button
                       v-if="msg.sendStatus && msg.sendStatus !== 'sent'"
                       type="button"
@@ -280,8 +301,21 @@
             </ul>
           </n-scrollbar>
 
+          <ChatMessageActions
+            ref="actions"
+            kind="group"
+            :conversation-id="groupId"
+            :messages="messages.map(actionMessage)"
+            :can-reply="canSpeak"
+            @deleted="removeMessages"
+            @forwarded="loadGroupHistory"
+            @quote="focusComposer"
+          />
           <!-- 输入框 -->
-          <footer class="group-chat-composer p-4 border-t bg-white">
+          <footer
+            v-show="!actions?.selecting"
+            class="group-chat-composer p-4 border-t bg-white"
+          >
             <ChatMediaComposer
               compact
               :disabled="!canSpeak"
@@ -328,6 +362,7 @@ import { groupSessionState } from '@/services/groupSessionState';
 import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
+import ChatMessageActions from '@/components/ChatMessageActions.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -345,6 +380,31 @@ const scrollbarRef = ref<ScrollbarInst | null>(null);
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { online?: boolean })[]>([]);
 const messages = ref<any[]>([]);
+
+const deletedMessageIds = new Set<number>();
+const actions = ref<InstanceType<typeof ChatMessageActions> | null>(null);
+function actionMessage(msg: any) {
+  return {
+    id: msg.id,
+    message: msg.message,
+    messageType: msg.messageType,
+    senderName: msg.user?.nickname || msg.user?.username || '未知用户',
+  };
+}
+function removeMessages(ids: number[]) {
+  ids.forEach((id) => deletedMessageIds.add(id));
+  messages.value = messages.value.filter((msg) => !ids.includes(msg.id));
+}
+function focusComposer() {
+  nextTick(() => document.querySelector<HTMLElement>('.text-editor')?.focus());
+}
+
+watch(
+  () => socketStore.authenticated,
+  (ready, previous) => {
+    if (ready && previous === false) void loadGroupHistory();
+  },
+);
 
 // 当前用户是否可以发言
 const canSpeak = computed(() => {
@@ -375,15 +435,19 @@ async function loadGroupDetail() {
 async function loadGroupHistory() {
   try {
     const res = await getGroupMessages(groupId.value);
-    messages.value = res.messages.map((msg) => ({
-      message: msg.message,
-      time: new Date(msg.createdAt).toLocaleString(),
-      user: msg.sender,
-      isMine: msg.userId === currentUser.value?.id,
-      messageType: msg.messageType,
-      call: msg.call,
-      media: msg.media,
-    }));
+    messages.value = res.messages
+      .filter((msg) => !deletedMessageIds.has(msg.id))
+      .map((msg) => ({
+        id: msg.id,
+        quote: msg.quote,
+        message: msg.message,
+        time: new Date(msg.createdAt).toLocaleString(),
+        user: msg.sender,
+        isMine: msg.userId === currentUser.value?.id,
+        messageType: msg.messageType,
+        call: msg.call,
+        media: msg.media,
+      }));
     scrollToBottom('auto');
   } catch (error: any) {
     message.error('加载群聊记录失败: ' + error.message);
@@ -428,11 +492,12 @@ watch([() => socketStore.userList, () => socketStore.authenticated], ([users, re
 });
 
 function handleGroupMessage(data: any) {
-  if (data.groupId !== groupId.value) return;
+  if (data.groupId !== groupId.value || deletedMessageIds.has(data.id)) return;
   if (data.id && messages.value.some((msg) => msg.id === data.id)) return;
 
   messages.value.push({
     id: data.id,
+    quote: data.quote,
     message: data.message,
     time: data.time,
     user: data.user,
@@ -454,6 +519,7 @@ function handleSend(text: string) {
   const msg = {
     clientMessageId: crypto.randomUUID(),
     message: text,
+    quote: actions.value?.takeQuote(),
     time: new Date().toLocaleString(),
     user: {
       id: currentUser.value?.id,
@@ -481,6 +547,7 @@ function sendGroupMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayl
     message: payload.type === 'image' ? '[图片]' : `[语音] ${payload.media.durationSeconds}秒`,
     messageType: payload.type,
     media: payload.media,
+    quote: actions.value?.takeQuote(),
     time: new Date().toLocaleString(),
     user: {
       id: currentUser.value?.id,
@@ -552,6 +619,7 @@ async function retryGroupMessage(msg: any) {
   const result = await sendReliableMessage(socket.value, 'group_message', {
     groupId: groupId.value,
     message: msg.message,
+    quote: msg.quote,
     messageType: msg.messageType,
     media: msg.media,
     clientMessageId: msg.clientMessageId,
@@ -584,6 +652,24 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.message-action-target {
+  -webkit-touch-callout: none;
+}
+.message-selection {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+}
+li[data-selecting='true'] {
+  position: relative;
+  padding-left: 34px;
+  background: #eff6ff55;
+  border-radius: 8px;
+}
 .member-muted {
   display: inline-flex;
   align-items: center;

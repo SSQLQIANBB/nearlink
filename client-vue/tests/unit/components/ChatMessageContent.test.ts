@@ -23,6 +23,19 @@ const voice = {
 };
 
 describe('聊天媒体消息', () => {
+  it.each([false, true])('引用在收发两侧保留作者、正文与回复，isMine=%s', (isMine) => {
+    const wrapper = mount(ChatMessageContent, {
+      props: {
+        isMine,
+        message: '验证通过',
+        quote: { id: 1, kind: 'private', senderName: '小李', message: '已经发好了' },
+      },
+    });
+    expect(wrapper.find('.message-quote').text()).toContain('小李:已经发好了');
+    expect(wrapper.find('.chat-text').text()).toBe('验证通过');
+    expect(wrapper.find('.message-bubble').classes().includes('message-bubble--mine')).toBe(isMine);
+  });
+
   it('图片保留 Naive UI 缩略图并使用手势预览，不渲染跳转链接', () => {
     const wrapper = shallowMount(ChatImageMessage, {
       props: { media: image, isMine: false },

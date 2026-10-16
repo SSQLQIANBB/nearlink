@@ -13,6 +13,13 @@
       'message-bubble--image': messageType === 'image' && media,
     }"
   >
+    <blockquote
+      v-if="quote"
+      class="message-quote"
+    >
+      <strong>{{ quote.senderName }}:</strong>
+      <div>{{ quote.message }}</div>
+    </blockquote>
     <ChatImageMessage
       v-if="messageType === 'image' && media"
       :media="media"
@@ -31,7 +38,12 @@
 </template>
 
 <script setup lang="ts">
-import type { CallHistoryRecord, ChatMediaPayload, GroupHistoryMessage } from '@/api/message';
+import type {
+  MessageQuote,
+  CallHistoryRecord,
+  ChatMediaPayload,
+  GroupHistoryMessage,
+} from '@/api/message';
 import CallHistoryMessage from './CallHistoryMessage.vue';
 import ChatImageMessage from './ChatImageMessage.vue';
 import ChatVoiceMessage from './ChatVoiceMessage.vue';
@@ -39,6 +51,7 @@ import ChatTextMessage from './ChatTextMessage.vue';
 
 defineProps<{
   message: string;
+  quote?: MessageQuote;
   messageType?: GroupHistoryMessage['messageType'];
   media?: ChatMediaPayload;
   call?: CallHistoryRecord;
@@ -47,6 +60,19 @@ defineProps<{
 </script>
 
 <style scoped>
+.message-quote {
+  margin: 0 0 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid currentColor;
+  opacity: 0.72;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.message-quote div {
+  max-height: 100px;
+  overflow: auto;
+}
 .message-bubble {
   min-width: 92px;
   padding: 11px 14px;

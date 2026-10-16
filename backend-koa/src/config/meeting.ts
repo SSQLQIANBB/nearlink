@@ -1,4 +1,10 @@
 import {
+  accessibleMessage,
+  attachQuote,
+  deleteMessages,
+  type MessageReference,
+} from '../services/messageActions';
+import {
   resolveScreenScope,
   privateScreenMembers,
   screenShareActions,
@@ -71,10 +77,16 @@ function getPrivateCallType(deviceType: number): CallHistoryType | null {
 }
 
 async function getMessageContent(
-  data: { message?: string; messageType?: string; media?: ChatMediaMessage['media'] },
+  data: {
+    message?: string;
+    messageType?: string;
+    media?: ChatMediaMessage['media'];
+    forward?: MessageReference;
+  },
   userId: number,
   groupId?: number,
 ) {
+  if (data.forward) return (await accessibleMessage(userId, data.forward)).message;
   if (data.messageType === 'image' || data.messageType === 'voice') {
     const fileId = data.media?.fileId;
     if (!Number.isSafeInteger(fileId)) throw new Error('媒体文件无效');
@@ -90,6 +102,7 @@ async function getMessageContent(
     });
   }
   const message = data.message?.trim();
+  if (message?.startsWith('__NEARLINK_REPLY__:')) throw new Error('消息格式无效');
   if (!message || message.length > 10000) throw new Error('消息无效');
   return message;
 }
@@ -766,6 +779,21 @@ const initialMeeting = (server: Server) => {
       }
     });
 
+    socket.on('messages_delete', async (data, ack) => {
+      if (!currentUser) {
+        ack?.({ ok: false, error: '请先登录' });
+        return;
+      }
+      const userId = currentUser.id;
+      try {
+        const ids = await deleteMessages(userId, data?.kind, data?.ids);
+        io.to(getUserSockets(userId)).emit('messages_deleted', { kind: data.kind, ids });
+        ack?.({ ok: true });
+      } catch (error) {
+        ack?.({ ok: false, error: error instanceof Error ? error.message : '删除失败' });
+      }
+    });
+
     socket.on(
       'private_message',
       async (
@@ -775,6 +803,8 @@ const initialMeeting = (server: Server) => {
           messageType?: string;
           media?: ChatMediaMessage['media'];
           clientMessageId?: string;
+          quote?: MessageReference;
+          forward?: MessageReference;
         },
         ack?: (result: unknown) => void,
       ) => {
@@ -784,7 +814,15 @@ const initialMeeting = (server: Server) => {
         }
 
         try {
-          const messageContent = await getMessageContent(data, currentUser.id);
+          let messageContent = await getMessageContent(data, currentUser.id);
+          if (data.quote)
+            messageContent = await attachQuote(
+              messageContent,
+              currentUser.id,
+              data.quote,
+              'private',
+              data.to.id,
+            );
           const writeStartedAt = Date.now();
           const receiverSockets = getUserSockets(data.to.id);
           const { saved: savedMessage, duplicate } = await saveReliableMessage({
@@ -954,6 +992,8 @@ const initialMeeting = (server: Server) => {
           messageType?: string;
           media?: ChatMediaMessage['media'];
           clientMessageId?: string;
+          quote?: MessageReference;
+          forward?: MessageReference;
         },
         _member,
         _generation,
@@ -965,7 +1005,15 @@ const initialMeeting = (server: Server) => {
         }
 
         try {
-          const messageContent = await getMessageContent(data, currentUser.id, data.groupId);
+          let messageContent = await getMessageContent(data, currentUser.id, data.groupId);
+          if (data.quote)
+            messageContent = await attachQuote(
+              messageContent,
+              currentUser.id,
+              data.quote,
+              'group',
+              data.groupId,
+            );
           const writeStartedAt = Date.now();
           const member = await GroupMember.findOne({
             where: { groupId: data.groupId, userId: currentUser.id },

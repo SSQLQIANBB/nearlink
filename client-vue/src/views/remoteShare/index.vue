@@ -363,12 +363,22 @@
             <ul class="message-list space-y-4">
               <li
                 class="message-item flex flex-col w-full relative"
+                @click.capture="actions?.click($event, actionMessage(msg))"
+                :data-selecting="actions?.selecting"
                 :class="msg.fromUserId === authUser?.id ? 'items-end' : 'items-start'"
                 v-for="(msg, index) in currentMessageList"
                 :key="msg.id || msg.clientMessageId || index"
               >
+                <input
+                  v-if="actions?.selecting && msg.id"
+                  class="message-selection"
+                  type="checkbox"
+                  :checked="actions.selectedIds.includes(msg.id)"
+                  @change="actions.changeSelection($event, msg.id)"
+                  aria-label="选择消息"
+                />
                 <n-avatar
-                  v-if="msg.fromUserId !== authUser?.id"
+                  v-if="!actions?.selecting && msg.fromUserId !== authUser?.id"
                   class="incoming-avatar"
                   :size="32"
                   :src="contactUser.avatar || undefined"
@@ -392,13 +402,24 @@
                     { 'message-entry--call': msg.messageType === 'call' },
                   ]"
                 >
-                  <ChatMessageContent
-                    :message="msg.message"
-                    :message-type="msg.messageType"
-                    :media="msg.media"
-                    :call="msg.call"
-                    :is-mine="msg.fromUserId === authUser?.id"
-                  />
+                  <div
+                    class="message-action-target"
+                    @contextmenu="actions?.open($event, actionMessage(msg))"
+                    @pointerdown="actions?.pointerDown($event, actionMessage(msg))"
+                    @pointermove="actions?.pointerMove($event)"
+                    @pointerup="actions?.cancelPress()"
+                    @pointercancel="actions?.cancelPress()"
+                    @pointerleave="actions?.cancelPress()"
+                  >
+                    <ChatMessageContent
+                      :message="msg.message"
+                      :quote="msg.quote"
+                      :message-type="msg.messageType"
+                      :media="msg.media"
+                      :call="msg.call"
+                      :is-mine="msg.fromUserId === authUser?.id"
+                    />
+                  </div>
                 </div>
                 <button
                   v-if="msg.sendStatus && msg.sendStatus !== 'sent'"
@@ -412,7 +433,19 @@
             </ul>
           </n-scrollbar>
 
-          <div class="message-composer-shell">
+          <ChatMessageActions
+            ref="actions"
+            kind="private"
+            :conversation-id="contactUser.id"
+            :messages="currentMessageList.map(actionMessage)"
+            @deleted="removeMessages"
+            @forwarded="selectContact(contactUser!)"
+            @quote="focusComposer"
+          />
+          <div
+            v-show="!actions?.selecting"
+            class="message-composer-shell"
+          >
             <ToolBar
               class="chat-toolbar"
               :contact-user="contactUser"
@@ -496,6 +529,8 @@ import {
 import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
+import ChatMessageActions from '@/components/ChatMessageActions.vue';
+import type { MessageQuote } from '@/api/message';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import { mergeContactPresence } from '@/services/contactPresence';
@@ -562,6 +597,7 @@ type MessageInfo = {
   toUserId?: number;
   message: string;
   messageType?: 'text' | 'call' | 'image' | 'voice';
+  quote?: MessageQuote;
   call?: CallHistoryRecord;
   media?: ChatMediaPayload;
 };
@@ -623,6 +659,41 @@ async function loadContacts() {
 }
 const currentMessageList = ref<MessageInfo[]>([]);
 
+const deletedMessageIds = new Set<number>();
+const actions = ref<InstanceType<typeof ChatMessageActions> | null>(null);
+function actionMessage(msg: MessageInfo) {
+  return {
+    id: msg.id,
+    message: msg.message,
+    messageType: msg.messageType,
+    senderName:
+      (msg.fromUserId === authUser.value?.id ? authUser.value : contactUser.value)?.nickname ||
+      (msg.fromUserId === authUser.value?.id ? authUser.value : contactUser.value)?.username ||
+      '未知用户',
+  };
+}
+function removeMessages(ids: number[]) {
+  ids.forEach((id) => deletedMessageIds.add(id));
+  for (const [id, list] of privateMessageMap)
+    privateMessageMap.set(
+      id,
+      list.filter((msg) => !msg.id || !ids.includes(msg.id)),
+    );
+  currentMessageList.value = contactUser.value
+    ? privateMessageMap.get(contactUser.value.id) || []
+    : [];
+}
+function focusComposer() {
+  nextTick(() => document.querySelector<HTMLElement>('.text-editor')?.focus());
+}
+
+watch(
+  () => socketStore.authenticated,
+  (ready, previous) => {
+    if (ready && previous === false && contactUser.value) void selectContact(contactUser.value);
+  },
+);
+
 // refs
 const scrollbarRef = ref();
 
@@ -648,6 +719,7 @@ function handlePrivateMessage(data: any) {
     from: data.from,
     fromUserId: senderId,
     toUserId: data.toUserId,
+    quote: data.quote,
     message: data.message,
     messageType: data.messageType,
     media: data.media,
@@ -672,6 +744,7 @@ function handlePrivateCallHistory(data: any) {
     id: data.id,
     fromUserId: Number(data.fromUserId),
     toUserId: Number(data.toUserId),
+    quote: data.quote,
     message: data.message,
     messageType: data.messageType,
     call: data.call,
@@ -691,6 +764,7 @@ function handlePrivateCallHistory(data: any) {
 }
 
 function setMessage(id: number, data: MessageInfo) {
+  if (data.id && deletedMessageIds.has(data.id)) return;
   const list = privateMessageMap.get(id) || [];
   if (data.id && list.some((message) => message.id === data.id)) return;
 
@@ -715,20 +789,24 @@ async function selectContact(user: User) {
 
   try {
     const res = await getPrivateMessages(user.id);
-    const history = res.messages.map((msg) => ({
-      fromUserId: msg.fromUserId,
-      toUserId: msg.toUserId,
-      message: msg.message,
-      messageType: msg.messageType,
-      call: msg.call,
-      media: msg.media,
-      id: msg.id,
-      time: new Date(msg.createdAt).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }),
-    }));
+    if (contactUser.value?.id !== user.id) return;
+    const history = res.messages
+      .filter((msg) => !deletedMessageIds.has(msg.id))
+      .map((msg) => ({
+        fromUserId: msg.fromUserId,
+        toUserId: msg.toUserId,
+        quote: msg.quote,
+        message: msg.message,
+        messageType: msg.messageType,
+        call: msg.call,
+        media: msg.media,
+        id: msg.id,
+        time: new Date(msg.createdAt).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }),
+      }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
     scrollToBottom('auto');
@@ -757,6 +835,7 @@ function sendMsg(v: string) {
     fromUserId: authUser.value.id,
     toUserId: contactUser.value.id,
     message: v,
+    quote: actions.value?.takeQuote(),
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   };
   setMessage(contactUser.value.id, msg);
@@ -777,6 +856,7 @@ function sendMedia(payload: { type: 'image' | 'voice'; media: ChatMediaPayload }
     message: payload.type === 'image' ? '[图片]' : `[语音] ${payload.media.durationSeconds}秒`,
     messageType: payload.type,
     media: payload.media,
+    quote: actions.value?.takeQuote(),
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
   };
   setMessage(contactUser.value.id, msg);
@@ -794,6 +874,7 @@ async function retryPrivateMessage(msg: MessageInfo) {
   const result = await sendReliableMessage(socket.value, 'private_message', {
     to: target,
     message: msg.message,
+    quote: msg.quote,
     messageType: msg.messageType,
     media: msg.media,
     clientMessageId,
@@ -1004,6 +1085,24 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.message-action-target {
+  -webkit-touch-callout: none;
+}
+.message-selection {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+}
+li[data-selecting='true'] {
+  position: relative;
+  padding-left: 34px;
+  background: #eff6ff55;
+  border-radius: 8px;
+}
 .mobile-sidebar-toggle .iconfont {
   font-size: var(--icon-size-control);
 }
@@ -1373,7 +1472,7 @@ onUnmounted(() => {
   --n-color: transparent !important;
   --n-border: 0 !important;
 }
-.message-item.items-start {
+.message-item.items-start:not([data-selecting='true']) {
   padding-left: 44px;
 }
 .incoming-avatar {

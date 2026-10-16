@@ -6,7 +6,7 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>NearLink 需要使用麦克风进行语音消息和音视频通话。</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.10.0</string>
+  <string>0.11.0</string>
   <key>CFBundleGetInfoString</key>
-  <string>NearLink 内测版 0.10.0-alpha.5</string>
+  <string>NearLink 内测版 0.11.0-alpha.1</string>
 </dict></plist>
