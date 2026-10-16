@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { defineConfig, loadEnv, mergeConfig, normalizePath, type Plugin } from 'vite';
+import { defineConfig, loadEnv, mergeConfig, normalizePath } from 'vite';
 import webConfig from './vite.config';
 
 export default defineConfig(async (env) => {
@@ -14,19 +14,6 @@ export default defineConfig(async (env) => {
   }
   const base = typeof webConfig === 'function' ? await webConfig(env) : await webConfig;
   return mergeConfig(base, {
-    plugins: [
-      {
-        name: 'https-network-urls',
-        configureServer(server) {
-          const printUrls = server.printUrls;
-          server.printUrls = () => {
-            // Vite 将证书 SAN 域名追加到 Local；局域网启动只展示网卡 IP。
-            if (server.resolvedUrls) server.resolvedUrls.local = [];
-            printUrls();
-          };
-        },
-      },
-    ] satisfies Plugin[],
     server: {
       host: true,
       https: {
