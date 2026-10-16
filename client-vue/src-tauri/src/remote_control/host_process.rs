@@ -391,8 +391,7 @@ impl ProcessMediaDriver {
         if ttl == 0 || ttl > 15000 {
             return Err("REMOTE_MEDIA_LEASE_EXPIRED");
         }
-        let deadline = ipc::monotonic_deadline_ns(lease.deadline())
-            .map_err(|_| "REMOTE_MEDIA_LEASE_EXPIRED")?;
+        let deadline = ipc::monotonic_deadline_ns(lease.deadline())?;
         self.send(kind,json!({"mediaLeaseSeq":lease.lease_seq(),"ttlMs":ttl as u64,"monotonicDeadlineNs":deadline}))
     }
     pub fn terminate_bounded(&self) -> HostResult<()> {

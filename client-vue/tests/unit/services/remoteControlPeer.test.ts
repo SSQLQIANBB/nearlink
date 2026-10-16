@@ -301,6 +301,15 @@ describe('主控启用输入前报告真实渲染进度', () => {
     expect(state.send).not.toHaveBeenCalled();
     expect(peer.input.armed).toBe(false);
   });
+  it('快速重复点击共用待处理的启用请求，不使首个授权回复失效', () => {
+    render();
+    expect(peer.requestInputArm()).toBe(true);
+    expect(peer.requestInputArm()).toBe(true);
+    expect(messages().filter((message) => message.type === 'input-arm')).toHaveLength(1);
+    acceptArm();
+    expect(peer.input.armed).toBe(true);
+    expect(onEnd).not.toHaveBeenCalled();
+  });
   it.each(['closed', 'heartbeat-failed', 'arm-failed'] as const)(
     '%s 时请求失败且不保留可接受的启用请求',
     (failure) => {

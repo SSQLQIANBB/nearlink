@@ -51,7 +51,7 @@
         tabindex="0"
         :aria-label="
           session.scope === 'control'
-            ? '远程画面，点击继续操作后可使用键盘鼠标'
+            ? '远程画面，点击画面启用键盘鼠标'
             : '远程画面，仅观看'
         "
         @pointerdown="pointer($event, true)"
@@ -89,22 +89,16 @@
           session.scope === 'control'
             ? session.inputArmed
               ? '键鼠操作中'
-              : '键鼠操作已暂停'
+              : session.needsApproval ? '等待重新授权' : '点击画面开始操作'
             : '仅观看'
         }}
       </span>
       <n-button
-        v-if="session.scope === 'control'"
-        size="small"
-        :disabled="session.phase !== 'active' || session.inputArmed"
-        @click="session.continueInput()"
-      >
-        继续操作
-      </n-button>
-      <n-button
         v-if="session.needsApproval && session.device?.canHostControl"
         size="small"
-        @click="requestControl"
+        :loading="session.requestingControl"
+        :disabled="session.requestingControl"
+        @click="session.requestControl()"
       >
         请求控制许可
       </n-button>
@@ -315,13 +309,19 @@ function position(event: MouseEvent) {
   return session.mapPointer(event.clientX, event.clientY);
 }
 function pointer(event: PointerEvent, down: boolean) {
-  if (!session.inputArmed || ![0, 1, 2].includes(event.button)) return;
+  if (session.scope !== 'control' || ![0, 1, 2].includes(event.button)) return;
   const coordinates = position(event);
   if (!coordinates) {
     if (!down) pause();
     return;
   }
   event.preventDefault();
+  if (!session.inputArmed) {
+    // The activation click is local; never replay it after the host grants input.
+    if (down && event.button === 0) session.continueInput();
+    return;
+  }
+  if (!down && !pressedPointers.has(event.pointerId)) return;
   if (down) {
     pressedPointers.add(event.pointerId);
     video.value?.setPointerCapture(event.pointerId);
@@ -379,13 +379,6 @@ async function sendText() {
     if ((await session.commitText(value)) && text.value === value) text.value = '';
   } finally {
     sendingText.value = false;
-  }
-}
-async function requestControl() {
-  try {
-    await session.requestControl();
-  } catch {
-    /* The session transport already reports failure. */
   }
 }
 function visibility() {

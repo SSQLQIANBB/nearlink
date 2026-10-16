@@ -33,6 +33,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
   const scope = ref<'view' | 'control'>('view');
   const inputArmed = ref(false);
   const needsApproval = ref(false);
+  const requestingControl = ref(false);
   const textQueue = new RemoteTextCommitQueue();
   const statusMessage = ref('');
   const failureCode = ref('');
@@ -211,7 +212,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
             phase.value = 'active';
             statusMessage.value =
               value === 'control'
-                ? '已获控制许可，点击继续操作后开始'
+                ? '已获控制许可，点击画面开始操作'
                 : '仅观看，尚未授予键鼠控制权限';
           }
         },
@@ -221,9 +222,11 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
             inputArmed.value = false;
             if (reason === 'REMOTE_HOST_PAUSED') needsApproval.value = true;
             statusMessage.value =
-              scope.value === 'control'
-                ? '操作已暂停，确认画面正常后可继续'
-                : '仅观看，尚未授予键鼠控制权限';
+              scope.value === 'view'
+                ? '仅观看，尚未授予键鼠控制权限'
+                : needsApproval.value
+                ? '控制许可已暂停，请点击“请求控制许可”等待对方重新确认'
+                : '操作已暂停，点击画面继续';
           }
         },
         onInputArmed: (value) => {
@@ -282,9 +285,16 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     return !!peer?.sendInput(event);
   }
   function continueInput() {
+    if (phase.value !== 'active' || scope.value !== 'control') return false;
+    if (needsApproval.value) {
+      statusMessage.value = '控制许可已暂停，请点击“请求控制许可”等待对方重新确认';
+      return false;
+    }
     videoElement?.focus();
     const accepted = !!peer?.requestInputArm();
-    if (!accepted) statusMessage.value = '暂时无法继续操作，请等待正常画面或对方重新授权';
+    statusMessage.value = accepted
+      ? '正在启用键鼠操作'
+      : '画面或控制通道尚未就绪，请等待画面正常后再次点击';
     return accepted;
   }
   function pauseInput(reason = 'CONTROLLER_PAUSED') {
@@ -304,13 +314,32 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     return sent;
   }
   async function requestControl() {
-    if (!adapter || phase.value !== 'active' || !device.value?.canHostControl) return;
-    statusMessage.value = '等待对方重新确认控制许可';
-    await adapter.requestControl();
+    if (!adapter || phase.value !== 'active' || !device.value?.canHostControl || requestingControl.value) return;
+    const current = generation;
+    const transport = adapter;
+    requestingControl.value = true;
+    statusMessage.value = '正在申请控制许可';
+    try {
+      // Native media pauses invalidate input locally, but do not update server scope.
+      // Revoke the old server authorization before requesting a new host consent.
+      if (scope.value === 'control') await transport.pause();
+      if (current !== generation) return;
+      await transport.requestControl();
+      if (current === generation) statusMessage.value = '请求已发送，请在被控电脑确认控制许可';
+    } catch (error) {
+      if (current === generation) {
+        const code = error instanceof Error && /^[A-Z_]{1,64}$/.test(error.message)
+          ? error.message : 'REMOTE_REQUEST_FAILED';
+        statusMessage.value = `控制许可申请失败：${code}，请重试`;
+      }
+    } finally {
+      if (current === generation) requestingControl.value = false;
+    }
   }
   function end(reason = 'REMOTE_LOCAL_END', notify = true) {
     if (!visible.value && !adapter && !peer) return;
     generation++;
+    requestingControl.value = false;
     if (deadline) clearTimeout(deadline);
     deadline = null;
     const currentAdapter = adapter;
@@ -345,6 +374,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
     scope,
     inputArmed,
     needsApproval,
+    requestingControl,
     statusMessage,
     failureCode,
     visible,

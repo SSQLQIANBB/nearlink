@@ -352,7 +352,6 @@ impl HostRuntime {
                 let _ = self.stop(StopReason::MediaStalled);
                 Err("REMOTE_MEDIA_FROZEN")
             }
-            MediaStatus::Stalled if !self.paused => self.pause(StopReason::MediaStalled),
             _ => Ok(()),
         }
     }
@@ -656,6 +655,10 @@ impl HostRuntime {
         result
     }
     pub fn pause(&mut self, reason: StopReason) -> HostResult<()> {
+        eprintln!(
+            "remote_host_pause: reason={:?} media_status={:?} media_stage={:?} input_epoch={}",
+            reason, self.media_health.status, self.media_health.stage, self.highest_issued_input_epoch
+        );
         self.paused = true;
         let release = self.guard.pause(reason);
         self.consume_release(release);

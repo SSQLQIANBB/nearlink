@@ -437,7 +437,7 @@ export class RemoteControlPeer {
       this.now() - this.lastFrame >= 3000
     )
       return false;
-    this.armRequest = null;
+    if (this.armRequest !== null || this.input.armed) return true;
     // The host must observe a rendered frame before considering this explicit
     // arm request. Both messages share the same reliable, ordered channel.
     if (!this.sendState('heartbeat', { renderedFrames: this.frameCount })) return false;

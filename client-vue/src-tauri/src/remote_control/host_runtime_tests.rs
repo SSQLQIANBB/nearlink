@@ -494,18 +494,11 @@ fn missing_native_or_rendered_first_frame_never_arms_control() {
 }
 
 #[test]
-fn every_frozen_stage_pauses_and_ends_even_with_other_progress_and_lease_renewal() {
-    use super::super::media_liveness::MediaStage;
+fn every_frozen_stage_ends_at_ten_seconds_even_with_other_progress_and_lease_renewal() {
     for frozen in 0..4 {
         let mut f = fixture("control");
         start(&mut f, "control", 15000);
         key_down(&mut f);
-        let stage = [
-            MediaStage::Capture,
-            MediaStage::Encoded,
-            MediaStage::Forwarded,
-            MediaStage::Rendered,
-        ][frozen];
         for seconds in 1..=9 {
             let at = f.now + Duration::from_secs(seconds);
             {
@@ -523,20 +516,10 @@ fn every_frozen_stage_pauses_and_ends_even_with_other_progress_and_lease_renewal
                 let ms = f.ms + seconds * 1000;
                 lease(&mut f, "control", 1, 1, 15000, at, ms);
             }
-            if seconds >= 3 {
-                assert_eq!(
-                    f.host.media_health(),
-                    MediaHealth {
-                        status: MediaStatus::Stalled,
-                        stage: Some(stage)
-                    }
-                );
-                assert!(f.host.paused);
-                assert!(f.host.media_started());
-                assert!(!f.host.ended());
-                assert!(f.host.arm_input(at).is_err());
-                assert_eq!(f.log.lock().unwrap().released, vec!["KeyA"]);
-            }
+            assert_eq!(f.host.media_health().status, MediaStatus::Healthy);
+            assert!(!f.host.paused);
+            assert!(f.host.media_started());
+            assert!(!f.host.ended());
         }
         assert_eq!(f.log.lock().unwrap().renews, 2);
         let at = f.now + Duration::from_secs(10);
@@ -548,7 +531,7 @@ fn every_frozen_stage_pauses_and_ends_even_with_other_progress_and_lease_renewal
 }
 
 #[test]
-fn recovered_capture_cannot_automatically_rearm_the_paused_control_epoch() {
+fn recovered_capture_keeps_control_permission_without_reapproval() {
     let mut f = fixture("control");
     start(&mut f, "control", 15000);
     key_down(&mut f);
@@ -563,16 +546,16 @@ fn recovered_capture_cannot_automatically_rearm_the_paused_control_epoch() {
         f.host.supervisor_heartbeat(at).unwrap();
         rendered(&mut f, seconds + 1, at);
     }
-    assert!(f.host.paused);
+    assert!(!f.host.paused);
     let at = f.now + Duration::from_secs(4);
     f.log.lock().unwrap().progress = NativeMediaProgress::at(8, at);
     f.host.supervisor_heartbeat(at).unwrap();
     rendered(&mut f, 8, at);
     assert_eq!(f.host.media_health().status, MediaStatus::Healthy);
-    assert_eq!(f.host.arm_input(at), Err("REMOTE_CONTROL_NOT_ALLOWED"));
+    f.host.release_input(StopReason::LocalStop).unwrap();
+    assert!(f.host.arm_input(at).is_ok());
     let ms = f.ms + 4000;
     lease(&mut f, "control", 1, 1, 15000, at, ms);
-    assert!(f.host.arm_input(at).is_err());
     assert!(!f.host.ended());
     assert_eq!(f.log.lock().unwrap().released, vec!["KeyA"]);
 }
@@ -581,9 +564,14 @@ fn recovered_capture_cannot_automatically_rearm_the_paused_control_epoch() {
 fn input_post_deadline_includes_media_liveness_even_before_watchdog_tick() {
     let mut f = fixture("control");
     start(&mut f, "control", 15000);
-    let at = f.now + Duration::from_millis(2900);
+    for seconds in 1..=9 {
+        let at = f.now + Duration::from_secs(seconds);
+        f.host.supervisor_heartbeat(at).unwrap();
+        rendered(&mut f, seconds + 1, at);
+    }
+    let at = f.now + Duration::from_millis(9900);
     f.host.supervisor_heartbeat(at).unwrap();
-    rendered(&mut f, 2, at);
+    rendered(&mut f, 11, at);
     let context = f.host.arm_input(at).unwrap();
     let window = f.host.input_window(at).unwrap();
     let message = json!({"version":1,"sessionId":context.session_id,"controlEpoch":context.control_epoch,"inputEpoch":context.input_epoch,"layoutVersion":context.layout_version,"seq":1,"inputWindowId":window.input_window_id,"type":"key","payload":{"code":"KeyA","down":true}});
@@ -592,22 +580,22 @@ fn input_post_deadline_includes_media_liveness_even_before_watchdog_tick() {
         .unwrap();
     assert_eq!(
         f.log.lock().unwrap().deadlines,
-        vec![f.now + Duration::from_secs(3)]
+        vec![f.now + Duration::from_secs(10)]
     );
-    let at = f.now + Duration::from_secs(3);
+    let at = f.now + Duration::from_secs(10);
     assert_eq!(
         f.host
             .input(&serde_json::to_vec(&message).unwrap(), at)
             .err(),
-        Some("REMOTE_MEDIA_NOT_LIVE")
+        Some("REMOTE_MEDIA_FROZEN")
     );
     assert_eq!(f.log.lock().unwrap().actions, 1);
     assert_eq!(f.log.lock().unwrap().released, vec!["KeyA"]);
-    assert!(!f.host.ended());
+    assert!(f.host.ended());
 }
 
 #[test]
-fn in_flight_input_after_freeze_is_discarded_without_ack_or_early_view_end() {
+fn expired_in_flight_input_is_discarded_without_ack_or_early_view_end() {
     let mut f = fixture("control");
     start(&mut f, "control", 15000);
     let context = f.host.arm_input(f.now).unwrap();
@@ -624,13 +612,10 @@ fn in_flight_input_after_freeze_is_discarded_without_ack_or_early_view_end() {
         f.host.supervisor_heartbeat(at).unwrap();
         rendered(&mut f, seconds + 1, at);
         if seconds >= 3 {
-            let channels = f.log.lock().unwrap().channels.len();
             f.host.input_message(&message, at).unwrap();
-            assert_eq!(
-                f.log.lock().unwrap().channels.len(),
-                channels,
-                "discarded input must not ACK"
-            );
+            let acknowledged = f.log.lock().unwrap().channels.iter()
+                .any(|message| message["type"] == "input-ack");
+            assert!(!acknowledged, "discarded input must not ACK");
             assert_eq!(f.log.lock().unwrap().actions, 0);
             assert!(f.host.paused);
             assert!(f.host.media_started());
@@ -735,9 +720,9 @@ fn crossing_liveness_deadline_inside_executor_pauses_without_ending_view() {
     f.host.liveness = MediaLiveness::default();
     f.host
         .liveness
-        .start(now - Duration::from_secs(3), NativeMediaProgress::default())
+        .start(now - Duration::from_secs(10), NativeMediaProgress::default())
         .unwrap();
-    f.log.lock().unwrap().progress = NativeMediaProgress::at(1, now - Duration::from_millis(2800));
+    f.log.lock().unwrap().progress = NativeMediaProgress::at(1, now - Duration::from_millis(9800));
     f.host.liveness.rendered(1, now).unwrap();
     f.host.input = Box::new(CrossDeadline);
     let context = f.host.arm_input(now).unwrap();

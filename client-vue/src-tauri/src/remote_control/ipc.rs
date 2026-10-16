@@ -310,35 +310,20 @@ impl IpcCodec {
     }
 }
 
-/// Shared CLOCK_MONOTONIC, explicitly matched by the Python receiver. Read the
+/// Shared engine clock (CLOCK_MONOTONIC on Unix, QPC on Windows). Read the
 /// kernel clock BEFORE computing Instant remaining time, so delay only shortens
 /// authority and queued messages never extend the signed lease.
-#[cfg(unix)]
-pub fn monotonic_deadline_ns(deadline: Instant) -> Result<String, String> {
-    let mut current = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut current) } != 0
-        || current.tv_sec < 0
-        || current.tv_nsec < 0
-    {
-        return Err("Monotonic clock unavailable".into());
-    }
+pub fn monotonic_deadline_ns(deadline: Instant) -> Result<String, &'static str> {
+    let (current, _) = super::media_liveness::clock_sample()?;
+    // Sample Instant again AFTER the engine clock; clock_sample's earlier
+    // Instant is for progress timestamps and would extend a lease here.
     let remaining = deadline
         .checked_duration_since(Instant::now())
-        .ok_or("Media lease expired")?;
+        .ok_or("REMOTE_MEDIA_LEASE_EXPIRED")?;
     if remaining.is_zero() || remaining > std::time::Duration::from_secs(15) {
-        return Err("Invalid media lease deadline".into());
+        return Err("REMOTE_MEDIA_LEASE_EXPIRED");
     }
-    Ok(
-        ((current.tv_sec as u128) * 1_000_000_000 + current.tv_nsec as u128 + remaining.as_nanos())
-            .to_string(),
-    )
-}
-#[cfg(not(unix))]
-pub fn monotonic_deadline_ns(_deadline: Instant) -> Result<String, String> {
-    Err("Host IPC clock unsupported on this platform".into())
+    Ok((current as u128 + remaining.as_nanos()).to_string())
 }
 
 #[cfg(test)]
@@ -441,7 +426,7 @@ mod tests {
         assert!(child.decode(&frame).is_err());
         assert!(child.encode("ready", json!({})).is_err());
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "windows"))]
     #[test]
     fn expired_or_unbounded_deadline_is_rejected() {
         assert!(monotonic_deadline_ns(Instant::now()).is_err());
@@ -454,5 +439,18 @@ mod tests {
                 .parse::<u128>()
                 .is_ok()
         );
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn media_deadline_uses_windows_engine_clock_without_extending_lease() {
+        let deadline = Instant::now() + std::time::Duration::from_secs(15);
+        let before = super::super::media_liveness::clock_sample().unwrap().0 as u128;
+        let converted = monotonic_deadline_ns(deadline)
+            .unwrap()
+            .parse::<u128>()
+            .unwrap();
+        let (after, sampled_at) = super::super::media_liveness::clock_sample().unwrap();
+        assert!(converted > before);
+        assert!(converted <= after as u128 + deadline.duration_since(sampled_at).as_nanos());
     }
 }

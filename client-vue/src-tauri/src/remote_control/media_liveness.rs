@@ -5,7 +5,6 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 
 pub(super) const MAX_SEQUENCE: u64 = 9_007_199_254_740_991;
-pub(super) const PAUSE_AFTER: Duration = Duration::from_secs(3);
 const END_AFTER: Duration = Duration::from_secs(10);
 type ProgressResult<T> = Result<T, &'static str>;
 
@@ -141,7 +140,6 @@ pub(super) fn clock_sample() -> ProgressResult<(u64, Instant)> {
 pub(super) enum MediaStatus {
     Waiting,
     Healthy,
-    Stalled,
     Frozen,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -227,10 +225,10 @@ impl MediaLiveness {
             .min_by_key(|(_, at)| *at)
             .unwrap();
         let age = now.saturating_duration_since(oldest);
+        // Startup delays and short stalls must not revoke the approved control epoch.
+        // The viewer may release input locally; only sustained loss ends the session.
         let status = if age >= END_AFTER {
             MediaStatus::Frozen
-        } else if age >= PAUSE_AFTER {
-            MediaStatus::Stalled
         } else if progress
             .iter()
             .any(|(_, at)| at.is_none() || at.is_some_and(|at| at > now))
@@ -261,7 +259,7 @@ impl MediaLiveness {
         }
         self.progress(native)?
             .iter()
-            .map(|(_, at)| at.and_then(|at| at.checked_add(PAUSE_AFTER)))
+            .map(|(_, at)| at.and_then(|at| at.checked_add(END_AFTER)))
             .collect::<Option<Vec<_>>>()?
             .into_iter()
             .min()
@@ -328,7 +326,7 @@ mod tests {
         assert_eq!(p.stages[0].at, Some(now));
     }
     #[test]
-    fn every_stage_has_independent_first_frame_pause_and_end_deadlines() {
+    fn first_frame_wait_does_not_revoke_control_at_three_seconds() {
         for stage in 0..4 {
             let now = Instant::now();
             let mut live = MediaLiveness::default();
@@ -345,8 +343,8 @@ mod tests {
             assert_eq!(live.health(native, now).status, MediaStatus::Waiting);
             assert!(live.input_deadline(native, now).is_none());
             assert_eq!(
-                live.health(native, now + PAUSE_AFTER).status,
-                MediaStatus::Stalled
+                live.health(native, now + Duration::from_secs(3)).status,
+                MediaStatus::Waiting
             );
             assert_eq!(
                 live.health(native, now + END_AFTER).status,
@@ -368,16 +366,11 @@ mod tests {
             native.set_stage(2, seconds + 1, at);
             live.rendered(seconds + 1, at).unwrap();
             let health = live.health(native, at);
-            if seconds >= 3 {
+            if seconds >= 10 {
                 assert_eq!(health.stage, Some(MediaStage::Capture));
-                assert_eq!(
-                    health.status,
-                    if seconds >= 10 {
-                        MediaStatus::Frozen
-                    } else {
-                        MediaStatus::Stalled
-                    }
-                );
+                assert_eq!(health.status, MediaStatus::Frozen);
+            } else {
+                assert_eq!(health.status, MediaStatus::Healthy);
             }
         }
     }
@@ -388,16 +381,16 @@ mod tests {
         assert!(live.rendered(1, now).is_err());
         live.start(now, NativeMediaProgress::default()).unwrap();
         live.rendered(1, now).unwrap();
-        live.rendered(1, now + PAUSE_AFTER).unwrap();
-        assert!(live.rendered(0, now + PAUSE_AFTER).is_err());
-        let native = NativeMediaProgress::at(2, now + PAUSE_AFTER);
+        live.rendered(1, now + END_AFTER).unwrap();
+        assert!(live.rendered(0, now + END_AFTER).is_err());
+        let native = NativeMediaProgress::at(2, now + END_AFTER);
         assert_eq!(
-            live.health(native, now + PAUSE_AFTER),
+            live.health(native, now + END_AFTER),
             MediaHealth {
-                status: MediaStatus::Stalled,
+                status: MediaStatus::Frozen,
                 stage: Some(MediaStage::Rendered)
             }
         );
-        assert!(live.start(now + PAUSE_AFTER, native).is_err());
+        assert!(live.start(now + END_AFTER, native).is_err());
     }
 }

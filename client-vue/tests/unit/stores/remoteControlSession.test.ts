@@ -43,6 +43,7 @@ vi.mock('@/services/remoteControlAdapter', () => ({
     end = vi.fn().mockResolvedValue(undefined);
     dispose = vi.fn();
     requestControl = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn().mockResolvedValue(undefined);
     constructor(
       _token: string,
       _platform: string,
@@ -143,7 +144,52 @@ describe('远控主控会话接线', () => {
     expect(store.statusMessage).toBe('仅观看，尚未授予键鼠控制权限');
     peer.options.onAuthorization('control');
     peer.options.onPauseInput('REMOTE_HOST_PAUSED');
-    expect(store.statusMessage).toContain('操作已暂停');
+    expect(store.statusMessage).toContain('请求控制许可');
+    expect(store.continueInput()).toBe(false);
+    expect(peer.requestInputArm).not.toHaveBeenCalled();
+    await store.requestControl();
+    expect(mocks.adapters[0].pause).toHaveBeenCalledOnce();
+    expect(mocks.adapters[0].pause.mock.invocationCallOrder[0]).toBeLessThan(mocks.adapters[0].requestControl.mock.invocationCallOrder[0]);
+    expect(mocks.adapters[0].requestControl).toHaveBeenCalledOnce();
+    peer.options.onAuthorization('control');
+    expect(store.continueInput()).toBe(true);
+    expect(peer.requestInputArm).toHaveBeenCalledOnce();
+  });
+  it('重新授权等待撤销旧许可，拒绝重复点击，失败可见且允许重试', async () => {
+    const store = await connected();
+    mocks.peers[0].options.onAuthorization('control');
+    const adapter = mocks.adapters[0];
+    let release!: () => void;
+    adapter.pause.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const request = store.requestControl();
+    expect(store.requestingControl).toBe(true);
+    await store.requestControl();
+    expect(adapter.pause).toHaveBeenCalledOnce();
+    expect(adapter.requestControl).not.toHaveBeenCalled();
+    adapter.requestControl.mockRejectedValueOnce(new Error('INVALID_TRANSITION'));
+    release();
+    await request;
+    expect(store.statusMessage).toContain('申请失败：INVALID_TRANSITION');
+    expect(store.requestingControl).toBe(false);
+    mocks.peers[0].options.onAuthorization('view');
+    await store.requestControl();
+    expect(adapter.pause).toHaveBeenCalledOnce();
+    expect(adapter.requestControl).toHaveBeenCalledTimes(2);
+    expect(store.statusMessage).toContain('请求已发送');
+  });
+  it('撤销旧许可期间结束会话，不再申请控制', async () => {
+    const store = await connected();
+    mocks.peers[0].options.onAuthorization('control');
+    const adapter = mocks.adapters[0];
+    let release!: () => void;
+    adapter.pause.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const request = store.requestControl();
+    store.end();
+    release();
+    await request;
+    expect(adapter.requestControl).not.toHaveBeenCalled();
+    expect(store.requestingControl).toBe(false);
+    expect(store.statusMessage).toBe('远程协助已结束');
   });
   it('连接失败保留错误代码并释放资源，不展示任意异常正文', async () => {
     const store = useRemoteControlSessionStore();
