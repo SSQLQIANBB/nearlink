@@ -43,6 +43,7 @@
             </div>
             <p class="login-brand-subtitle">远程协作平台 · 高效安全链接</p>
             <p class="mt-2 text-xs text-slate-500">{{ APP_VERSION_LABEL }}</p>
+            <div class="mt-3"><DesktopReleaseEntry /></div>
           </div>
         </template>
 
@@ -409,6 +410,7 @@
 </template>
 
 <script setup lang="ts">
+import DesktopReleaseEntry from '@/components/DesktopReleaseEntry.vue';
 import { APP_VERSION_LABEL } from '@/config/appVersion';
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

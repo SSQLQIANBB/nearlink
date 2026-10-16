@@ -124,11 +124,12 @@ fn canonical(value: &serde_json::Value) -> String {
         _ => value.to_string(),
     }
 }
+// These proofs grant no session authority. The server checks expiry and consumes
+// the nonce once; only bound local signing duration, not the computer wall clock.
 pub(super) fn register(
     store: &impl SeedStore,
     challenge: DeviceChallenge,
     alias: String,
-    now: u64,
 ) -> Result<RegistrationProof, &'static str> {
     let started = Instant::now();
     let alias = alias.trim().to_owned();
@@ -137,8 +138,7 @@ pub(super) fn register(
         || !positive(challenge.user_id)
         || challenge.action != "register-device"
         || decode(&challenge.nonce, Some(32)).is_err()
-        || challenge.expires_at <= now
-        || challenge.expires_at > now.saturating_add(30_000)
+        || !positive(challenge.expires_at)
         || alias.is_empty()
         || alias.encode_utf16().count() > 80
         || alias.chars().any(|c| c <= '\u{1f}' || c == '\u{7f}')
@@ -147,7 +147,7 @@ pub(super) fn register(
     }
     let platform = platform()?;
     let key = signing_key(store, challenge.user_id, true)?;
-    if started.elapsed() >= Duration::from_millis(challenge.expires_at - now) {
+    if started.elapsed() >= Duration::from_secs(30) {
         return Err("INVALID_DEVICE_CHALLENGE");
     }
     let public_key = format!(
@@ -177,17 +177,17 @@ pub struct DeviceIdentityProof {
     signature: String,
     platform: &'static str,
 }
-pub(super) fn identify(store: &impl SeedStore, challenge: DeviceChallenge, now: u64) -> Result<DeviceIdentityProof, &'static str> {
+pub(super) fn identify(store: &impl SeedStore, challenge: DeviceChallenge) -> Result<DeviceIdentityProof, &'static str> {
     let started = Instant::now();
     if !uuid(&challenge.id) || !uuid(&challenge.sid) || !positive(challenge.user_id)
         || challenge.action != "identify-device" || decode(&challenge.nonce, Some(32)).is_err()
-        || challenge.expires_at <= now || challenge.expires_at > now.saturating_add(30_000) {
+        || !positive(challenge.expires_at) {
         return Err("INVALID_DEVICE_CHALLENGE");
     }
     let platform = platform()?;
     // Never create or rotate a key when merely identifying this machine.
     let key = signing_key(store, challenge.user_id, false)?;
-    if started.elapsed() >= Duration::from_millis(challenge.expires_at - now) { return Err("INVALID_DEVICE_CHALLENGE"); }
+    if started.elapsed() >= Duration::from_secs(30) { return Err("INVALID_DEVICE_CHALLENGE"); }
     let public_key = format!("-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----\n", STANDARD.encode(public_der(&key)));
     let mut message = serde_json::to_value(&challenge).map_err(|_| "INVALID_DEVICE_CHALLENGE")?;
     let map = message.as_object_mut().unwrap();
@@ -825,26 +825,26 @@ mod tests {
     }
     #[test]
     fn identification_matches_node_and_never_creates_a_key() {
-        let (_, store, _, _, ms, _) = fixture();
+        let (_, store, _, _, _, _) = fixture();
         let vector: Value = serde_json::from_str(include_str!("../../../../fixtures/remote-device-identification-v1.json")).unwrap();
         let challenge: DeviceChallenge = serde_json::from_value(vector["challenge"].clone()).unwrap();
-        let result = identify(&store, challenge.clone(), ms).unwrap();
+        let result = identify(&store, challenge.clone()).unwrap();
         assert_eq!(result.public_key, vector["proof"]["publicKey"]);
         #[cfg(target_os = "macos")]
         assert_eq!(result.signature, vector["proof"]["signature"]);
         let empty = MemoryStore::default();
-        assert!(identify(&empty, challenge.clone(), ms).is_err());
+        assert!(identify(&empty, challenge.clone()).is_err());
         assert!(empty.0.borrow().is_empty());
         let mut wrong = challenge.clone(); wrong.action = "register-device".into();
-        assert!(identify(&store, wrong, ms).is_err());
-        assert!(register(&store, challenge.clone(), "test".into(), ms).is_err());
-        assert!(identify(&store, challenge, ms + 30_001).is_err());
+        assert!(identify(&store, wrong).is_err());
+        assert!(register(&store, challenge.clone(), "test".into()).is_err());
+        assert!(identify(&store, challenge).is_ok());
     }
     #[test]
     fn registration_is_exactly_the_node_canonical_signature() {
-        let (f, store, _, _, ms, _) = fixture();
+        let (f, store, _, _, _, _) = fixture();
         let challenge = serde_json::from_value(f["registrationChallenge"].clone()).unwrap();
-        let proof = register(&store, challenge, "本机 Mac".into(), ms).unwrap();
+        let proof = register(&store, challenge, "本机 Mac".into()).unwrap();
         assert_eq!(
             proof.public_key,
             f["registration"]["publicKey"].as_str().unwrap()
@@ -883,8 +883,8 @@ mod tests {
         );
     }
     #[test]
-    fn registration_never_signs_other_actions_expired_challenges_or_control_characters() {
-        let (f, store, _, _, ms, _) = fixture();
+    fn registration_rejects_other_actions_invalid_timestamps_and_control_characters() {
+        let (f, store, _, _, _, _) = fixture();
         for mode in 0..5 {
             let mut challenge: DeviceChallenge =
                 serde_json::from_value(f["registrationChallenge"].clone()).unwrap();
@@ -894,12 +894,12 @@ mod tests {
             };
             match mode {
                 1 => challenge.action = "host-consent".into(),
-                2 => challenge.expires_at = ms,
-                3 => challenge.expires_at = ms + 30_001,
+                2 => challenge.expires_at = 0,
+                3 => challenge.expires_at = u64::MAX,
                 4 => challenge.user_id = 0,
                 _ => (),
             }
-            assert!(register(&store, challenge, alias.into(), ms).is_err());
+            assert!(register(&store, challenge, alias.into()).is_err());
         }
     }
     #[test]

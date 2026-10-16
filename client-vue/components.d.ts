@@ -22,6 +22,8 @@ declare module 'vue' {
     ChatTextMessage: typeof import('./src/components/ChatTextMessage.vue')['default']
     ChatVoiceMessage: typeof import('./src/components/ChatVoiceMessage.vue')['default']
     DesktopAuxiliaryHost: typeof import('./src/components/DesktopAuxiliaryHost.vue')['default']
+    DesktopReleaseCenter: typeof import('./src/components/DesktopReleaseCenter.vue')['default']
+    DesktopReleaseEntry: typeof import('./src/components/DesktopReleaseEntry.vue')['default']
     DesktopScreenPicker: typeof import('./src/components/DesktopScreenPicker.vue')['default']
     DesktopTitlebar: typeof import('./src/components/DesktopTitlebar.vue')['default']
     GlobalMessages: typeof import('./src/components/GlobalMessages.vue')['default']

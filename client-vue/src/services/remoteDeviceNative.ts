@@ -124,6 +124,8 @@ async function operation<T>(
   }
 }
 
+// Challenge expiry is enforced by the server (Redis TTL + one-time consumption).
+// Local wall-clock comparison would reject valid challenges on misconfigured PCs.
 export function validDeviceChallenge(value: RemoteDeviceChallenge, userId: number, sid: string) {
   const uuid = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
   return (
@@ -138,8 +140,7 @@ export function validDeviceChallenge(value: RemoteDeviceChallenge, userId: numbe
     value.action === 'register-device' &&
     /^[A-Za-z0-9_-]{43}$/.test(value.nonce) &&
     Number.isSafeInteger(value.expiresAt) &&
-    value.expiresAt > Date.now() &&
-    value.expiresAt <= Date.now() + 30000
+    value.expiresAt > 0
   );
 }
 
@@ -152,7 +153,7 @@ export async function createRemoteDeviceProof(
     'remote_control_register_device',
     { challenge, alias },
     signal,
-    Math.max(1, challenge.expiresAt - Date.now()),
+    30000,
   );
   if (
     !value ||
@@ -166,8 +167,7 @@ export async function createRemoteDeviceProof(
     value.publicKey.length > 1024 ||
     !value.publicKey.startsWith('-----BEGIN PUBLIC KEY-----\n') ||
     typeof value.signature !== 'string' ||
-    !/^[A-Za-z0-9+/]{86}==$/.test(value.signature) ||
-    challenge.expiresAt <= Date.now()
+    !/^[A-Za-z0-9+/]{86}==$/.test(value.signature)
   )
     throw new Error('REMOTE_DEVICE_PROOF_INVALID');
   return value;
@@ -243,7 +243,7 @@ export async function identifyRemoteDevice(
     'remote_control_identify_device',
     { challenge },
     signal,
-    Math.max(1, challenge.expiresAt - Date.now()),
+    30000,
   );
   if (
     !value ||
@@ -256,8 +256,7 @@ export async function identifyRemoteDevice(
     value.publicKey.length > 1024 ||
     !value.publicKey.startsWith('-----BEGIN PUBLIC KEY-----\n') ||
     typeof value.signature !== 'string' ||
-    !/^[A-Za-z0-9+/]{86}==$/.test(value.signature) ||
-    challenge.expiresAt <= Date.now()
+    !/^[A-Za-z0-9+/]{86}==$/.test(value.signature)
   )
     throw new Error('REMOTE_DEVICE_PROOF_INVALID');
   return value;

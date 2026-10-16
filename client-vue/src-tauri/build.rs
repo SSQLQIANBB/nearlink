@@ -67,6 +67,8 @@ fn main() {
     // App commands otherwise bypass the per-window capability allowlist.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "desktop_release_info",
+            "desktop_release_download",
             "screen_share_sources",
             "screen_share_preview",
             "screen_share_start",

@@ -102,11 +102,11 @@ describe('设备身份与OS授权桥', () => {
       alias: '办公电脑',
     });
   });
-  it('错误身份/过期/未知字段的挑战无效', () => {
+  it('错误身份/非法时间戳/未知字段的挑战无效', () => {
     const input = challenge();
     expect(validDeviceChallenge(input, 1, input.sid)).toBe(true);
     expect(validDeviceChallenge(input, 2, input.sid)).toBe(false);
-    expect(validDeviceChallenge({ ...input, expiresAt: Date.now() }, 1, input.sid)).toBe(false);
+    expect(validDeviceChallenge({ ...input, expiresAt: 0 }, 1, input.sid)).toBe(false);
     expect(validDeviceChallenge({ ...input, accepted: true } as any, 1, input.sid)).toBe(false);
   });
   it('取消期间的迟到本机签名被丢弃，并执行原生stop', async () => {
@@ -177,4 +177,29 @@ describe('设备身份与OS授权桥', () => {
     await flushPromises();
     expect(mocks.invoke).toHaveBeenCalledWith('remote_control_stop');
   });
+});
+
+it('电脑时钟偏差不阻止登记或识别签名，过期由服务端裁定', async () => {
+  const input = challenge();
+  const originalNow = Date.now();
+  const clock = vi.spyOn(Date, 'now');
+  try {
+    for (const offset of [-86400000, 86400000]) {
+      clock.mockReturnValue(originalNow + offset);
+      expect(validDeviceChallenge(input, 1, input.sid)).toBe(true);
+      mocks.invoke.mockResolvedValue(proof());
+      await expect(
+        createRemoteDeviceProof(input, '办公电脑', new AbortController().signal),
+      ).resolves.toMatchObject({ challengeId: input.id });
+      const { alias: _, ...identityProof } = proof();
+      mocks.invoke.mockResolvedValue(identityProof);
+      const identifying = { ...input, action: 'identify-device' as const };
+      expect(validIdentityChallenge(identifying, 1, input.sid)).toBe(true);
+      await expect(
+        identifyRemoteDevice(identifying, new AbortController().signal),
+      ).resolves.toEqual(identityProof);
+    }
+  } finally {
+    clock.mockRestore();
+  }
 });

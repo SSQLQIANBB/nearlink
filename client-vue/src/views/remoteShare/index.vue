@@ -80,6 +80,7 @@
           </div>
           <!-- 快捷操作 -->
           <div class="sidebar-profile-actions">
+            <DesktopReleaseEntry class="profile-button sidebar-release-entry" />
             <n-button
               class="profile-button"
               size="small"
@@ -1165,9 +1166,13 @@ li[data-selecting='true'] {
 
 .sidebar-profile-actions {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.sidebar-release-entry {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 
 .sidebar-profile-actions .profile-button {

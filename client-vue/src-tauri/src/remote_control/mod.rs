@@ -163,8 +163,8 @@ pub async fn remote_control_presence(
             return Err("PLATFORM_UNSUPPORTED");
         }
         let engine = engine_bundle::TrustedEngineBundle::from_app(&app)
-            .map_err(|_| "REMOTE_ENGINE_NOT_READY")?;
-        let digest = engine.digest().map_err(|_| "REMOTE_ENGINE_NOT_READY")?;
+            .map_err(|reason| engine_bundle::presence_error(&reason))?;
+        let digest = engine.digest().map_err(|reason| engine_bundle::presence_error(&reason))?;
         let (capture, input) = platform::permissions();
         native_presence::prove(
             &device_store::OsSeedStore,
@@ -317,7 +317,6 @@ pub async fn remote_control_register_device(
             &device_store::OsSeedStore,
             challenge,
             alias,
-            identity::wall_ms()?,
         );
         worker_state
             .lock()
@@ -351,7 +350,6 @@ pub async fn remote_control_identify_device(
         let result = identity::identify(
             &device_store::OsSeedStore,
             challenge,
-            identity::wall_ms()?,
         );
         worker_state
             .lock()

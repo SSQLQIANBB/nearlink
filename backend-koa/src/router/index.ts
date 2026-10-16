@@ -1,3 +1,4 @@
+import desktopReleaseRouter from './desktopRelease';
 import sseRouter from './sse';
 import chatRouter from './chat';
 import authRouter from './auth';
@@ -17,6 +18,7 @@ apiRouter.use('/sse', sseRouter.routes(), sseRouter.allowedMethods());
 apiRouter.use('/chat', chatRouter.routes(), chatRouter.allowedMethods());
 
 function setupRouter(app) {
+  app.use(desktopReleaseRouter.routes()).use(desktopReleaseRouter.allowedMethods());
   // 注册路由
   app.use(authRouter.routes()).use(authRouter.allowedMethods());
   app.use(groupRouter.routes()).use(groupRouter.allowedMethods());

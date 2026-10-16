@@ -12,6 +12,7 @@
           <GlobalRemoteControl />
           <GlobalRemoteControlHost />
           <GlobalMessages />
+          <DesktopReleaseCenter v-if="!isAuxiliaryWindow" />
           <DesktopTitlebar v-if="showDesktopTitlebar" />
           <div class="app-route-content"><RouterView /></div>
         </n-dialog-provider>
@@ -22,9 +23,10 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, watch } from 'vue';
+import DesktopReleaseCenter from '@/components/DesktopReleaseCenter.vue';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
 import DesktopAuxiliaryHost from '@/components/DesktopAuxiliaryHost.vue';
-import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { isDesktopWindow, isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';

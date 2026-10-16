@@ -18,6 +18,17 @@ pub(super) fn is_configured() -> bool {
     SELECTED != b"[]"
 }
 
+/// Preserve a useful category without sending filesystem paths to the WebView.
+pub(super) fn presence_error(reason: &str) -> &'static str {
+    if reason.contains("manifest differs") { "REMOTE_ENGINE_MANIFEST_CHANGED" }
+    else if reason.contains("hash mismatch") || reason.contains("size mismatch") || reason.contains("changed while reading") { "REMOTE_ENGINE_CONTENT_CHANGED" }
+    else if reason.contains("unlisted resource") { "REMOTE_ENGINE_UNLISTED_RESOURCE" }
+    else if reason.contains("resource missing") || reason.contains("unreadable") || reason.contains("inaccessible") || reason.contains("directory unavailable") || reason.contains("directory unreadable") || reason.contains("root must be") { "REMOTE_ENGINE_RESOURCE_UNREADABLE" }
+    else if reason.contains("permissions") || reason.contains("reparse") || reason.contains("hard link") || reason.contains("writable resource") { "REMOTE_ENGINE_RESOURCE_UNSAFE" }
+    else if reason == "REMOTE_ENGINE_NOT_CONFIGURED" { "REMOTE_ENGINE_NOT_CONFIGURED" }
+    else { "REMOTE_ENGINE_BUNDLE_REJECTED" }
+}
+
 pub(super) struct TrustedEngineBundle {
     root: PathBuf,
     _verified: VerifiedTree,
@@ -68,6 +79,16 @@ impl TrustedEngineBundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn presence_reports_the_resource_failure_category() {
+        for (reason, code) in [
+            ("REMOTE_ENGINE_BUNDLE: manifest differs from compiled trust anchor", "REMOTE_ENGINE_MANIFEST_CHANGED"),
+            ("REMOTE_ENGINE_BUNDLE: resource hash mismatch: app/entry.py", "REMOTE_ENGINE_CONTENT_CHANGED"),
+            ("REMOTE_ENGINE_BUNDLE: unlisted resource", "REMOTE_ENGINE_UNLISTED_RESOURCE"),
+            ("REMOTE_ENGINE_BUNDLE: resource missing, writable or inaccessible", "REMOTE_ENGINE_RESOURCE_UNREADABLE"),
+            ("REMOTE_ENGINE_BUNDLE: resource type or reparse point rejected", "REMOTE_ENGINE_RESOURCE_UNSAFE"),
+        ] { assert_eq!(presence_error(reason), code); }
+    }
     #[test]
     fn absent_build_selection_fails_closed_without_reading_runtime_paths() {
         if SELECTED == b"[]" {

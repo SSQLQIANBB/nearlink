@@ -104,7 +104,7 @@ export const useRemoteDevicesStore = defineStore('remoteDevices', () => {
             phase.value === 'submitting'
               ? '未能确认本机初始化结果，请稍后重试。'
               : phase.value === 'challenge'
-                ? '本机初始化失败，无法取得服务端凭据，请确认后端与 Redis 正常运行。'
+                ? '未能取得有效的设备凭据，请稍后重试；若持续失败，请重新登录。'
                 : '设备登记未完成。请确认系统凭据访问权限后重试。';
       }
       return false;

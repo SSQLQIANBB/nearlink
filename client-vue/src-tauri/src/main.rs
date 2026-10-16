@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod desktop_release;
 mod remote_control;
 mod screen_share;
 #[cfg(target_os = "windows")]
@@ -39,6 +40,8 @@ fn main() {
         .manage(remote_control::RemoteControlState::default())
         .manage(screen_share::ScreenShareState::default())
         .invoke_handler(tauri::generate_handler![
+            desktop_release::desktop_release_info,
+            desktop_release::desktop_release_download,
             screen_share::screen_share_sources,
             screen_share::screen_share_preview,
             screen_share::screen_share_start,
