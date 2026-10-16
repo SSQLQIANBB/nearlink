@@ -18,6 +18,9 @@ on:
     paths:
       - 'client-vue/**'
       - 'pnpm-lock.yaml'
+      - 'scripts/remote-control*'
+      - 'scripts/remote_control*'
+      - 'scripts/package-remote-control*'
       - 'scripts/desktop-release*.mjs'
       - 'scripts/product-version*.mjs'
       - 'package.json'
@@ -71,7 +74,19 @@ jobs:
       - run: node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs
       - run: pnpm --filter client-vue test
       - run: cargo check --locked --manifest-path client-vue/src-tauri/Cargo.toml
-      - run: pnpm --filter client-vue desktop:build ${{ matrix.args }}
+      - uses: actions/setup-python@v5
+        if: matrix.platform != 'macos-x64'
+        with:
+          python-version: '3.13.2'
+          architecture: ${{ runner.os == 'Windows' && 'x64' || 'arm64' }}
+      - name: Build installer with bundled engine
+        env:
+          TODE_ENGINE_BUILD_PYTHON: python
+        if: matrix.platform != 'macos-x64'
+        run: pnpm --filter client-vue desktop:build ${{ matrix.args }}
+      - name: Build Intel Mac chat-only installer (no supported engine)
+        if: matrix.platform == 'macos-x64'
+        run: pnpm --filter client-vue desktop:build:chat ${{ matrix.args }}
       - name: Build native test binary
         if: runner.os == 'Windows'
         shell: pwsh

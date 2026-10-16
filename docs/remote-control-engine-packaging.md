@@ -18,7 +18,7 @@ python3 scripts/verify-remote-control-engine.py \
 python3 scripts/verify-remote-control-engine.py \
   dist/remote-control-engine-candidate --static-only
 
-# 显式把同一个完整资源包固定进桌面构建（默认构建不包含候选引擎）
+# 显式把同一个完整资源包固定进桌面构建（默认 desktop:build 自动制作对应平台引擎）
 VITE_API_BASE_URL=https://www.sycsq.top VITE_SOCKET_URL=https://www.sycsq.top \
 node scripts/remote-control-desktop-build.mjs \
   --bundle /absolute/path/to/remote-control-engine-candidate \

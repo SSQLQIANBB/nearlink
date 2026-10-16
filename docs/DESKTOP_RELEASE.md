@@ -2,6 +2,8 @@
 
 开发分支为 `feature/desktop-tauri`。桌面端使用独立的 `desktop-v` 标签前缀，避免与网页版本混淆。下载地址：<https://github.com/SSQLQIANBB/nearlink/releases>。
 
+Windows x64 / Apple 芯片 macOS 的 `pnpm desktop:build` 会自动准备固定版本 SDK、从源码制作引擎，并将完整引擎资源及清单嵌入安装包；制作失败即停止打包。也可用 `pnpm desktop:remote:build --bundle <绝对路径> -- <Tauri 参数>` 选择已有资源。构建机需要 Windows CPython 3.13 与 MSVC，或 macOS CPython 3.13.2 与 Xcode Command Line Tools；可用 `TODE_ENGINE_BUILD_PYTHON` 指定构建解释器。终端用户无需安装 Python/GStreamer，也无需为缺少引擎修改服务器配置。`desktop:build:chat` 仅用于聊天功能验证，不能作为远控版本发布。当前发布流水线尚未准备全平台引擎和实机验收记录，因此不能发布宣称支持远控的安装包。
+
 ## 统一产品版本与提交规则
 
 当前源码产品版本为 `0.8.0-alpha.4`，处于内测阶段。根目录 `package.json` 的 `version` 是唯一维护入口，前端、后端、Tauri、Rust 包及 `Cargo.lock` 中的自有包版本保持一致。第三方依赖版本不加内测标识。界面、桌面窗口、托盘和 Release 说明显示“内测版”及完整版本；应用名为 `NearLink`，仓库名为 `nearlink`；应用标识继续使用 `top.sycsq.todesk`，以沿用现有应用数据标识。新安装包与 macOS 应用名使用 `NearLink`，旧版安装路径和系统权限的迁移仍需实机验证。域名、服务器部署目录、容器与数据库名称、协议和存储键保持不变。
@@ -55,7 +57,7 @@ git push origin desktop-v0.2.0-alpha.1
 1. 校验所有自有包、Tauri、Rust 锁文件、平台版本字段与标签是否一致，不一致时在构建前失败。
 2. 运行前端测试、类型检查（打包前执行）、Rust 编译并构建三个安装包。Windows 还运行现有的 WebView2 原生测试。
 3. 三个平台全部成功后，检查安装包数量并生成 `SHA256SUMS.txt`。
-4. 创建 Release 草稿，附加所有安装包及 SHA-256 校验文件；上传全部成功后发布，避免用户看到缺少平台附件的正式版本。
+4. 创建 Release 草稿，附加所有安装包及 SHA-256 校验文件；保持草稿，等待精确安装包的实际远控验收后再另行发布。Intel Mac 当前只构建聊天验证包，不能视为全平台远控支持。
 
 失败的构建不会发布 Release。若上传阶段中断，可在 Actions 中重跑失败任务，流程会补齐同一个草稿的附件；已公开发布的版本不会被覆盖。
 
@@ -87,3 +89,7 @@ git push origin desktop-v0.2.0-alpha.1
 ### Alpha 标识迁移
 
 当前内测统一使用 `alpha.N`，版本校验拒绝 `beta`、`rc` 和正式版；历史标签、发布记录和第三方依赖版本不改写。本次由 `0.8.0-beta.4` 切换为 `0.8.0-alpha.4`，数字构建号从 30 增至 31。同一基础版本按 SemVer 排序时 alpha 低于 beta，数字构建号不能代替 Windows 安装器的完整版本比较；从旧 Beta 包覆盖安装的行为需实机验证，不能视为普通递增升级。后续 Alpha 迭代继续使用 `pnpm version:set`。
+
+### 引擎补齐的交付边界
+
+此修复改变后续安装包的构建方式，不会修改已经安装的 exe。Windows 用户需要安装新制作的含引擎版本并完全退出旧进程后重新启动。此批未执行远控实机测试或验收，也未发布 Release。开发签名密钥只在开发启动时生成，安装包制作不会注入开发信任。

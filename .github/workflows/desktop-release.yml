@@ -63,7 +63,7 @@ jobs:
           test "$(find release-assets -name '*.dmg' | wc -l)" -eq 2
           cd release-assets
           sha256sum -- *.exe *.dmg > SHA256SUMS.txt
-      - name: Publish complete release
+      - name: Prepare release draft (remote control acceptance pending)
         shell: bash
         run: |
           set -euo pipefail
@@ -80,4 +80,5 @@ jobs:
             "release-assets/NearLink_${RELEASE_VERSION}_aarch64.dmg#macOS 安装包（Apple 芯片 / M 系列）.dmg" \
             "release-assets/NearLink_${RELEASE_VERSION}_x64.dmg#macOS 安装包（Intel 芯片）.dmg" \
             "release-assets/SHA256SUMS.txt#SHA-256 校验文件（不是安装包）"
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE"
+          gh release edit "$RELEASE_TAG" --prerelease="$PRERELEASE"
+          # Keep draft until exact installers pass remote-control acceptance.

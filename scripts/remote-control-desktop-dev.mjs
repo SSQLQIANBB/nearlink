@@ -2,7 +2,7 @@
 // Build-time preparation only. Runtime still verifies the compiled manifest.
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { access, mkdir, readFile, readdir } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, mkdtemp, rename, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -46,13 +46,11 @@ function run(command, args, env) {
   });
 }
 
-async function main() {
+export async function prepareEngine() {
   if (!(windows && process.arch === 'x64') && !(process.platform === 'darwin' && process.arch === 'arm64')) {
     throw new Error('本机远控开发支持 Windows x64 / macOS Apple 芯片。普通聊天开发可运行 npm run desktop:dev:chat。');
   }
   const env = { ...process.env };
-  const publicKeyFile = await prepareDevelopmentSigning(repository);
-  if (publicKeyFile) env.TODE_REMOTE_DEV_PUBLIC_KEY = publicKeyFile;
   if (windows) {
     console.log('[远控] 加载 MSVC x64 编译环境…');
     const { stdout } = await capture('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(scripts, 'remote-control-dev-msvc.ps1')], { windowsHide: true });
@@ -73,7 +71,7 @@ async function main() {
     : path.join(venv, windows ? 'Scripts/python.exe' : 'bin/python');
   if (!(await exists(python))) {
     console.log('[远控] 创建隔离 Python 3.13 环境（macOS 要求 3.13.2 framework 版本）…');
-    await run(windows ? 'py' : 'python3.13', [...(windows ? ['-3.13'] : []), '-m', 'venv', venv], env);
+    await run(env.TODE_ENGINE_BUILD_PYTHON || (windows ? 'py' : 'python3.13'), [...(windows && !env.TODE_ENGINE_BUILD_PYTHON ? ['-3.13'] : []), '-m', 'venv', venv], env);
   }
   const query = `import sys,json,importlib.metadata as m
 names=json.loads(sys.argv[1])
@@ -99,15 +97,29 @@ print(json.dumps({'version':list(sys.version_info[:3]),'base':sys.base_prefix,'p
   if (!(await exists(path.join(bundle, 'manifest.json')))) {
     console.log('[远控] 从当前源码生成引擎资源…');
     const packager = path.join(scripts, windows ? 'package-remote-control-engine-windows.py' : 'package-remote-control-engine.py');
-    await run(python, [packager, ...(windows ? [] : ['--sdk-python', python]), '--output', bundle], env);
+    const staging = await mkdtemp(path.join(cache, 'preparing-'));
+    try {
+      const output = path.join(staging, 'engine');
+      await run(python, [packager, ...(windows ? [] : ['--sdk-python', python]), '--output', output], env);
+      await rename(output, bundle);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
   } else {
     console.log('[远控] 复用当前源码对应的引擎资源。');
   }
+  return { bundle, env };
+}
+
+async function main() {
+  const { bundle, env } = await prepareEngine();
+  const publicKeyFile = await prepareDevelopmentSigning(repository);
+  if (publicKeyFile) env.TODE_REMOTE_DEV_PUBLIC_KEY = publicKeyFile;
   console.log('[远控] 启动包含引擎的桌面客户端；实际能力仍取决于系统权限和服务端配置。');
   await run(process.execPath, [path.join(scripts, 'remote-control-desktop-build.mjs'), '--dev', '--bundle', bundle, '--', ...process.argv.slice(2)], env);
 }
 
-main().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => {
   console.error(`[远控] ${error.message}`);
   if (error.stderr) console.error(error.stderr);
   process.exitCode = 1;
