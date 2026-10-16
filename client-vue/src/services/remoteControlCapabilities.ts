@@ -32,6 +32,7 @@ export type RemoteCapabilityReason =
   | 'NOT_RELEASED'
   | 'PLATFORM_UNSUPPORTED'
   | 'PROTOCOL_MISMATCH'
+  | 'INSECURE_CONTEXT'
   | 'CONTROLLER_UNSUPPORTED'
   | 'READY';
 export interface RemoteCapabilities {
@@ -49,6 +50,7 @@ export const remoteCapabilityMessages: Record<RemoteCapabilityReason, string> = 
   NOT_RELEASED: '服务端尚未开放此平台的远程控制，请更新后端并刷新状态。',
   PLATFORM_UNSUPPORTED: '当前桌面系统暂不支持远程控制。',
   PROTOCOL_MISMATCH: '当前客户端的远程控制协议不兼容，请升级客户端。',
+  INSECURE_CONTEXT: '远程控制需要安全连接，请使用 HTTPS 地址访问；局域网 HTTP 地址不支持远程控制。',
   CONTROLLER_UNSUPPORTED: '当前环境不支持此版本的远程协助，请升级客户端或浏览器。',
   READY: '此设备可作为主控端。被控电脑仍须开启临时协助，并逐次确认授权。',
 };
@@ -103,6 +105,8 @@ export function deriveRemoteCapabilities(
     native.permissions?.inputControl === 'granted';
   // Keep the permission/setup entry discoverable once a real host engine is released.
   result.showHostEntry = hostReleased && native?.engineReady === true;
+  if (controllerReleased && !features.secureContext)
+    return { ...result, reason: 'INSECURE_CONTEXT' };
   result.reason = result.canControl
     ? 'READY'
     : controllerReleased

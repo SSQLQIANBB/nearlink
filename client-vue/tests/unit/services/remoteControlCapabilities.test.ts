@@ -72,6 +72,27 @@ describe('远控能力与发布门禁', () => {
       ).toBe(false);
     }
   });
+  it('局域网 HTTP 明确提示改用 HTTPS，安全连接恢复后允许主控', () => {
+    const webRelease = { ...release, webControllerReleaseEnabled: true };
+    const insecure = deriveRemoteCapabilities('web', webRelease, null, {
+      ...features,
+      secureContext: false,
+      canVerifySignatures: false,
+    });
+    expect(insecure.showControllerEntry).toBe(true);
+    expect(insecure.canControl).toBe(false);
+    expect(insecure.reason).toBe('INSECURE_CONTEXT');
+    expect(deriveRemoteCapabilities('web', webRelease, null, features)).toMatchObject({
+      canControl: true,
+      reason: 'READY',
+    });
+    expect(
+      deriveRemoteCapabilities('web', webRelease, null, {
+        ...features,
+        canVerifySignatures: false,
+      }).reason,
+    ).toBe('CONTROLLER_UNSUPPORTED');
+  });
   it('原生能力发布后保留权限设置入口，但拒绝缺少权限的实际采集', () => {
     const result = deriveRemoteCapabilities(
       'tauri',

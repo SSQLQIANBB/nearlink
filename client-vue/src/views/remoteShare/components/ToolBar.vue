@@ -12,19 +12,28 @@
       </template>
       屏幕共享
     </n-button>
-    <n-button
+    <n-tooltip
       v-if="remote.showControllerEntry"
-      :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl"
-      @click="openRemoteControl"
+      :disabled="!remoteCapabilityHint"
     >
-      <template #icon>
-        <i
-          class="iconfont call-action-icon icon-desktop"
-          aria-hidden="true"
-        ></i>
+      <template #trigger>
+        <span class="inline-flex">
+          <n-button
+            :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl"
+            @click="openRemoteControl"
+          >
+            <template #icon>
+              <i
+                class="iconfont call-action-icon icon-desktop"
+                aria-hidden="true"
+              ></i>
+            </template>
+            远程控制
+          </n-button>
+        </span>
       </template>
-      远程控制
-    </n-button>
+      {{ remoteCapabilityHint }}
+    </n-tooltip>
     <n-button
       :disabled="!contactUser || calls.busy || mediaBusy"
       @click="start(0)"
@@ -52,7 +61,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { NButton, useMessage } from 'naive-ui';
+import { NButton, NTooltip, useMessage } from 'naive-ui';
 import { openScreenShare } from '@/features/screenShare';
 const message = useMessage();
 import { computed } from 'vue';
@@ -60,10 +69,16 @@ import { mediaOccupancy } from '@/services/mediaOccupancy';
 const mediaBusy = computed(() => !!mediaOccupancy.current.value);
 import { useRouter } from 'vue-router';
 import { useRemoteControlStore } from '@/stores/remoteControl';
+import { remoteCapabilityMessages } from '@/services/remoteControlCapabilities';
 import { usePrivateCallStore, type CallUser } from '@/stores/privateCall';
 const props = defineProps<{ contactUser: CallUser | null }>();
 const calls = usePrivateCallStore();
 const remote = useRemoteControlStore();
+const remoteCapabilityHint = computed(() =>
+  !remote.loading && remote.capabilities && !remote.capabilities.canControl
+    ? remoteCapabilityMessages[remote.capabilities.reason]
+    : '',
+);
 const router = useRouter();
 function openRemoteControl() {
   if (props.contactUser && remote.canControl && !calls.busy && !mediaBusy.value) {

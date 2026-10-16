@@ -1,10 +1,12 @@
 {
   "name": "client-vue",
   "private": true,
-  "version": "0.10.0-alpha.1",
+  "version": "0.10.0-alpha.2",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --config vite.https.config.ts",
+    "dev:http": "vite",
+    "dev:https": "vite --config vite.https.config.ts --host",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

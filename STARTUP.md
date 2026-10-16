@@ -73,24 +73,26 @@ pnpm run server
 
 ## 启动前端
 
-前端默认使用 Vite 代理，不需要环境变量。需要连接其他机器上的后端时，先创建并编辑个人配置：
+前端默认监听所有网卡并启用 HTTPS。首次启动先按[局域网 HTTPS 配置步骤](./docs/ENVIRONMENT_VARIABLES.md#局域网-https-开发)生成证书，并创建个人配置（已有文件直接编辑）：
 
 ```bash
 cp client-vue/.env.example client-vue/.env.local
 ```
 
-再打开一个终端，在仓库根目录运行：
+在配置中填写 `DEV_HTTPS_CERT` 和 `DEV_HTTPS_KEY`；本机后端的 `VITE_API_BASE_URL` 和 `VITE_SOCKET_URL` 留空，使用同源代理。再打开一个终端，在仓库根目录运行：
 
 ```bash
 pnpm run client
 ```
 
-浏览器打开 `http://localhost:5173/`。Vite 将 `/api`、`/meeting` 和迁移期兼容的 `/uploads` 代理到后端的 3000 端口。新文件由后端直接上传七牛，浏览器不需要七牛变量。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。`VITE_*` 会进入浏览器代码，不能填写任何密钥。
+浏览器打开 `https://localhost:5173/`；其他电脑使用证书覆盖的主机名或局域网 IP，并信任对应 CA。端口以启动日志为准。Vite 将 `/api`、`/meeting` 和迁移期兼容的 `/uploads` 代理到后端的 3000 端口。新文件由后端直接上传七牛，浏览器不需要七牛变量。修改后端端口时，还需修改 `client-vue/vite.config.ts` 的代理目标。`VITE_*` 会进入浏览器代码，不能填写任何密钥。
+
+仅需本机 HTTP 调试时，可显式运行 `pnpm --filter client-vue dev:http`。桌面端仍使用独立的 Tauri 开发命令。
 
 ## 检查与停止
 
 ```bash
-curl -I http://localhost:5173/
+curl -I https://localhost:5173/
 curl -i http://localhost:3000/api/auth/me
 ```
 

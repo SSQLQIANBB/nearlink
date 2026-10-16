@@ -45,6 +45,47 @@ pnpm server
 
 Vite 按模式加载 `.env`、`.env.local`、`.env.[mode]` 和 `.env.[mode].local`。项目只把个人覆盖值放在 `.env.local`；需要所有开发者共享的非敏感默认值时，才新增可提交的模式文件。
 
+### 局域网 HTTPS 开发
+
+其他电脑通过 `http://host:5173` 或局域网 IP 访问开发机时，页面不属于浏览器安全上下文，远控所需的 WebCrypto 等能力不可用。应使用受信任的 HTTPS 地址；其他 Mac 上的 `localhost` 指向那台 Mac 自身，不能代替开发机地址。
+
+先按 [mkcert 官方安装说明](https://github.com/FiloSottile/mkcert)安装工具。在 `client-vue` 目录执行以下命令；把 `host` 和 `192.168.1.100` 换成其他 Mac 实际访问的开发机主机名及局域网 IP：
+
+```bash
+mkdir .certs
+mkcert -install
+mkcert -cert-file .certs/local-dev.pem -key-file .certs/local-dev-key.pem localhost 127.0.0.1 host 192.168.1.100
+```
+
+证书的 SAN 必须覆盖实际访问的主机名或 IP；主机名还需要能在访问方解析到开发机。仓库仅保留 `.certs/local-dev.pem` 和 `.certs/local-dev-rootCA.crt` 两个公开测试证书，其余 `.certs/` 文件（包括私钥）均被 Git 忽略。其他开发机需自行生成匹配的证书与私钥；HTTPS 配置保留 Vite 默认文件保护，并拒绝通过开发服务器读取 `.certs/` 及配置的证书、私钥文件（包括自定义扩展名）。不要把证书或私钥放进 `public/`，该目录不受 Vite 文件拒绝规则保护。
+
+在 `client-vue/.env.local` 中设置：
+
+```dotenv
+VITE_API_BASE_URL=
+VITE_SOCKET_URL=
+DEV_HTTPS_CERT=.certs/local-dev.pem
+DEV_HTTPS_KEY=.certs/local-dev-key.pem
+```
+
+`DEV_HTTPS_CERT` 和 `DEV_HTTPS_KEY` 是仅供 Node 读取的开发服务器配置，路径相对于 `client-vue`，也支持绝对路径；它们不属于 `publicEnv`，不添加到 `src/config/env.ts` 或 `src/env.d.ts`，也不使用 `VITE_` 前缀。进程环境变量优先于文件配置。两项缺失或文件无法读取时，HTTPS 启动直接报错，不回退到 HTTP。
+
+保持后端按原方式运行，然后在仓库根目录启动前端；默认监听所有网卡并启用 HTTPS：
+
+```bash
+pnpm client
+```
+
+API 和 Socket 地址留空后，浏览器使用当前 HTTPS/WSS 源；Vite 沿用 `/api`、`/uploads` 和 `/meeting` 的代理，将请求转发到开发机的 `http://localhost:3000`。如果给这两个公开变量填写 HTTP 后端地址，会绕过同源代理并产生混合内容问题。
+
+另一台 Mac 需要信任开发机签发证书的 CA。当前 `.certs/local-dev.pem` 对应的根证书文件是 `.certs/local-dev-rootCA.crt`，将它导入该 Mac 的钥匙串并设置信任即可；Vite 启动只读取服务器证书和私钥，不需要加载根证书。重命名根证书文件不会改变其内容或信任关系。
+
+如果重新通过 mkcert 生成证书，在开发机执行 `mkcert -CAROOT`，仅复制该目录中的 `rootCA.pem` 到 Mac 的单独目录，再按官方说明把 `CAROOT` 指向该目录执行 `mkcert -install`。不要分发 `rootCA-key.pem`、`.certs/local-dev-key.pem` 或其他私钥。
+
+在该 Mac 的受支持 Chrome/Edge 中打开 `https://host:实际端口`，也可以使用证书覆盖的局域网 IP；端口以 Vite 启动输出为准，默认是 `5173`。确认浏览器信任证书且 `window.isSecureContext` 为 `true` 后，刷新远控状态。
+
+`pnpm client`、`pnpm --filter client-vue dev` 和保留的 `dev:https` 均使用上述 HTTPS 配置。需要本机 HTTP 调试时显式运行 `pnpm --filter client-vue dev:http`；Playwright 也使用该命令在回环地址启动，避免测试依赖个人证书。Tauri 开发和生产构建仍使用原配置。
+
 ## `cross-env` 的使用边界
 
 `cross-env` 只解决 Windows、macOS 和 Linux 在命令行内设置单个临时变量时的语法差异，例如为一次脚本运行设置 `NODE_ENV=test`。它不负责加载文件、类型转换、合法性校验或密钥管理。
