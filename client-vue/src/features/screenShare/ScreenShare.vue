@@ -71,17 +71,19 @@
         <MediaRecorder
           v-if="isSharing || sharer"
           :stream="screenStream"
-          @recording-start="handleRecordingStart"
-          @recording-stop="handleRecordingStop"
         />
 
         <!-- 视频质量设置 -->
         <n-dropdown
           :options="qualityOptions"
+          :value="isSharing || !sharer ? currentQuality : remoteQuality"
           :disabled="!!qualityChanging || (!!screenSession && !isSharing)"
           @select="handleQualityChange"
         >
-          <n-button circle>
+          <n-button
+            circle
+            aria-label="共享画质"
+          >
             <template #icon>
               <n-icon>
                 <i
@@ -92,22 +94,6 @@
             </template>
           </n-button>
         </n-dropdown>
-
-        <!-- 参与者列表；麦克风控制仍仅群主可用 -->
-        <n-button
-          circle
-          aria-label="参与者"
-          @click="showMemberControl = true"
-        >
-          <template #icon>
-            <n-icon>
-              <i
-                class="iconfont icon-users"
-                aria-hidden="true"
-              ></i>
-            </n-icon>
-          </template>
-        </n-button>
 
         <!-- 开始/停止共享 -->
         <n-button
@@ -167,9 +153,9 @@
       style="display: none"
     />
     <!-- 主内容区 -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
       <!-- 屏幕共享主区域 -->
-      <div class="flex-1 min-w-0 p-2 sm:p-4 flex items-center justify-center">
+      <div class="flex-1 min-w-0 min-h-0 p-2 sm:p-4 flex items-center justify-center">
         <div
           ref="screenViewport"
           class="relative w-full h-full bg-gray-800 rounded-lg overflow-hidden shadow-2xl"
@@ -253,7 +239,9 @@
       </div>
 
       <!-- 侧边栏 - 参与者列表 -->
-      <div class="hidden md:block w-64 flex-shrink-0 bg-gray-800 p-4 overflow-y-auto">
+      <div
+        class="w-full md:w-64 max-h-48 md:max-h-none flex-shrink-0 bg-gray-800 p-4 overflow-y-auto"
+      >
         <div class="text-white font-semibold mb-4">参与者 ({{ members.length }})</div>
         <div class="space-y-2">
           <div
@@ -282,13 +270,20 @@
                 />
                 {{ member.id === currentUser?.id ? ' (我)' : '' }}
               </div>
-              <div class="flex items-center gap-1">
+              <div class="flex flex-wrap items-center gap-1">
                 <n-tag
                   v-if="member.role === 'owner'"
                   type="warning"
                   size="tiny"
                 >
                   群主
+                </n-tag>
+                <n-tag
+                  v-else-if="member.role === 'admin'"
+                  type="info"
+                  size="tiny"
+                >
+                  管理员
                 </n-tag>
                 <n-tag
                   :type="isMemberParticipating(member.id) ? 'success' : 'default'"
@@ -307,78 +302,18 @@
                   ></i>
                 </n-icon>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 参与者抽屉 -->
-    <n-drawer
-      v-model:show="showMemberControl"
-      width="min(350px, calc(100vw - 24px))"
-      placement="right"
-    >
-      <n-drawer-content title="参与者">
-        <div class="space-y-3">
-          <div
-            v-for="member in members"
-            :key="member.id"
-            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-          >
-            <div class="flex items-center gap-3">
-              <n-avatar
-                :size="40"
-                :src="member.avatar || undefined"
-              >
-                <span v-if="!member.avatar">
-                  {{ member.nickname?.charAt(0) || member.username?.charAt(0) }}
-                </span>
-              </n-avatar>
-              <div>
-                <div class="font-semibold">
-                  {{ member.nickname || member.username }}
-                  <SpeakingIndicator
-                    :stream="
-                      member.id === currentUser?.id
-                        ? localStream
-                        : peerRegistry.get(member.id)?.stream
-                    "
-                    :muted="member.id === currentUser?.id && isMicMuted"
-                  />
-                </div>
-                <div class="text-xs text-gray-500">
-                  <n-tag
-                    v-if="member.role === 'owner'"
-                    type="warning"
-                    size="tiny"
-                  >
-                    群主
-                  </n-tag>
-                  <n-tag
-                    v-else-if="member.role === 'admin'"
-                    type="info"
-                    size="tiny"
-                  >
-                    管理员
-                  </n-tag>
-                  <n-tag
-                    :type="isMemberParticipating(member.id) ? 'success' : 'default'"
-                    size="tiny"
-                  >
-                    {{ isMemberParticipating(member.id) ? '参与中' : '未参与' }}
-                  </n-tag>
-                </div>
-              </div>
-            </div>
-            <div
-              v-if="member.id !== currentUser?.id && isOwner"
-              class="flex flex-col gap-2"
-            >
               <n-switch
-                :value="member.canSpeak"
-                @update:value="(val: boolean) => handleControlMemberMic(member.socketId || '', val)"
+                v-if="
+                  member.id !== currentUser?.id &&
+                  isOwner &&
+                  member.socketId &&
+                  isMemberParticipating(member.id)
+                "
+                :value="member.canSpeak !== false"
+                :aria-label="`控制 ${member.nickname || member.username} 发言`"
+                class="mt-2"
                 size="small"
+                @update:value="(val: boolean) => handleControlMemberMic(member.socketId!, val)"
               >
                 <template #checked>可发言</template>
                 <template #unchecked>禁言</template>
@@ -386,8 +321,8 @@
             </div>
           </div>
         </div>
-      </n-drawer-content>
-    </n-drawer>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -452,7 +387,6 @@ const members = ref<(GroupMember & { socketId?: string; isMicMuted?: boolean })[
 const isSharing = ref(false); // 当前用户是否正在共享
 const sharer = ref<any>(null); // 当前共享者信息
 const isMicMuted = ref(false);
-const showMemberControl = ref(false);
 const showAnnotation = ref(false); // 是否显示标注
 const pendingInitialScreen = ref<MediaStream | null>(null);
 
@@ -463,7 +397,8 @@ const pendingIce = new Map<string, RTCIceCandidateInit[]>();
 const annotationState = createScreenAnnotationState();
 const participantState = createMediaParticipantState();
 const qualityChanging = ref<ShareQuality | null>(null);
-const currentQuality = ref<ShareQuality>('high'); // 当前视频质量
+const currentQuality = ref<ShareQuality>('high'); // 本地采集画质
+const remoteQuality = ref<ShareQuality | null>(null);
 const screenStream = computed(() => (isSharing.value ? localStream.value : remoteStream.value)); // 用于录制
 const displayStream = computed(() => (isSharing.value ? localStream.value : remoteStream.value));
 const screenSession = ref<{ ownerUserId: number; startedAt: string; channelId: string } | null>(
@@ -527,24 +462,15 @@ const canSpeak = computed(() => {
   return myMember?.canSpeak !== false;
 });
 
-// 当前质量标签
+// 选择菜单和共享指示器使用同一份预设文案。
 const currentQualityLabel = computed(() => {
-  const labels: any = {
-    low: '流畅 720p',
-    medium: '标清 1080p',
-    high: '高清 1080p',
-    ultra: '超清 2K',
-  };
-  return labels[currentQuality.value];
+  const quality = isSharing.value || !sharer.value ? currentQuality.value : remoteQuality.value;
+  return quality ? qualityPresets[quality].label : '等待画质同步';
 });
-
-// 质量选项
-const qualityOptions = computed(() => [
-  { label: '流畅 720p@15fps', key: 'low' },
-  { label: '标清 1080p@24fps', key: 'medium' },
-  { label: '高清 1080p@30fps', key: 'high' },
-  { label: '超清 2K@30fps', key: 'ultra' },
-]);
+const qualityOptions = Object.entries(qualityPresets).map(([key, preset]) => ({
+  key,
+  label: preset.label,
+}));
 
 // 加载群组详情
 async function loadGroupDetail() {
@@ -584,7 +510,7 @@ function initSocket() {
       if (!ready) return;
       if (isSharing.value) {
         // 初次授权时 Socket 可能仍在认证；认证完成后补发邀请。
-        api.send('start', { groupId: groupId.value, deviceType: 2 });
+        api.send('start', { groupId: groupId.value, deviceType: 2, quality: currentQuality.value });
       }
       api.send('state');
     },
@@ -607,6 +533,7 @@ function initSocket() {
   target.on('group_access_revoked', handleGroupAccessRevoked);
   target.on('group_call_error', handleGroupCallError);
   target.on('screen_share_error', handleScreenShareError);
+  target.on('screen_share_quality', handleShareQuality);
 
   // WebRTC 信令
   target.on('group_webrtc_offer', handleOffer);
@@ -688,6 +615,15 @@ async function startScreenShare() {
     }
     // 等待麦克风授权时，退出逻辑也必须能立即停止屏幕轨道。
     pendingInitialScreen.value = screenStream;
+    // 聊天页预先采集的流也必须应用预设，否则标签与实际采集参数不同。
+    if (!isAuxiliaryWindow) {
+      await screenStream.getVideoTracks()[0]!.applyConstraints({
+        width: { ideal: preset.width },
+        height: { ideal: preset.height },
+        frameRate: { ideal: preset.frameRate, max: preset.frameRate },
+      });
+    }
+    if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) return;
     await ensureMicrophone();
     if (cleanedUp || generation !== mediaGeneration || !mediaClaim?.isCurrent()) {
       screenStream.getTracks().forEach((track) => track.stop());
@@ -707,6 +643,7 @@ async function startScreenShare() {
     api.send('start', {
       groupId: groupId.value,
       deviceType: 2, // 2: 屏幕共享
+      quality: currentQuality.value,
     });
 
     // 监听屏幕共享停止
@@ -720,6 +657,8 @@ async function startScreenShare() {
     // 向所有成员发送流
     await broadcastStream();
   } catch (error: any) {
+    pendingInitialScreen.value?.getTracks().forEach((track) => track.stop());
+    pendingInitialScreen.value = null;
     if (error.name !== 'AbortError') message.error('开始屏幕共享失败: ' + error.message);
   } finally {
     startingScreenShare = false;
@@ -909,6 +848,9 @@ function handleCallState(data: any) {
   screenSession.value = session;
   if (session) {
     startScreenSession(session.startedAt, session.channelId);
+    // 开始响应到达前也可能已切换画质；以当前已应用的预设校准会话快照。
+    if (isSharing.value)
+      api.send('quality', { startedAt: session.startedAt, quality: currentQuality.value });
     joinScreenCall(session.ownerUserId);
   } else if (!isSharing.value) {
     sharer.value = null;
@@ -1021,9 +963,22 @@ function handleSocketDisconnect() {
 }
 
 function startScreenSession(startedAt: string, channelId: string) {
+  if (currentSessionStartedAt !== startedAt) remoteQuality.value = null;
   currentSessionStartedAt = startedAt;
   annotationState.startSession(startedAt);
   participantState.setChannel(groupId.value, 'screen', channelId);
+}
+
+function handleShareQuality(data: { groupId: ScreenShareId; startedAt: string; quality: string }) {
+  if (
+    cleanedUp ||
+    isSharing.value ||
+    data.groupId !== groupId.value ||
+    data.startedAt !== currentSessionStartedAt ||
+    !isShareQuality(data.quality)
+  )
+    return;
+  remoteQuality.value = data.quality;
 }
 
 function handleCallPresence(data: ParticipantSnapshot & { startedAt: string }) {
@@ -1217,6 +1172,8 @@ async function handleQualityChange(key: string) {
       if (isAuxiliaryWindow) updateDesktopShareQuality(track, key);
     }
     currentQuality.value = key;
+    if (isSharing.value && currentSessionStartedAt)
+      api.send('quality', { startedAt: currentSessionStartedAt, quality: key });
     message.success(`视频质量已切换为 ${currentQualityLabel.value}`);
   } catch (error) {
     if (!cleanedUp && generation === mediaGeneration) {
@@ -1305,6 +1262,7 @@ function unbindSocketEvents() {
   socket.value?.off('group_access_revoked', handleGroupAccessRevoked);
   socket.value?.off('group_call_error', handleGroupCallError);
   socket.value?.off('screen_share_error', handleScreenShareError);
+  socket.value?.off('screen_share_quality', handleShareQuality);
   socket.value?.off('group_webrtc_offer', handleOffer);
   socket.value?.off('group_webrtc_answer', handleAnswer);
   socket.value?.off('group_webrtc_ice', handleIceCandidate);
@@ -1316,16 +1274,6 @@ function unbindSocketEvents() {
   socket.value?.off('screen_annotation_undo', handleAnnotationUndo);
   socket.value?.off('screen_annotation_clear', handleAnnotationClear);
   socket.value?.off('screen_annotation_error', handleAnnotationError);
-}
-
-// 录制功能回调
-function handleRecordingStart() {
-  message.success('开始录制屏幕共享');
-}
-
-function handleRecordingStop(blob: Blob) {
-  message.success(`录制完成，文件大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
-  // 可以在这里上传到服务器
 }
 
 onMounted(async () => {

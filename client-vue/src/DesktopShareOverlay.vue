@@ -59,6 +59,7 @@ onMounted(async () => {
       if (payload.token !== token) return;
       if (pendingQuality && pendingQuality !== payload.quality)
         error.value = '清晰度切换失败，请重试';
+      pendingQuality = '';
       quality.value = payload.quality;
       changingQuality.value = false;
     },

@@ -843,3 +843,67 @@ describe('通用屏幕共享 API', () => {
     );
   });
 });
+
+describe('屏幕共享画质同步', () => {
+  it.each([
+    { kind: 'group', id: 7 },
+    { kind: 'private', peerId: 2 },
+  ])('同步初始画质、切换和迟到成员：%j', async (scope) => {
+    initialMeeting({} as any);
+    const owner = connect(1);
+    const viewer = connect(2);
+    await owner.handlers.get('authenticate')!({ token: '1' });
+    await viewer.handlers.get('authenticate')!({ token: '2' });
+    const viewerScope = scope.kind === 'private' ? { kind: 'private', peerId: 1 } : scope;
+    await owner.handlers.get('screen_share')!({
+      scope,
+      action: 'start',
+      payload: { quality: 'low' },
+    });
+    const startedAt = mock.session.startedAt;
+    await viewer.handlers.get('screen_share')!({
+      scope: viewerScope,
+      action: 'join',
+      payload: { startedAt },
+    });
+    expect(viewer.socket.emit).toHaveBeenCalledWith('screen_share_quality', {
+      groupId: mock.session.groupId,
+      startedAt,
+      quality: 'low',
+    });
+    await owner.handlers.get('screen_share')!({
+      scope,
+      action: 'quality',
+      payload: { startedAt, quality: 'ultra' },
+    });
+    expect(mock.broadcasts).toContainEqual({
+      rooms: [mock.session.channelId],
+      event: 'screen_share_quality',
+      payload: { groupId: mock.session.groupId, startedAt, quality: 'ultra' },
+    });
+    mock.broadcasts.length = 0;
+    for (const [client, clientScope, payload] of [
+      [viewer, viewerScope, { startedAt, quality: 'low' }],
+      [owner, scope, { startedAt: 'old', quality: 'low' }],
+      [owner, scope, { startedAt, quality: 'invalid' }],
+    ] as const) {
+      await client.handlers.get('screen_share')!({
+        scope: clientScope,
+        action: 'quality',
+        payload,
+      });
+    }
+    expect(mock.broadcasts.filter((item) => item.event === 'screen_share_quality')).toHaveLength(0);
+    viewer.socket.emit.mockClear();
+    await viewer.handlers.get('screen_share')!({
+      scope: viewerScope,
+      action: 'join',
+      payload: { startedAt },
+    });
+    expect(viewer.socket.emit).toHaveBeenCalledWith('screen_share_quality', {
+      groupId: mock.session.groupId,
+      startedAt,
+      quality: 'ultra',
+    });
+  });
+});

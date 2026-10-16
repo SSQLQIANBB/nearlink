@@ -12,7 +12,25 @@ const authenticatedRoutes = [
 const publicRoutes = ['/login', '/chat', '/socket', '/share'];
 
 async function preparePage(page: Page, userId = 1) {
+  await page.route('**/api/remote-control/**', (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: 'Remote control is unavailable in this layout fixture' },
+    }),
+  );
+  await page.route('**/api/remote-control/capabilities', (route) =>
+    route.fulfill({
+      json: {
+        protocolVersion: 1,
+        releasedPlatforms: [],
+        webControllerReleaseEnabled: false,
+        desktopControllerEnabled: false,
+        desktopHostEnabled: false,
+      },
+    }),
+  );
   await page.route(/\/meeting(?:\/|\?|$)/, (route) => route.abort());
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
   await page.addInitScript(
     ({ authenticatedUserId }) => {
       localStorage.setItem('token', 'layout-test-token');
@@ -37,7 +55,18 @@ async function preparePage(page: Page, userId = 1) {
           getUserMedia: async () => stream,
           getDisplayMedia: async () => {
             (window as any).__screenCaptureCount = ((window as any).__screenCaptureCount || 0) + 1;
-            return stream;
+            const canvas = document.createElement('canvas');
+            canvas.width = 1280;
+            canvas.height = 720;
+            canvas.getContext('2d')!.fillRect(0, 0, canvas.width, canvas.height);
+            const capture = canvas.captureStream(15);
+            const draw = () => {
+              if (capture.getVideoTracks()[0]!.readyState === 'ended') return;
+              canvas.getContext('2d')!.fillRect(0, 0, canvas.width, canvas.height);
+              requestAnimationFrame(draw);
+            };
+            requestAnimationFrame(draw);
+            return capture;
           },
         },
       });
@@ -382,9 +411,15 @@ test.describe('响应式布局', () => {
     for (const route of ['/group-video/7', '/group-screen/7']) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
-      await page.getByRole('button', { name: '群成员' }).click();
-      await expect(page.getByText('群成员', { exact: true })).toBeVisible();
-      await expect(page.locator('.n-drawer:visible').getByText('未参与').first()).toBeVisible();
+      if (route === '/group-screen/7') {
+        await expect(page.getByText('参与者 (2)', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '参与者', exact: true })).toHaveCount(0);
+        await expect(page.getByText('未参与').first()).toBeVisible();
+      } else {
+        await page.getByRole('button', { name: '群成员' }).click();
+        await expect(page.getByText('群成员', { exact: true })).toBeVisible();
+        await expect(page.locator('.n-drawer:visible').getByText('未参与').first()).toBeVisible();
+      }
       await expectNoHorizontalOverflow(page);
       await page.keyboard.press('Escape');
     }
@@ -429,4 +464,86 @@ test.describe('响应式布局', () => {
     await expect(detailDialog).toBeVisible();
     await expect.poll(async () => (await detailDialog.boundingBox())?.width).toBe(512);
   });
+});
+
+for (const width of [375, 1440]) {
+  test(`共享参与者列表直接可见且没有重复入口 ${width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await preparePage(page);
+    await page.goto('/group-screen/7');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText('参与者 (2)', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '参与者', exact: true })).toHaveCount(0);
+    await expect(page.locator('.n-drawer')).toHaveCount(0);
+    await page.getByRole('button', { name: '共享画质' }).click();
+    await page.getByText('超清 2K@30fps', { exact: true }).click();
+    await expect(page.locator('#app').getByText('超清 2K@30fps', { exact: true })).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(
+      page.locator('.n-dropdown-option-body__label').filter({ hasText: '超清' }),
+    ).not.toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: testInfo.outputPath('participants.png') });
+  });
+}
+
+test('屏幕录制开始结束各显示一次成功提示', async ({ page }, testInfo) => {
+  await preparePage(page);
+  await page.goto('/group-screen/7');
+  await page.getByRole('button', { name: '开始共享', exact: true }).click();
+  await expect(page.getByRole('button', { name: '停止共享', exact: true })).toBeVisible();
+  await page.locator('.media-recorder button').click();
+  await expect(page.locator('.n-message').filter({ hasText: '开始录制' })).toHaveCount(1);
+  await expect(page.locator('.media-recorder .n-tag')).toContainText('00:01');
+  await page
+    .locator('.media-recorder button')
+    .filter({ has: page.locator('.icon-stop') })
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.locator('.n-message').filter({ hasText: '录制完成' })).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath('recording.png') });
+  await page.getByRole('button', { name: '丢弃', exact: true }).click();
+});
+
+test('观看端画质标签跟随共享者更新', async ({ page }) => {
+  await preparePage(page);
+  await page.goto('/group-screen/7');
+  await expect(page.getByText('参与者 (2)', { exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const { useSocketStore } = await import('/src/stores/socket.ts' as string);
+    const socket = useSocketStore().socket!;
+    const session = {
+      groupId: 7,
+      ownerUserId: 2,
+      channelId: 'group:7:screen',
+      startedAt: 'test-session',
+    };
+    socket.listeners('group_call_state').forEach((handler: Function) =>
+      handler({
+        groupId: 7,
+        sessions: { screen: session, video: null, audio: null },
+      }),
+    );
+    socket.listeners('screen_share_quality').forEach((handler: Function) =>
+      handler({
+        groupId: 7,
+        startedAt: session.startedAt,
+        quality: 'ultra',
+      }),
+    );
+  });
+  await expect(page.locator('#app').getByText('超清 2K@30fps', { exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const { useSocketStore } = await import('/src/stores/socket.ts' as string);
+    useSocketStore()
+      .socket!.listeners('screen_share_quality')
+      .forEach((handler: Function) =>
+        handler({
+          groupId: 7,
+          startedAt: 'test-session',
+          quality: 'low',
+        }),
+      );
+  });
+  await expect(page.getByText('流畅 720p@15fps', { exact: true })).toBeVisible();
 });

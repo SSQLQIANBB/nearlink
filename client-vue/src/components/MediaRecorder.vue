@@ -6,11 +6,10 @@
       @click="startRecording"
       type="error"
       :disabled="!canRecord"
-      size="large"
       circle
     >
       <template #icon>
-        <n-icon size="24">
+        <n-icon>
           <i
             class="iconfont icon-record"
             aria-hidden="true"

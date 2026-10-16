@@ -23,6 +23,7 @@ export const screenShareActions = {
   offer: 'group_webrtc_offer',
   answer: 'group_webrtc_answer',
   ice: 'group_webrtc_ice',
+  quality: 'screen_share_quality',
   draft: 'screen_annotation_draft',
   complete: 'screen_annotation_complete',
   undo: 'screen_annotation_undo',

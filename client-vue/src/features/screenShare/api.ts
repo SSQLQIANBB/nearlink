@@ -12,6 +12,7 @@ export type ScreenShareAction =
   | 'offer'
   | 'answer'
   | 'ice'
+  | 'quality'
   | 'draft'
   | 'complete'
   | 'undo'

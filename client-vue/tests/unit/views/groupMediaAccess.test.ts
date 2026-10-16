@@ -8,13 +8,14 @@ const mock = vi.hoisted(() => ({
   peers: [] as any[],
   captured: null as any,
   getUserMedia: vi.fn(),
+  success: vi.fn(),
 }));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: '7' }, name: 'GroupVideo' }),
   useRouter: () => ({ replace: mock.replace, back: vi.fn() }),
 }));
 vi.mock('naive-ui', () => ({
-  useMessage: () => ({ warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() }),
+  useMessage: () => ({ warning: vi.fn(), error: vi.fn(), success: mock.success, info: vi.fn() }),
 }));
 vi.mock('@/api/auth', () => ({
   getUserList: async () => ({ users: [{ id: 2, username: 'peer' }] }),
@@ -61,6 +62,7 @@ vi.mock('@/components/SpeakingIndicator.vue', () => ({ default: { template: '<di
 vi.mock('@/components/ScreenAnnotation.vue', () => ({ default: { template: '<div />' } }));
 import GroupVideo from '../../../src/views/groupVideo.vue';
 import GroupScreen from '../../../src/features/screenShare/ScreenShare.vue';
+import MediaRecorder from '../../../src/components/MediaRecorder.vue';
 import { groupSessionState } from '../../../src/services/groupSessionState';
 
 class Stream {
@@ -346,7 +348,13 @@ it('切换清晰度保留共享、麦克风、轨道和接收方连接', async (
   );
   expect(state.currentQuality).toBe('ultra');
   expect(state.isSharing).toBe(true);
-  expect(mock.emit).not.toHaveBeenCalled();
+  expect(mock.emit).toHaveBeenCalledWith(
+    'screen_share',
+    expect.objectContaining({
+      action: 'quality',
+      payload: { startedAt: session.startedAt, quality: 'ultra' },
+    }),
+  );
   expect(mock.getUserMedia).toHaveBeenCalledTimes(microphoneRequests);
   expect(peer.close).not.toHaveBeenCalled();
   expect(video.stop).not.toHaveBeenCalled();
@@ -365,6 +373,7 @@ it('清晰度切换失败不结束共享或报告已切换', async () => {
 });
 it('切换期间退出不继续修改发送端或更新质量状态', async () => {
   await open('screen');
+  video.applyConstraints.mockClear();
   const state = (wrapper!.vm as any).$.setupState;
   let resolve!: () => void;
   video.applyConstraints.mockReturnValueOnce(
@@ -395,4 +404,71 @@ it('发送端拒绝新参数时恢复采集和编码，不结束会话', async (
   );
   expect(mock.emit).not.toHaveBeenCalled();
   expect(mock.peers[0].close).not.toHaveBeenCalled();
+});
+
+it('预采集的屏幕应用默认画质，开始会话发送同一画质', async () => {
+  await open('screen');
+  expect(video.applyConstraints).toHaveBeenCalledWith({
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 30, max: 30 },
+  });
+  expect(mock.emit).toHaveBeenCalledWith(
+    'screen_share',
+    expect.objectContaining({
+      action: 'start',
+      payload: expect.objectContaining({ quality: 'high' }),
+    }),
+  );
+});
+
+it('录制事件不再触发页面的第二份成功提示', async () => {
+  await open('screen');
+  mock.success.mockClear();
+  const recorder = wrapper!.findComponent(MediaRecorder);
+  recorder.vm.$emit('recording-start');
+  recorder.vm.$emit('recording-stop', new Blob(['recording']));
+  expect(mock.success).not.toHaveBeenCalled();
+});
+
+it('观看者使用共享者同步的画质并忽略其它会话消息', async () => {
+  wrapper = shallowMount(GroupScreen, {
+    props: { scope: { kind: 'group', id: 7 } },
+    global: { config: { warnHandler: () => undefined } },
+  });
+  await flushPromises();
+  mock.handlers.get('group_call_state')!({
+    groupId: 7,
+    sessions: { screen: { ...session, ownerUserId: 2 } },
+  });
+  await flushPromises();
+  const state = (wrapper.vm as any).$.setupState;
+  expect(state.currentQualityLabel).toBe('等待画质同步');
+  const update = mock.handlers.get('screen_share_quality')!;
+  expect(update).toBeTypeOf('function');
+  update({ groupId: 7, startedAt: session.startedAt, quality: 'ultra' });
+  expect(state.currentQualityLabel).toBe('超清 2K@30fps');
+  update({ groupId: 8, startedAt: session.startedAt, quality: 'low' });
+  update({ groupId: 7, startedAt: 'old', quality: 'low' });
+  update({ groupId: 7, startedAt: session.startedAt, quality: 'invalid' });
+  expect(state.currentQualityLabel).toBe('超清 2K@30fps');
+  await state.handleQualityChange('low');
+  expect(state.currentQualityLabel).toBe('超清 2K@30fps');
+});
+
+it('首次采集参数失败时释放屏幕且不发布共享', async () => {
+  video.applyConstraints.mockRejectedValueOnce(new Error('unsupported'));
+  mock.captured = new Stream([video]);
+  wrapper = shallowMount(GroupScreen, {
+    props: { scope: { kind: 'group', id: 7 } },
+    global: { config: { warnHandler: () => undefined } },
+  });
+  await flushPromises();
+  expect(video.stop).toHaveBeenCalled();
+  expect((wrapper.vm as any).$.setupState.isSharing).toBe(false);
+  expect(
+    mock.emit.mock.calls.some(
+      ([event, data]) => event === 'screen_share' && data.action === 'start',
+    ),
+  ).toBe(false);
 });

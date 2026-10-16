@@ -39,6 +39,10 @@ import { createChatMediaMessage, type ChatMediaMessage } from '../services/chatM
 
 type PresenceStatus = 'online' | 'offline' | 'busy';
 
+function isScreenQuality(value: unknown): value is 'low' | 'medium' | 'high' | 'ultra' {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'ultra';
+}
+
 type MeetingUser = {
   id: number;
   socketId: string;
@@ -102,6 +106,11 @@ const initialMeeting = (server: Server) => {
   const socketToUserMap = new Map<string, number>();
   const groupRooms = new Map<number, Set<string>>();
   const mediaRooms = new MediaRoomRegistry();
+  // 与进程内媒体连接同生命周期；加入者领取快照，切换时向当前房间广播。
+  const screenQualities = new Map<
+    string,
+    { groupId: MediaScopeId; startedAt: string; quality: string }
+  >();
   const connectedPrivateScreens = new Set<string>();
   const privateMicPermissions = new Map<string, Map<number, boolean>>();
   const groupSessionService = new GroupSessionService(new RedisGroupSessionStore());
@@ -320,6 +329,8 @@ const initialMeeting = (server: Server) => {
   }
 
   function closeMediaSession(session: GroupSession) {
+    if (screenQualities.get(session.channelId)?.startedAt === session.startedAt)
+      screenQualities.delete(session.channelId);
     privateMicPermissions.delete(session.channelId);
     const peers = mediaRooms
       .getSocketIds(session.channelId)
@@ -1044,7 +1055,11 @@ const initialMeeting = (server: Server) => {
 
     onGroup(
       'group_call_start',
-      async (data: { groupId: MediaScopeId; deviceType: number }, _member, startGeneration) => {
+      async (
+        data: { groupId: MediaScopeId; deviceType: number; quality?: unknown },
+        _member,
+        startGeneration,
+      ) => {
         if (!currentUser || !data.groupId) return;
         const type = getSessionType(data.deviceType);
         const startKey = `${data.groupId}:${type}`;
@@ -1077,6 +1092,13 @@ const initialMeeting = (server: Server) => {
             if (stale && stale.startedAt !== result.session.startedAt) closeMediaSession(stale);
           }
           ownedSessions.set(result.session.channelId, result.session);
+          if (type === 'screen' && isScreenQuality(data.quality)) {
+            screenQualities.set(result.session.channelId, {
+              groupId: data.groupId,
+              startedAt: result.session.startedAt,
+              quality: data.quality,
+            });
+          }
           await emitGroupSessionEvent(
             data.groupId,
             'group_call_started',
@@ -1145,6 +1167,28 @@ const initialMeeting = (server: Server) => {
     );
 
     onGroup(
+      'screen_share_quality',
+      async (data: { groupId: MediaScopeId; startedAt: string; quality: unknown }) => {
+        if (!isScreenQuality(data.quality)) return;
+        const session = await groupSessionService.get(data.groupId, 'screen');
+        if (
+          !connected() ||
+          !session ||
+          session.startedAt !== data.startedAt ||
+          session.ownerSocketId !== socketId
+        )
+          return;
+        const state = {
+          groupId: data.groupId,
+          startedAt: session.startedAt,
+          quality: data.quality,
+        };
+        screenQualities.set(session.channelId, state);
+        io.to(session.channelId).emit('screen_share_quality', state);
+      },
+    );
+
+    onGroup(
       'join_group_call',
       async (data: { groupId: MediaScopeId; deviceType: number; startedAt: string }) => {
         if (!currentUser || !data.groupId) return;
@@ -1199,6 +1243,9 @@ const initialMeeting = (server: Server) => {
           members,
         });
         if (type === 'screen') {
+          const quality = screenQualities.get(session.channelId);
+          if (quality?.startedAt === session.startedAt)
+            socket.emit('screen_share_quality', quality);
           socket.emit('screen_annotation_snapshot', {
             groupId: session.groupId,
             startedAt: session.startedAt,

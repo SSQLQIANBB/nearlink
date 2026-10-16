@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-const native = vi.hoisted(() => ({ invoke: vi.fn(), handler: null as any, detach: vi.fn() }));
+const native = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  emitTo: vi.fn(),
+  handler: null as any,
+  detach: vi.fn(),
+}));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }));
 vi.mock('@tauri-apps/api/event', () => ({
+  emitTo: native.emitTo,
   listen: vi.fn(async (_event, handler) => {
     native.handler = handler;
     return native.detach;
@@ -22,6 +28,7 @@ const draw = vi.fn();
 beforeEach(() => {
   vi.useFakeTimers();
   native.invoke.mockReset();
+  native.emitTo.mockReset().mockResolvedValue(undefined);
   native.detach.mockClear();
   native.handler = null;
   nativeTrackStop = vi.fn();
@@ -144,6 +151,10 @@ it('同一原生会话在下一帧应用清晰度，无需重建轨道或选源'
   screenPicker.value!.select({ id: 'display:1', smooth: false });
   const stream = await pending;
   updateDesktopShareQuality(stream.getVideoTracks()[0]!, 'ultra');
+  expect(native.emitTo).toHaveBeenCalledWith('share-toolbar', 'desktop-share-quality-state', {
+    token: 11,
+    quality: 'ultra',
+  });
   resolveFrame(new ArrayBuffer(1));
   await flushPromises();
   expect(native.invoke).toHaveBeenLastCalledWith('screen_share_frame', {

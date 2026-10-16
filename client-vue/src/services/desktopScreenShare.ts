@@ -150,6 +150,10 @@ export async function captureDesktopScreen(
     videoTrack.stop = dispose;
     captureQuality.set(videoTrack, (value) => {
       quality = value;
+      // 共享页和悬浮工具栏都能切换画质，采集更新后同步工具栏的已选值。
+      void emitTo('share-toolbar', 'desktop-share-quality-state', { token, quality }).catch(
+        (error) => console.warn('同步共享工具栏画质失败', error),
+      );
     });
     (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
     await invoke('screen_share_present', { token });
