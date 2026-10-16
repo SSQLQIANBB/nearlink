@@ -37,6 +37,10 @@ describe('通话历史', () => {
     rejected.request(request);
     expect(rejected.respond('caller-socket', 'callee-socket', false)?.status).toBe('rejected');
 
+    const setupFailed = new PrivateCallTracker();
+    setupFailed.request(request);
+    expect(setupFailed.respond('caller-socket', 'callee-socket', false, true)?.status).toBe('failed');
+
     const cancelled = new PrivateCallTracker();
     cancelled.request(request);
     expect(cancelled.finish('caller-socket', 'callee-socket')?.status).toBe('cancelled');

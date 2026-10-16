@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { options } from './remote-control-desktop-build.mjs';
-test('default build requires no implicit engine selection', () => {
-  assert.deepEqual(options([]), { bundle: null, plan: false, dev: false, tauri: [] });
+test('default installer build rejects a missing engine', () => {
+  assert.throws(() => options([]), /--bundle/);
 });
 test('explicit selection resolves at build time and preserves normal Tauri options', () => {
   assert.deepEqual(

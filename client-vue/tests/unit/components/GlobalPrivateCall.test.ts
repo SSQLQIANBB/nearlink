@@ -92,6 +92,9 @@ beforeEach(() => {
       }
       close = mocks.close;
       addTrack = vi.fn();
+      addTransceiver = vi.fn();
+      createOffer = vi.fn().mockResolvedValue({ type: 'offer', sdp: 'recvonly' });
+      setLocalDescription = vi.fn().mockResolvedValue(undefined);
     },
   );
 });
@@ -231,6 +234,51 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     });
     expect(mocks.getUserMedia).not.toHaveBeenCalled();
     expect(usePrivateCallStore().busy).toBe(false);
+    wrapper.unmount();
+  });
+  it('摄像头和麦克风均失败仍接听视频，并保留接收画面和声音的通道', async () => {
+    mocks.getUserMedia.mockRejectedValue(new DOMException('设备不可用', 'NotReadableError'));
+    const wrapper = render();
+    request(0);
+    wrapper.findComponent(Modal).vm.$emit('positive-click');
+    await flushPromises();
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
+      to: { socketId: 'alice' }, accepted: true,
+    });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', { direction: 'recvonly' });
+    expect(usePrivateCallStore().busy).toBe(true);
+    wrapper.unmount();
+  });
+  it('麦克风失败时降级为只发送视频，并保持音频接收', async () => {
+    mocks.getUserMedia.mockRejectedValueOnce(new DOMException('麦克风不可用', 'NotFoundError'));
+    mocks.getUserMedia.mockResolvedValueOnce({
+      getTracks: () => [mocks.videoTrack],
+      getAudioTracks: () => [],
+      getVideoTracks: () => [mocks.videoTrack],
+    });
+    const wrapper = render();
+    request(0);
+    wrapper.findComponent(Modal).vm.$emit('positive-click');
+    await flushPromises();
+    expect(mocks.getUserMedia).toHaveBeenCalledWith({ audio: false, video: expect.anything() });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
+      to: { socketId: 'alice' }, accepted: true,
+    });
+    wrapper.unmount();
+  });
+  it('主叫方设备失败仍发出邀请，并以纯接收连接继续通话', async () => {
+    mocks.getUserMedia.mockRejectedValue(new DOMException('设备不可用', 'NotReadableError'));
+    const wrapper = render();
+    usePrivateCallStore().request = { user: { id: 1, socketId: 'alice' }, type: 0 };
+    await flushPromises();
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_request', expect.objectContaining({ deviceType: 0 }));
+    mocks.handlers.get('webrtc_call_response')!({ from: 'alice', accepted: true });
+    await flushPromises();
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', { direction: 'recvonly' });
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_offer', expect.anything());
     wrapper.unmount();
   });
   it('来电取消会关闭邀请，其他人的挂断不影响当前来电', async () => {

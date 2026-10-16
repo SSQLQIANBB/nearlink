@@ -1,6 +1,6 @@
 {
   "name": "nearlink",
-  "version": "0.11.0-alpha.1",
+  "version": "0.11.0-alpha.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -14,6 +14,7 @@
     "desktop:remote:dev": "node scripts/remote-control-desktop-build.mjs --dev",
     "desktop:remote:build": "node scripts/remote-control-desktop-build.mjs",
     "desktop:build": "pnpm --filter client-vue desktop:build",
+    "desktop:build:chat": "pnpm --filter client-vue desktop:build:chat",
     "desktop:check": "pnpm --filter client-vue desktop:check",
     "version:check": "node scripts/product-version.mjs check",
     "version:sync": "node scripts/product-version.mjs sync",
@@ -29,7 +30,7 @@
   "dependencies": {
     "uuid": "^13.0.0"
   },
-  "desktopBuildNumber": 43,
+  "desktopBuildNumber": 44,
   "devDependencies": {
     "prettier": "3.6.2"
   }

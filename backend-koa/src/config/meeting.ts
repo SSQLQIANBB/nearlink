@@ -919,12 +919,14 @@ const initialMeeting = (server: Server) => {
 
     socket.on('webrtc_call_response', async (data) => {
       if (!data.to?.socketId) return;
+      const setupFailed = data.accepted === false && data.reason === 'SETUP_FAILED';
       socket.to(data.to.socketId).emit('webrtc_call_response', {
         from: socketId,
         accepted: data.accepted,
+        ...(setupFailed ? { reason: 'SETUP_FAILED' } : {}),
       });
       await recordPrivateCall(
-        privateCallTracker.respond(data.to.socketId, socketId, data.accepted === true),
+        privateCallTracker.respond(data.to.socketId, socketId, data.accepted === true, setupFailed),
       );
     });
 

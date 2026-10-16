@@ -1,4 +1,6 @@
 import { mount } from '@vue/test-utils';
+import { nextTick, ref } from 'vue';
+import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -9,12 +11,13 @@ const mocks = vi.hoisted(() => ({
   destroy: vi.fn(),
   startRingtone: vi.fn(),
   stopRingtone: vi.fn(),
+  route: null as any,
 }));
 vi.mock('naive-ui', () => ({ useDialog: () => ({ info: mocks.info }) }));
 vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: mocks.push,
-    currentRoute: { value: { path: '/remote' } },
+    currentRoute: mocks.route,
   }),
 }));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ currentUser: { id: 2 } }) }));
@@ -46,6 +49,7 @@ const session = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.handlers.clear();
+  mocks.route = ref({ path: '/remote' });
   mocks.info.mockReturnValue({ destroy: mocks.destroy });
 });
 
@@ -88,6 +92,48 @@ describe('群组通话全局邀请', () => {
     expect(mocks.stopRingtone).toHaveBeenCalledWith('group:7:screen:2026-09-12');
     wrapper.unmount();
     expect(mocks.handlers.size).toBe(0);
+  });
+
+  it('从群聊进入共享页面后撤回邀请并停止铃声', async () => {
+    const wrapper = mount(GroupCallInvitations);
+    mocks.handlers.get('group_call_started')!({ ...session, type: 'screen' });
+    mocks.route.value = { path: '/group-screen/7' };
+    await nextTick();
+    expect(mocks.destroy).toHaveBeenCalledOnce();
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('group:7:screen:2026-09-12');
+    wrapper.unmount();
+  });
+
+  it('独立共享窗口已占用媒体时不再播放同一邀请', async () => {
+    const claim = mediaOccupancy.acquire('group-screen', 'test-window')!;
+    const wrapper = mount(GroupCallInvitations);
+    mocks.handlers.get('group_call_started')!({ ...session, type: 'screen' });
+    await nextTick();
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.startRingtone).not.toHaveBeenCalled();
+    wrapper.unmount();
+    claim.release();
+  });
+
+  it('个人共享已经在独立窗口加入时不回放邀请或发送拒绝', () => {
+    const claim = mediaOccupancy.acquire('group-screen', 'test-private-window')!;
+    const wrapper = mount(GroupCallInvitations);
+    mocks.handlers.get('group_call_started')!({ ...session, groupId: 'private:1:2', type: 'screen' });
+    expect(mocks.startRingtone).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalledWith('screen_share', expect.objectContaining({ action: 'decline' }));
+    wrapper.unmount();
+    claim.release();
+  });
+
+  it('收到邀请后打开独立共享窗口会停止后台铃声', async () => {
+    const wrapper = mount(GroupCallInvitations);
+    mocks.handlers.get('group_call_started')!({ ...session, type: 'screen' });
+    const claim = mediaOccupancy.acquire('group-screen', 'test-window')!;
+    await nextTick();
+    expect(mocks.destroy).toHaveBeenCalledOnce();
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('group:7:screen:2026-09-12');
+    claim.release();
+    wrapper.unmount();
   });
 });
 

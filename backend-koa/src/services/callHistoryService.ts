@@ -135,7 +135,7 @@ export class PrivateCallTracker {
     });
   }
 
-  respond(callerSocketId: string, calleeSocketId: string, accepted: boolean) {
+  respond(callerSocketId: string, calleeSocketId: string, accepted: boolean, setupFailed = false) {
     const key = this.getKey(callerSocketId, calleeSocketId);
     const session = this.sessions.get(key);
     if (!session) return null;
@@ -146,7 +146,7 @@ export class PrivateCallTracker {
     }
 
     this.sessions.delete(key);
-    return this.toRecord(session, 'rejected', 0);
+    return this.toRecord(session, setupFailed ? 'failed' : 'rejected', 0);
   }
 
   connected(socketId: string, peerSocketId: string, connectedAt = Date.now()) {

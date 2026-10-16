@@ -444,7 +444,11 @@ async function handleMedia(type = DEVICE_TYPE.CAMERA) {
 
     const attempt = generation;
     // 先获取媒体流
-    await initDeviceMedia(type);
+    try {
+      await initDeviceMedia(type);
+    } catch {
+      message.warning('本机音视频设备不可用，仍可接通并接收对方画面或声音');
+    }
     if (attempt !== generation) return;
     connectModalShow.value = true;
     isFullscreen.value = true;
@@ -478,10 +482,20 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
   const owner = mediaClaim;
 
   try {
-    const stream =
-      type === DEVICE_TYPE.CAMERA
-        ? await mediaDevices.getUserMedia(cameraConstraints)
-        : await mediaDevices.getUserMedia({ audio: true, video: false });
+    let stream: MediaStream;
+    if (type === DEVICE_TYPE.CAMERA) {
+      try {
+        stream = await mediaDevices.getUserMedia(cameraConstraints);
+      } catch {
+        try {
+          stream = await mediaDevices.getUserMedia({ audio: false, video: cameraConstraints.video });
+        } catch {
+          stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+        }
+      }
+    } else {
+      stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+    }
     if (attempt !== generation || !owner?.isCurrent()) {
       stream.getTracks().forEach((track) => track.stop());
       return;
@@ -542,6 +556,10 @@ async function initRTC(type = RTC_TYPE.CALLER) {
         if (sender && track.kind === 'video') void limitVideoBitrate(sender, 900_000);
       });
     }
+    if (!currentStream?.getAudioTracks().length)
+      peer.addTransceiver('audio', { direction: 'recvonly' });
+    if (connectionType.value === DEVICE_TYPE.CAMERA && !currentStream?.getVideoTracks().length)
+      peer.addTransceiver('video', { direction: 'recvonly' });
 
     // 监听远程媒体流
     peer.ontrack = (e) => {
@@ -713,6 +731,7 @@ function handleIncomingCall(data: {
 
 // 接听来电
 async function acceptCall() {
+  const attempt = generation;
   try {
     notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
     incomingCallShow.value = false;
@@ -722,8 +741,11 @@ async function acceptCall() {
     connectModalShow.value = true;
     isFullscreen.value = true;
 
-    const attempt = generation;
-    await initDeviceMedia(incomingCallType.value);
+    try {
+      await initDeviceMedia(incomingCallType.value);
+    } catch {
+      message.warning('本机音视频设备不可用，仍可接通并接收对方画面或声音');
+    }
     if (attempt !== generation) return;
     await nextTick();
     syncVideos();
@@ -737,8 +759,14 @@ async function acceptCall() {
     });
   } catch (error: any) {
     console.error('接听失败:', error);
-    message.error('无法访问设备: ' + error.message);
-    rejectCall();
+    if (attempt !== generation) return;
+    socket.value?.emit('webrtc_call_response', {
+      to: { socketId: incomingCallFromSocketId.value },
+      accepted: false,
+      reason: 'SETUP_FAILED',
+    });
+    cleanup();
+    message.error(`无法建立通话连接：${error?.message || '请重试'}`);
   }
 }
 
@@ -755,7 +783,7 @@ function rejectCall() {
 }
 
 // 处理呼叫响应
-async function handleCallResponse(data: { accepted: boolean }) {
+async function handleCallResponse(data: { accepted: boolean; reason?: string }) {
   outgoingCallId = null;
   outgoingRinging = false;
   notificationService.stopOutgoingRingtone();
@@ -766,7 +794,9 @@ async function handleCallResponse(data: { accepted: boolean }) {
     // 对方接听，初始化RTC作为主叫方
     await initRTC(RTC_TYPE.CALLER);
   } else {
-    message.warning('对方拒绝了您的呼叫');
+    message.warning(
+      data.reason === 'SETUP_FAILED' ? '对方无法建立通话连接，请重试' : '对方拒绝了您的呼叫',
+    );
     cleanup();
   }
 }

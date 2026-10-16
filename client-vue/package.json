@@ -1,7 +1,7 @@
 {
   "name": "client-vue",
   "private": true,
-  "version": "0.11.0-alpha.1",
+  "version": "0.11.0-alpha.2",
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.https.config.ts",
@@ -16,10 +16,11 @@
     "tauri": "tauri",
     "desktop:dev": "node ../scripts/remote-control-desktop-dev.mjs",
     "desktop:dev:chat": "tauri dev",
-    "desktop:build": "node ../scripts/product-version.mjs check && tauri build",
+    "desktop:build": "node ../scripts/remote-control-desktop-build.mjs",
     "desktop:check": "tauri info",
     "desktop:web:dev": "vite --config vite.desktop.config.ts --mode desktop",
-    "desktop:web:build": "node ../scripts/product-version.mjs check && vue-tsc -b && vite build --config vite.desktop.config.ts --mode desktop"
+    "desktop:web:build": "node ../scripts/product-version.mjs check && vue-tsc -b && vite build --config vite.desktop.config.ts --mode desktop",
+    "desktop:build:chat": "node ../scripts/product-version.mjs check && tauri build"
   },
   "dependencies": {
     "@mediapipe/selfie_segmentation": "0.1.1675465747",

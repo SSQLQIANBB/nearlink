@@ -19,6 +19,7 @@ const router = useRouter();
 const socketStore = useSocketStore();
 const authStore = useAuthStore();
 const pending = new Map<string, DialogReactive>();
+const pendingPaths = new Map<string, string>();
 const ringtoneKeys = new Map<string, string>();
 const seen = new Set<string>();
 
@@ -32,12 +33,14 @@ function stopRingtone(key: string, eventId?: string) {
 function finishInvitation(key: string, eventId: string) {
   if (ringtoneKeys.get(key) !== eventId) return;
   pending.delete(key);
+  pendingPaths.delete(key);
   stopRingtone(key, eventId);
 }
 
 function dismissAll() {
   pending.forEach((item) => item.destroy());
   pending.clear();
+  pendingPaths.clear();
   ringtoneKeys.forEach((eventId, key) => stopRingtone(key, eventId));
   seen.clear();
 }
@@ -65,17 +68,31 @@ function handleStarted(
         startedAt: data.startedAt,
       });
   };
-  if (privateScreen && mediaOccupancy.current.value) {
+  if (
+    privateScreen &&
+    mediaOccupancy.current.value &&
+    mediaOccupancy.current.value.kind !== 'group-screen'
+  ) {
     decline();
     return;
   }
-  if (router.currentRoute.value.path === path) return;
   const key = `${data.groupId}:${type}`;
   const eventId = `${key}:${data.startedAt}`;
+  if (
+    router.currentRoute.value.path === path ||
+    (type === 'screen' && mediaOccupancy.current.value?.kind === 'group-screen')
+  ) {
+    pending.get(key)?.destroy();
+    pending.delete(key);
+    pendingPaths.delete(key);
+    stopRingtone(key);
+    return;
+  }
   if (seen.has(eventId)) return;
   seen.add(eventId);
   pending.get(key)?.destroy();
   stopRingtone(key);
+  pendingPaths.set(key, path);
   const label = type === 'screen' ? '屏幕共享' : type === 'audio' ? '语音通话' : '视频通话';
   ringtoneKeys.set(key, eventId);
   pending.set(
@@ -159,8 +176,24 @@ function handleEnded(data: {
   if (data.startedAt && ringtoneKeys.get(key) !== `${key}:${data.startedAt}`) return;
   pending.get(key)?.destroy();
   pending.delete(key);
+  pendingPaths.delete(key);
   stopRingtone(key);
 }
+
+watch(
+  () => [router.currentRoute.value.path, mediaOccupancy.current.value?.kind] as const,
+  ([path, occupiedKind]) => {
+    pending.forEach((item, key) => {
+      const type = key.slice(key.lastIndexOf(':') + 1);
+      const destination = pendingPaths.get(key);
+      if (path !== destination && !(type === 'screen' && occupiedKind === 'group-screen')) return;
+      item.destroy();
+      pending.delete(key);
+      pendingPaths.delete(key);
+      stopRingtone(key);
+    });
+  },
+);
 
 watch(
   () => socketStore.socket,

@@ -286,6 +286,31 @@ describe('长连接登录会话撤销', () => {
 });
 
 describe('私聊通话历史', () => {
+  it('设备之外的连接准备失败不会记成用户拒绝', async () => {
+    initialMeeting({} as any);
+    const alice = connect(1);
+    const bob = connect(2);
+    await alice.handlers.get('authenticate')!({ token: '1' });
+    await bob.handlers.get('authenticate')!({ token: '2' });
+    alice.handlers.get('webrtc_call_request')!({
+      to: { socketId: 'socket-2' },
+      deviceType: 0,
+      callId: 'call-setup-failed',
+    });
+    await bob.handlers.get('webrtc_call_response')!({
+      to: { socketId: 'socket-1' },
+      accepted: false,
+      reason: 'SETUP_FAILED',
+    });
+    expect(mock.broadcasts).toContainEqual({
+      rooms: ['socket-1'],
+      event: 'webrtc_call_response',
+      payload: { from: 'socket-2', accepted: false, reason: 'SETUP_FAILED' },
+    });
+    expect(mock.messageCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('"status":"failed"') }),
+    );
+  });
   it('被叫断开时通知主叫结束等待，并拒绝已结束呼叫的铃声回传', async () => {
     initialMeeting({} as any);
     const alice = connect(1);

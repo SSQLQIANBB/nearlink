@@ -40,6 +40,7 @@ export function options(argv) {
     );
   }
   if (dev && !bundle) throw new Error('--dev requires --bundle with a platform engine bundle');
+  if (!dev && !bundle) throw new Error('桌面安装包必须使用 --bundle 指定对应平台的远控引擎；仅聊天构建请使用 desktop:build:chat');
   return { bundle, plan, dev, tauri };
 }
 function run(command, args, env) {
