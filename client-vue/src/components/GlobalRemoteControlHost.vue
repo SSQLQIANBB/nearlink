@@ -20,7 +20,7 @@
       size="small"
       type="error"
       secondary
-      @click="host.stop()"
+      @click="host.endSession()"
     >
       停止协助
     </n-button>

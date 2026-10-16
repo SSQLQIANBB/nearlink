@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NMessageProvider } from 'naive-ui';
 import { defineComponent } from 'vue';
 
-const mocks = vi.hoisted(() => ({ release: vi.fn(), probe: vi.fn() }));
+const mocks = vi.hoisted(() => ({ release: vi.fn(), probe: vi.fn(), host: {
+  phase: 'offline', displayedDeviceCode: '', credentials: null as null | { deviceCode: string; temporaryPassword: string },
+  session: null as null | { sessionId: string }, endSession: vi.fn(), stop: vi.fn(), refreshCredentials: vi.fn(),
+} }));
 vi.mock('@/api/remoteControl', () => ({
   getRemoteControlRelease: mocks.release,
   getRemoteSessions: vi.fn(),
@@ -14,11 +17,7 @@ vi.mock('@/services/remoteControlCapabilities', async (original) => ({
   probeRemoteCapabilities: mocks.probe,
 }));
 vi.mock('@/stores/remoteControlHost', () => ({
-  useRemoteControlHostStore: () => ({
-    phase: 'offline',
-    displayedDeviceCode: '',
-    credentials: null,
-  }),
+  useRemoteControlHostStore: () => mocks.host,
 }));
 vi.mock('@/stores/remoteControlSession', () => ({
   useRemoteControlSessionStore: () => ({ visible: false }),
@@ -31,6 +30,7 @@ let wrapper: ReturnType<typeof mount>;
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
+  Object.assign(mocks.host, { phase: 'offline', displayedDeviceCode: '', credentials: null, session: null });
   mocks.release.mockResolvedValue({});
   mocks.probe.mockResolvedValue({
     runtime: 'web',
@@ -96,4 +96,21 @@ describe('远控能力刷新时的页面稳定性', () => {
     expect(wrapper.get('.connection-form > .hint').text()).toContain('暂时无法确认');
     expect(submit().attributes('disabled')).toBeDefined();
   });
+  it('shows non-expiring credentials and ends only the current session', async () => {
+    Object.assign(mocks.host, { phase: 'online', displayedDeviceCode: '848219524',
+      credentials: { deviceCode: '848219524', temporaryPassword: 'abcdefgh23' }, session: { sessionId: 'session' } });
+    wrapper = mount(defineComponent({ components: { NMessageProvider, RemoteControlWorkbench },
+      template: '<NMessageProvider><RemoteControlWorkbench /></NMessageProvider>' }));
+    await flushPromises();
+    expect(wrapper.get('.credential-actions').text()).toContain('仅手动刷新或重启客户端');
+    expect(wrapper.text()).not.toContain('15 分钟');
+    await wrapper.get('button[aria-label="显示密码"]').trigger('click');
+    expect(wrapper.get('.password-field strong').text()).toBe('abcdefgh23');
+    await wrapper.get('button[aria-label="刷新临时密码"]').trigger('click');
+    expect(mocks.host.refreshCredentials).toHaveBeenCalledOnce();
+    await wrapper.get('.session-strip button').trigger('click');
+    expect(mocks.host.endSession).toHaveBeenCalledOnce();
+    expect(mocks.host.stop).not.toHaveBeenCalled();
+  });
+
 });

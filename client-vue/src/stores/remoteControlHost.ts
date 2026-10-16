@@ -14,7 +14,7 @@ import { useAuthStore } from './auth';
 import type { RemoteSignalAck, RemoteStateSnapshot } from '@/services/remoteControlSignaling';
 
 export const useRemoteControlHostStore = defineStore('remoteControlHost', () => {
-  const phase = ref<'offline' | 'starting' | 'online' | 'pending' | 'connecting' | 'active'>(
+  const phase = ref<'offline' | 'starting' | 'online' | 'pending' | 'connecting' | 'active' | 'ending'>(
     'offline',
   );
   const deviceId = ref<string | null>(null);
@@ -27,6 +27,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
   const session = shallowRef<RemoteStateSnapshot | null>(null);
   let socket: Socket | null = null,
     generation = 0,
+    sessionGeneration = 0,
     claim: MediaClaim | null = null;
   let approval: AbortController | null = null,
     heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -45,49 +46,72 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
   function current(value: number) {
     return generation === value && !!socket?.connected;
   }
-  function stop(reason = '') {
-    generation++;
+  function clearSession() {
+    sessionGeneration++;
     approval?.abort();
     approval = null;
     clearInterval(heartbeat);
     heartbeat = undefined;
-    socket?.removeAllListeners();
-    socket?.disconnect();
-    socket = null;
     claim?.release();
     claim = null;
     session.value = null;
     connecting = null;
     nativeStarted = false;
-    phase.value = 'offline';
-    deviceId.value = null;
-    credentials.value = null;
-    refreshingCredentials.value = false;
+    // Drain an in-flight native launch before stopping it or accepting another session.
+    const pending = queue;
     queue = Promise.resolve();
     queued = 0;
-    if (reason) error.value = reason;
     if (isTauri())
-      nativeCleanup = nativeCleanup.catch(() => {}).then(() => invoke('remote_control_stop'));
+      nativeCleanup = nativeCleanup.catch(() => {}).then(async () => {
+        await pending.catch(() => {});
+        await invoke('remote_control_stop');
+      });
+  }
+  function stop(reason = '') {
+    generation++;
+    socket?.removeAllListeners();
+    socket?.disconnect();
+    socket = null;
+    clearSession();
+    phase.value = 'offline';
+    deviceId.value = null;
+    refreshingCredentials.value = false;
+    if (reason) error.value = reason;
     void nativeCleanup.catch(() => {
       error.value = '本机停止确认失败，请重新启动客户端后再开启协助。';
     });
   }
+  async function endSession(reason = '', notify = true) {
+    if (!session.value) return;
+    const value = generation;
+    const ended = notify ? command('remote:end', {}) : Promise.resolve();
+    clearSession();
+    phase.value = 'ending';
+    error.value = reason;
+    try {
+      await Promise.all([ended, nativeCleanup]);
+      if (current(value) && phase.value === 'ending') phase.value = 'online';
+    } catch (cause) {
+      if (current(value)) stop(failure('结束协助未能确认，本机已离线。', cause));
+    }
+  }
   registerRemoteControlCleanup(() => {
     stop();
     displayedDeviceCode.value = '';
+    credentials.value = null;
   });
-  async function refreshCredentials() {
+  async function refreshCredentials(rotate = true) {
     if (!socket?.connected || refreshingCredentials.value || session.value) return;
     const value = generation;
     refreshingCredentials.value = true;
-    credentials.value = null;
+    const resume = !rotate ? credentials.value : null;
+    if (rotate) credentials.value = null;
     try {
-      const response = await socket.timeout(5000).emitWithAck('remote:credentials', {});
+      const response = await socket.timeout(5000).emitWithAck('remote:credentials', resume ? { resume } : {});
       if (!current(value)) return;
       const item = response?.credentials;
       if (!response?.ok) throw new Error(response?.code || 'REMOTE_CREDENTIALS_UNAVAILABLE');
-      if (!item || !/^\d{9}$/.test(item.deviceCode) || !/^[a-z2-9]{10}$/.test(item.temporaryPassword) ||
-          !Number.isSafeInteger(item.expiresAt) || item.expiresAt <= Date.now())
+      if (!item || !/^\d{9}$/.test(item.deviceCode) || !/^[a-z2-9]{10}$/.test(item.temporaryPassword))
         throw new Error('REMOTE_CREDENTIALS_INVALID');
       credentials.value = item;
       displayedDeviceCode.value = item.deviceCode;
@@ -121,21 +145,23 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
     if (!id || !nativeStarted) throw new Error('REMOTE_HOST_NOT_STARTED');
     await invoke('remote_control_host_command', { sessionId: id, command });
   }
-  function enqueue(value: number, action: () => Promise<void>) {
-    if (!current(value)) return;
+  function enqueue(value: number, action: (isCurrent: () => boolean) => Promise<void>) {
+    const epoch = sessionGeneration;
+    const isCurrent = () => current(value) && epoch === sessionGeneration && !!session.value;
+    if (!isCurrent()) return;
     if (++queued > 64) {
       stop('远控消息积压，已停止协助。');
       return;
     }
     queue = queue
       .then(async () => {
-        if (current(value)) await action();
+        if (isCurrent()) await action(isCurrent);
       })
       .catch((cause) => {
-        if (current(value)) stop(failure('远控连接中断，已停止屏幕共享和键鼠控制。', cause));
+        if (isCurrent()) void endSession(failure('远控连接中断，已停止屏幕共享和键鼠控制。', cause));
       })
       .finally(() => {
-        if (generation === value) queued--;
+        if (isCurrent()) queued--;
       });
   }
   async function start(id: string) {
@@ -182,7 +208,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
               .emitWithAck('remote:presence', { proof });
             if (!response?.ok) throw new Error(response?.code || 'REMOTE_PRESENCE_REJECTED');
             if (phase.value === 'starting') {
-              await refreshCredentials();
+              await refreshCredentials(false);
               if (current(value)) phase.value = 'online';
             }
           })
@@ -196,7 +222,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
         if (!Number.isSafeInteger(state.revision) || state.revision < session.value.revision)
           return;
         if (state.state === 'ended') {
-          stop();
+          void endSession('', false);
           return;
         }
         const paused = session.value.scope === 'control' && state.scope === 'view';
@@ -206,9 +232,13 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
         if (paused && nativeStarted) enqueue(value, () => native({ type: 'pause' }));
       });
       transport.on('remote:ended', (message) => {
-        if (current(value) && message?.sessionId === session.value?.sessionId) stop();
+        if (current(value) && message?.sessionId === session.value?.sessionId) void endSession('', false);
       });
-      transport.on('remote:approval', (message) => {
+      transport.on('remote:approval', async (message) => {
+        if (phase.value === 'ending') {
+          try { await nativeCleanup; }
+          catch { return; } // endSession takes the host offline if cleanup fails.
+        }
         if (
           !current(value) ||
           approval ||
@@ -223,7 +253,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
           stop('协助请求无效。');
           return;
         }
-        claim ||= mediaOccupancy.acquire('remote-control', `host:${id}`, () => stop());
+        claim ||= mediaOccupancy.acquire('remote-control', `host:${id}`, () => { void endSession(); });
         if (!claim) {
           stop('正在通话或共享屏幕，请结束后再开启协助。');
           return;
@@ -245,10 +275,10 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
               await command('remote:consent', { proof }, message.revision);
           })
           .catch((cause: unknown) => {
-            if (current(value))
-              stop(
+            if (current(value) && !cancel.signal.aborted)
+              void endSession(
                 cause instanceof Error && cause.message === 'REMOTE_NATIVE_TIMEOUT'
-                  ? '45 秒内未完成本机确认，协助已取消。请重新上线后发起请求，并在 NearLink 窗口确认。'
+                  ? '45 秒内未完成本机确认，协助已取消。请重新发起请求，并在 NearLink 窗口确认。'
                   : '本机授权未完成，协助已取消。',
               );
           })
@@ -256,8 +286,9 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
             if (approval === cancel) approval = null;
           });
       });
-      transport.on('remote:connecting', (message) =>
-        enqueue(value, async () => {
+      transport.on('remote:connecting', (message) => {
+        if (message?.sessionId !== session.value?.sessionId) return;
+        enqueue(value, async (isCurrent) => {
           if (
             !validRemoteConnecting(message) ||
             message.sessionId !== session.value?.sessionId ||
@@ -269,7 +300,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
           connecting = message;
           phase.value = 'connecting';
           const ice = await getRemoteSessionIce(message.sessionId);
-          if (!current(value)) return;
+          if (!isCurrent()) return;
           validateRemoteIceConfiguration(ice, message.hardDeadline);
           const events = new Channel<{
             sessionId: string;
@@ -279,7 +310,7 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
           events.onmessage = (event) => {
             if (!current(value) || event.sessionId !== session.value?.sessionId) return;
             if (event.type === 'ended') {
-              stop(failure('本机远控已停止。', event.payload?.reason));
+              void endSession(failure('本机远控已停止。', event.payload?.reason));
               return;
             }
             enqueue(value, async () => {
@@ -302,17 +333,18 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
             });
           };
           await invoke('remote_control_start_host', { iceProof: ice.proof, events });
-          if (!current(value)) return; // stop() already scheduled teardown after the in-flight native launch.
+          if (!isCurrent()) return;
           nativeStarted = true;
           heartbeat = setInterval(() => {
-            if (current(value))
+            if (isCurrent())
               void native({ type: 'heartbeat' }).catch(() => {
-                if (current(value)) stop('本机远控进程已停止。');
+                if (isCurrent()) void endSession('本机远控进程已停止。');
               });
           }, 500);
-        }),
-      );
-      transport.on('remote:signal', (message) =>
+        });
+      });
+      transport.on('remote:signal', (message) => {
+        if (message?.sessionId !== session.value?.sessionId) return;
         enqueue(value, async () => {
           if (
             message?.sessionId !== session.value?.sessionId ||
@@ -332,21 +364,22 @@ export const useRemoteControlHostStore = defineStore('remoteControlHost', () => 
               sdp_m_line_index: message.candidate.sdpMLineIndex,
             });
           else throw new Error('REMOTE_SIGNAL_INVALID');
-        }),
-      );
+        });
+      });
       for (const type of ['connection-proof', 'lease'] as const)
-        transport.on(`remote:${type}`, (message) =>
+        transport.on(`remote:${type}`, (message) => {
+          if (message?.sessionId !== session.value?.sessionId) return;
           enqueue(value, async () => {
             if (message?.sessionId !== session.value?.sessionId)
               throw new Error('REMOTE_PROOF_INVALID');
             await native({ type: type === 'lease' ? 'lease' : 'connection', proof: message.proof });
-          }),
-        );
+          });
+        });
       transport.connect();
     } catch {
       if (generation === value)
         stop('当前版本尚不能开启本机协助，请完成客户端与服务器配置后重试。');
     }
   }
-  return { phase, deviceId, scope, error, session, credentials, displayedDeviceCode, refreshingCredentials, refreshCredentials, start, stop };
+  return { phase, deviceId, scope, error, session, credentials, displayedDeviceCode, refreshingCredentials, refreshCredentials, start, stop, endSession };
 });

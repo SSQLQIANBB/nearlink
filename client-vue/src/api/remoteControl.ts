@@ -4,7 +4,6 @@ export type RemotePlatform = 'windows' | 'macos';
 export interface RemoteAssistanceCredentials {
   deviceCode: string;
   temporaryPassword: string;
-  expiresAt: number;
 }
 export interface RemoteControlRelease {
   protocolVersion: number;

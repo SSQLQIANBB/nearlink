@@ -10,6 +10,7 @@ import { remoteCredentialSignerFromEnvironment } from './remoteCredentials';
 import { getRemoteControlCapabilities } from './remoteControlPolicy';
 import { RemoteControlError } from './remoteControlProtocol';
 import { RemoteDeviceCodes } from './remoteDeviceCodes';
+import { ensureRemoteDeviceCode } from './remoteDeviceCodeRegistry';
 
 function createContext() {
   const deviceCodes = new RemoteDeviceCodes();
@@ -41,7 +42,7 @@ function createContext() {
     signer && authority
       ? new RemoteAuthorizationCoordinator(service, store, history, signer, authority)
       : null;
-  return { store, history, service, signer, authority, coordinator, deviceCodes };
+  return { store, history, service, signer, authority, coordinator, deviceCodes, deviceCode: ensureRemoteDeviceCode };
 }
 let context: ReturnType<typeof createContext> | undefined;
 /** Runtime cleanup, REST discovery and Socket admission share the same service owner. */

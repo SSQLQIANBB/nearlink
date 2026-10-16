@@ -65,8 +65,8 @@ class FakeSocket {
   timeout() {
     return this;
   }
-  emitWithAck = vi.fn(async (event: string) =>
-    event === 'remote:credentials' ? { ok: true, credentials: { deviceCode: '123456789', temporaryPassword: 'abcdefgh23', expiresAt: Date.now() + 900000 } } : event === 'remote:presence' ? { ok: true } : { ok: true, sessionId: id, revision: 1 },
+  emitWithAck = vi.fn(async (event: string, payload?: any) =>
+    event === 'remote:credentials' ? { ok: true, credentials: { deviceCode: '123456789', temporaryPassword: 'abcdefgh23' } } : event === 'remote:presence' ? { ok: true } : { ok: true, sessionId: payload?.sessionId ?? id, revision: 1 },
   );
   receive(event: string, value: unknown) {
     this.handlers.get(event)?.(value);
@@ -149,7 +149,7 @@ describe('desktop host bridge lifecycle', () => {
     expect(mock.invoke).toHaveBeenCalledWith('remote_control_stop');
     expect(store.phase).toBe('offline');
   });
-  it('explains consent timeout and stops without starting media', async () => {
+  it('explains consent timeout and remains available without starting media', async () => {
     mock.consent.mockRejectedValue(new Error('REMOTE_NATIVE_TIMEOUT'));
     const store = useRemoteControlHostStore();
     await store.start(device);
@@ -163,14 +163,14 @@ describe('desktop host bridge lifecycle', () => {
       proof: {},
     });
     await flush();
-    expect(store.phase).toBe('offline');
+    expect(store.phase).toBe('online');
     expect(store.error).toContain('45 秒');
-    expect(socket.disconnect).toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
     expect(mock.ice).not.toHaveBeenCalled();
     expect(mock.invoke).toHaveBeenCalledWith('remote_control_stop');
     expect(mock.invoke.mock.calls.some((c) => c[0] === 'remote_control_start_host')).toBe(false);
   });
-  it('disconnect during an ICE fetch cannot launch capture afterward', async () => {
+  it.each(['disconnect', 'remote:ended'])('%s during an ICE fetch cannot launch capture afterward', async (event) => {
     mock.consent.mockResolvedValue({ signed: 'consent' });
     let resolveIce!: (value: unknown) => void;
     mock.ice.mockReturnValue(
@@ -213,7 +213,7 @@ describe('desktop host bridge lifecycle', () => {
     });
     await flush();
     expect(mock.ice).toHaveBeenCalled();
-    socket.receive('disconnect', undefined);
+    socket.receive(event, { sessionId: id });
     resolveIce({ proof: { signed: 'ice' } });
     await flush();
     expect(mock.invoke.mock.calls.some((c) => c[0] === 'remote_control_start_host')).toBe(false);
@@ -270,12 +270,75 @@ describe('desktop host bridge lifecycle', () => {
       expect(mock.channels).toHaveLength(1);
       mock.channels[0].onmessage({ sessionId: id, type: 'ended', payload: { reason } });
       await flush();
-      expect(store.phase).toBe('offline');
-      expect(socket.disconnect).toHaveBeenCalled();
+      expect(store.phase).toBe('online');
+      expect(socket.disconnect).not.toHaveBeenCalled();
       expect(mock.invoke).toHaveBeenCalledWith('remote_control_stop');
       expect(store.error).toBe(
         reason.startsWith('REMOTE_') ? `本机远控已停止。（${reason}）` : '本机远控已停止。',
       );
     },
   );
+  it.each(['remote:state', 'remote:ended'])('keeps presence and credentials after %s and accepts another request', async (event) => {
+    mock.consent.mockResolvedValue({ signed: 'consent' });
+    const store = useRemoteControlHostStore();
+    await store.start(device);
+    socket.receive('remote:presence-challenge', { proof: {} });
+    await flush();
+    const credentials = store.credentials;
+    const approval = { sessionId: id, state: 'pending', revision: 0, scope: 'control', authorizationRevision: 0, controlEpoch: 0, proof: {} };
+    socket.receive('remote:approval', approval);
+    await flush();
+    socket.receive(event, { ...approval, state: 'ended', revision: 2 });
+    await flush();
+    expect(store.phase).toBe('online');
+    expect(store.session).toBeNull();
+    expect(store.credentials).toEqual(credentials);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(mock.claims[0].release).toHaveBeenCalledOnce();
+    expect(socket.emitWithAck.mock.calls.filter(([name]) => name === 'remote:credentials')).toHaveLength(1);
+    socket.receive('remote:approval', { ...approval, sessionId: '33333333-3333-4333-8333-333333333333' });
+    await flush();
+    expect(store.phase).toBe('pending');
+    expect(mock.consent).toHaveBeenCalledTimes(2);
+    socket.receive('remote:signal', { sessionId: id, type: 'answer' });
+    await flush();
+    expect(store.phase).toBe('pending');
+  });
+  it('reuses credentials after disabling and clears them on account cleanup', async () => {
+    const store = useRemoteControlHostStore();
+    await store.start(device);
+    socket.receive('remote:presence-challenge', { proof: {} });
+    await flush();
+    const credentials = store.credentials;
+    store.stop();
+    await flush();
+    expect(store.credentials).toEqual(credentials);
+    await store.start(device);
+    socket.receive('remote:presence-challenge', { proof: {} });
+    await flush();
+    expect(socket.emitWithAck).toHaveBeenLastCalledWith('remote:credentials', { resume: credentials });
+    await store.refreshCredentials();
+    expect(socket.emitWithAck).toHaveBeenLastCalledWith('remote:credentials', {});
+    mock.cleanups[0]!();
+    await flush();
+    expect(store.credentials).toBeNull();
+  });
+  it('ending locally notifies the server but disabling still disconnects', async () => {
+    mock.consent.mockResolvedValue({ signed: 'consent' });
+    const store = useRemoteControlHostStore();
+    await store.start(device);
+    socket.receive('remote:presence-challenge', { proof: {} });
+    await flush();
+    socket.receive('remote:approval', { sessionId: id, state: 'pending', revision: 0, scope: 'view', proof: {} });
+    await flush();
+    await store.endSession();
+    expect(socket.emitWithAck).toHaveBeenCalledWith('remote:end', expect.objectContaining({ sessionId: id }));
+    expect(store.phase).toBe('online');
+    expect(store.credentials).not.toBeNull();
+    store.stop();
+    await flush();
+    expect(store.phase).toBe('offline');
+    expect(socket.disconnect).toHaveBeenCalledOnce();
+  });
+
 });

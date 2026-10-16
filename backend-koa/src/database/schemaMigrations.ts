@@ -7,6 +7,7 @@ const migrationFiles = [
   '20260925-remote-control.up.sql',
   '20260926-remote-lifecycle.up.sql',
   '20260927-assistance-duration.up.sql',
+  '20261016-remote-device-code.up.sql',
 ];
 const requiredColumns: Record<string, string[]> = {
   users: ['authVersion'],
@@ -27,6 +28,7 @@ const requiredColumns: Record<string, string[]> = {
   ],
   remote_devices: [
     'id',
+    'deviceCode',
     'ownerUserId',
     'publicKey',
     'fingerprint',
@@ -118,6 +120,9 @@ export async function assertDatabaseSchema(query: SchemaQuery) {
     "SELECT COUNT(*) AS count FROM users WHERE authVersion IS NULL OR authVersion = ''",
   );
   if (Number(invalid.count)) throw new Error('数据库迁移未完成：用户认证版本尚未回填');
+  const deviceIndexes = await indexes(query, 'remote_devices');
+  if (!deviceIndexes.some((index) => !Number(index.NON_UNIQUE) && index.columnList === 'deviceCode'))
+    throw new Error('数据库迁移未完成：设备代码唯一索引缺失');
   const sessionIndexes = await indexes(query, 'remote_sessions');
   if (
     !sessionIndexes.some(

@@ -16,6 +16,8 @@ vi.mock('../../src/config/database', async () => {
   };
 });
 import db from '../../src/config/database';
+import { ensureRemoteDeviceCode } from '../../src/services/remoteDeviceCodeRegistry';
+import type { RemoteEndpoint } from '../../src/services/remoteControlProtocol';
 import {
   RemoteDevice,
   AssistanceGrant,
@@ -40,6 +42,7 @@ suite('remote-control migration (real MySQL)', () => {
   it('reapplies idempotently, matches ORM fields and retains revocations/history on rollback', async () => {
     await apply('20260925-remote-control.up.sql');
     await apply('20260926-remote-lifecycle.up.sql');
+    await apply('20261016-remote-device-code.up.sql');
     const device = await RemoteDevice.create({
       id: randomUUID(),
       ownerUserId: 7,
@@ -50,6 +53,15 @@ suite('remote-control migration (real MySQL)', () => {
     });
     expect(device.keyVersion).toBe(1);
     expect(device.revokedAt).toBeNull();
+    const endpoint = { endpointId: device.id, userId: 7 } as RemoteEndpoint;
+    const [code, concurrentCode] = await Promise.all([
+      ensureRemoteDeviceCode(endpoint),
+      ensureRemoteDeviceCode(endpoint),
+    ]);
+    expect(code).toMatch(/^\d{9}$/);
+    expect(concurrentCode).toBe(code);
+    expect((await RemoteDevice.findByPk(device.id))!.deviceCode).toBe(code);
+    expect(await ensureRemoteDeviceCode({ ...endpoint, connectionId: 'restarted' })).toBe(code);
     const sid = randomUUID();
     const grant = await AssistanceGrant.create({
       id: randomUUID(),

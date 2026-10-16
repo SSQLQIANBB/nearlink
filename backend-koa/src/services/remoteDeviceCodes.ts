@@ -3,9 +3,9 @@ import { isEndpoint, REMOTE_LIMITS, RemoteControlError, type RemoteEndpoint, typ
 
 interface Credentials {
   host: RemoteEndpoint;
+  online: boolean;
   code: string;
   digest: Buffer;
-  expiresAt: number;
   version: string;
 }
 interface Admission {
@@ -18,7 +18,7 @@ interface Admission {
   expiresAt: number;
 }
 
-/** Matches the single-process live authority: restart/disconnect never restores assistance. */
+/** Password digests survive a host toggle; an authenticated online binding is still required. */
 export class RemoteDeviceCodes {
   private readonly secret = randomBytes(32);
   private readonly credentials = new Map<string, Credentials>();
@@ -38,28 +38,32 @@ export class RemoteDeviceCodes {
     item.count++;
     this.attempts.set(key, item);
   }
-  issue(host: RemoteEndpoint) {
+  issue(host: RemoteEndpoint, code: string, resume?: { deviceCode: string; temporaryPassword: string }) {
     this.limit(`issue:${host.userId}`, 6);
-    const previous = this.credentials.get(host.connectionId);
+    const previous = this.credentials.get(host.endpointId);
+    if (resume) {
+      if (!previous || previous.host.userId !== host.userId || previous.code !== resume.deviceCode || previous.code !== code ||
+          !timingSafeEqual(previous.digest, this.digest(resume.deviceCode, resume.temporaryPassword)))
+        throw new RemoteControlError('REMOTE_CODE_INVALID', 403);
+      previous.host = host;
+      previous.online = true;
+      return resume;
+    }
     if (!previous && this.credentials.size >= 256)
       throw new RemoteControlError('REMOTE_CAPACITY', 503);
-    let code = previous?.code;
-    while (!code || [...this.credentials.values()].some((item) => item.code === code && item !== previous))
-      code = String(randomInt(100_000_000, 1_000_000_000));
     const alphabet = '23456789abcdefghjkmnpqrstuvwxyz';
     const password = Array.from({ length: 10 }, () => alphabet[randomInt(alphabet.length)]).join('');
-    const expiresAt = this.now() + 15 * 60_000;
-    this.credentials.set(host.connectionId, {
-      host, code, digest: this.digest(code, password), expiresAt, version: randomUUID(),
+    this.credentials.set(host.endpointId, {
+      host, online: true, code, digest: this.digest(code, password), version: randomUUID(),
     });
-    return { deviceCode: code, temporaryPassword: password, expiresAt };
+    return { deviceCode: code, temporaryPassword: password };
   }
   authorize(code: string, password: string, controller: RemoteEndpoint, requestId: string, scope: RemoteScope) {
     this.limit(`actor:${controller.userId}`, 10);
     this.limit(`code:${code}`, 10);
     const item = [...this.credentials.values()].find((value) => value.code === code);
     const digest = this.digest(code, password);
-    if (!item || item.expiresAt <= this.now() || !timingSafeEqual(item.digest, digest))
+    if (!item || !item.online || !timingSafeEqual(item.digest, digest))
       throw new RemoteControlError('REMOTE_CODE_INVALID', 403);
     if (item.host.endpointId === controller.endpointId)
       throw new RemoteControlError('SELF_CONTROL_NOT_ALLOWED');
@@ -82,8 +86,8 @@ export class RemoteDeviceCodes {
   }
   assertAuthorized(session: RemoteSession) {
     const admission = this.admissions.get(session.grantId);
-    const credentials = this.credentials.get(session.host.connectionId);
-    if (!admission || !credentials || admission.expiresAt <= this.now() ||
+    const credentials = this.credentials.get(session.host.endpointId);
+    if (!admission || !credentials?.online || !isEndpoint(credentials.host, session.host) || admission.expiresAt <= this.now() ||
         admission.requestId !== session.requestId || admission.scope !== session.requestedScope ||
         !isEndpoint(admission.host, session.host) || !isEndpoint(admission.controller, session.controller) ||
         (session.state === 'pending' && admission.version !== credentials.version))
@@ -92,7 +96,8 @@ export class RemoteDeviceCodes {
   }
   forget(id: string) { this.admissions.delete(id); }
   disconnect(endpoint: RemoteEndpoint) {
-    this.credentials.delete(endpoint.connectionId);
+    const credentials = this.credentials.get(endpoint.endpointId);
+    if (credentials && isEndpoint(credentials.host, endpoint)) credentials.online = false;
     for (const [id, value] of this.admissions)
       if (isEndpoint(value.host, endpoint) || isEndpoint(value.controller, endpoint)) this.admissions.delete(id);
   }

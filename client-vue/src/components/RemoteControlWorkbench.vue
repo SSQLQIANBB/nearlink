@@ -17,25 +17,25 @@
         <div class="credential-value">
           <strong>{{ formattedCode }}</strong>
           <button type="button" aria-label="复制设备代码" :disabled="!host.displayedDeviceCode" @click="copy(host.displayedDeviceCode)">
-            <i class="iconfont icon-copy1" aria-hidden="true" />
+            <n-icon :size="18"><CopyOutline /></n-icon>
           </button>
         </div>
       </div>
       <div class="credential-field password-field">
         <span class="field-label">临时密码</span>
         <div class="credential-value">
-          <strong>{{ !host.credentials ? '—' : expired ? '已过期' : passwordVisible ? host.credentials.temporaryPassword : '••••••••••' }}</strong>
+          <strong>{{ !host.credentials ? '—' : passwordVisible ? host.credentials.temporaryPassword : '••••••••••' }}</strong>
           <button type="button" :aria-label="passwordVisible ? '隐藏密码' : '显示密码'" :disabled="!validCredentials" @click="passwordVisible = !passwordVisible">
-            <i :class="['iconfont', passwordVisible ? 'icon-hide_password' : 'icon-show_password']" aria-hidden="true" />
+            <n-icon :size="18"><EyeOffOutline v-if="passwordVisible" /><EyeOutline v-else /></n-icon>
           </button>
-          <button type="button" aria-label="刷新临时密码" :disabled="host.phase !== 'online' || host.refreshingCredentials" @click="refreshPassword">
-            <i class="iconfont icon-refresh" aria-hidden="true" />
+          <button type="button" :aria-busy="host.refreshingCredentials" aria-label="刷新临时密码" :disabled="host.phase !== 'online' || host.refreshingCredentials" @click="refreshPassword">
+            <n-icon :size="18" :class="{ 'is-refreshing': host.refreshingCredentials }"><RefreshOutline /></n-icon>
           </button>
         </div>
       </div>
     </div>
     <div class="credential-actions">
-      <span>{{ host.credentials ? expired ? '临时密码已过期，请刷新后分享。' : '临时密码有效期 15 分钟；停止协助后连接信息失效。' : '开启本机协助后，生成设备代码和临时密码。' }}</span>
+      <span>{{ host.credentials ? '密码仅手动刷新或重启客户端时更换；连接需本机确认。' : '开启本机协助后，生成设备代码和临时密码。' }}</span>
       <n-button text type="primary" :disabled="!validCredentials" @click="share">复制连接信息</n-button>
     </div>
     <p v-if="host.error || devices.error" role="alert" class="error">{{ host.error || devices.error }}</p>
@@ -49,7 +49,7 @@
     </div>
     <div v-if="host.session" class="session-strip" role="status">
       {{ host.phase === 'pending' ? '等待本机确认' : host.phase === 'connecting' ? '正在建立连接' : '对方正在协助本机' }}
-      <n-button type="error" secondary @click="host.stop()">结束协助</n-button>
+      <n-button type="error" secondary @click="host.endSession()">结束协助</n-button>
     </div>
     <form class="connection-form" @submit.prevent="connect">
       <h2>远程控制设备</h2>
@@ -74,7 +74,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { NButton, NInput, NRadio, NRadioGroup, NSwitch, useMessage } from 'naive-ui';
+import { CopyOutline, EyeOutline, EyeOffOutline, RefreshOutline } from '@vicons/ionicons5';
+import { NIcon, NButton, NInput, NRadio, NRadioGroup, NSwitch, useMessage } from 'naive-ui';
 import { useRemoteControlStore } from '@/stores/remoteControl';
 import { useRemoteControlHostStore } from '@/stores/remoteControlHost';
 import { useRemoteControlSessionStore } from '@/stores/remoteControlSession';
@@ -86,11 +87,10 @@ const session = useRemoteControlSessionStore(), devices = useRemoteDevicesStore(
 const message = useMessage();
 const deviceCode = ref(''), temporaryPassword = ref(''), passwordVisible = ref(false);
 const requestedScope = ref<'control' | 'view'>('control'), connectionError = ref('');
-const connecting = ref(false), now = ref(Date.now());
+const connecting = ref(false);
 const normalizedCode = computed(() => deviceCode.value.replace(/\s/g, ''));
 const formattedCode = computed(() => host.displayedDeviceCode.replace(/(\d{3})(?=\d)/g, '$1 ') || '—');
-const expired = computed(() => !!host.credentials && now.value >= host.credentials.expiresAt);
-const validCredentials = computed(() => !!host.credentials && !expired.value);
+const validCredentials = computed(() => !!host.credentials && host.phase !== 'offline');
 const canConnect = computed(() => remote.canControl && !session.visible && !connecting.value &&
   /^\d{9}$/.test(normalizedCode.value) && /^[a-z2-9]{10}$/.test(temporaryPassword.value));
 const capabilityMessage = computed(() => {
@@ -128,7 +128,7 @@ function share() {
   void copy(`NearLink 远程协助\n设备代码：${host.credentials.deviceCode}\n临时密码：${host.credentials.temporaryPassword}\n连接后需要我在本机确认。`);
 }
 async function refreshPassword() {
-  try { await host.refreshCredentials(); now.value = Date.now(); }
+  try { await host.refreshCredentials(); }
   catch { message.error('刷新失败，请稍后重试；需要立即失效时请关闭协助。'); }
 }
 async function openPermission(permission: 'screenCapture' | 'inputControl') {
@@ -149,13 +149,11 @@ async function connect() {
       '连接未成功，请确认对方已开启协助、当前在线且没有其他会话。';
   } finally { connecting.value = false; }
 }
-let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(async () => {
-  timer = setInterval(() => { now.value = Date.now(); }, 1000);
   await remote.refreshCapabilities();
   if (!disposed && remote.capabilities?.canHostView) await toggleHost(true);
 });
-onUnmounted(() => { disposed = true; if (preparing.value) devices.cancel(); clearInterval(timer); temporaryPassword.value = ''; });
+onUnmounted(() => { disposed = true; if (preparing.value) devices.cancel(); temporaryPassword.value = ''; });
 </script>
 
 <style scoped>
@@ -167,17 +165,19 @@ onUnmounted(() => { disposed = true; if (preparing.value) devices.cancel(); clea
 .refresh-capabilities .is-refreshing { animation: refresh-capabilities-spin 1s linear infinite; }
 @keyframes refresh-capabilities-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .refresh-capabilities .is-refreshing { animation: none; } }
-h2 { font-size: 24px; font-weight: 700; margin: 0; }
-.credentials-card { display: grid; grid-template-columns: 1fr 1fr; background: #f5f6f8; border-radius: 20px; padding: 28px; gap: 28px; }
+h2 { font-size: 20px; font-weight: 700; margin: 0; }
+.credentials-card { display: grid; grid-template-columns: 1fr 1fr; background: #f5f6f8; border: 1px solid #edf0f4; border-radius: 16px; padding: 24px; gap: 24px; }
 .credential-field { min-width: 0; }
-.password-field { border-left: 1px solid #e6e8ed; padding-left: 28px; }
-.field-label { font-size: 18px; color: #687484; }
-.credential-value { display: flex; align-items: center; gap: 14px; min-height: 64px; flex-wrap: wrap; }
-.credential-value strong { font-size: clamp(24px, 2.5vw, 38px); font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.credential-value button { color: #66717f; background: none; border: 0; cursor: pointer; padding: 6px; }
+.password-field { border-left: 1px solid #e1e5eb; padding-left: 24px; }
+.field-label { display: block; margin-bottom: 12px; font-size: 14px; line-height: 20px; color: #687484; }
+.credential-value { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.credential-value strong { margin-right: auto; font-size: clamp(20px, 2.2vw, 28px); line-height: 36px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: .02em; }
+.credential-value button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; color: #66717f; background: transparent; border: 0; border-radius: 8px; cursor: pointer; padding: 0; transition: color .15s, background .15s; }
+.credential-value button:hover:not(:disabled) { color: #2563eb; background: #e7edf8; }
 .credential-value button:disabled { opacity: .4; cursor: default; }
-.credential-value button:focus-visible { outline: 2px solid #2563eb; border-radius: 4px; }
-.iconfont { font-size: 23px; }
+.credential-value button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.credential-value .is-refreshing { animation: refresh-capabilities-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .credential-value .is-refreshing { animation: none; } }
 .credential-actions, .session-strip { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
 .credential-actions, .hint { color: #8691a0; font-size: 13px; }
 .connection-form { margin-top: 72px; }

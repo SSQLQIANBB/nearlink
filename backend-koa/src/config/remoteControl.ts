@@ -72,7 +72,7 @@ const fail = (code: string): never => {
 /** Dedicated namespace, authenticated native presence, bounded signaling, and durable admission. */
 export function initializeRemoteControl(io: Server) {
   const namespace = io.of('/remote-control');
-  const { authority, coordinator, service, store, history, deviceCodes } = getRemoteControlContext();
+  const { authority, coordinator, service, store, history, deviceCodes, deviceCode } = getRemoteControlContext();
   const sessionsBySocket = new Map<string, string>();
   const sessions = new Map<string, RemoteSession>();
   const queues = new Map<string, { tail: Promise<unknown>; pending: number }>();
@@ -274,12 +274,18 @@ export function initializeRemoteControl(io: Server) {
       if (pending >= 2) { ack({ ok: false, code: 'REMOTE_BACKPRESSURE' }); return; }
       pending++;
       try {
-        empty.parse(raw);
+        const { resume } = z.object({ resume: z.object({
+          deviceCode: z.string().regex(/^\d{9}$/),
+          temporaryPassword: z.string().regex(/^[a-z2-9]{10}$/),
+        }).strict().optional() }).strict().parse(raw);
         const credentials = await serial(socket.id, async () => {
           if (connection.role !== 'host') fail('HOST_REQUIRED');
           const host = await authority!.resolveConnection(connection.handle);
           if (sessionsBySocket.has(socket.id)) fail('REMOTE_SESSION_BUSY');
-          return deviceCodes.issue(host);
+          const code = await deviceCode(host);
+          // Persistence may outlive the socket; only bind credentials to a still-live host.
+          await authority!.resolveConnection(connection.handle);
+          return deviceCodes.issue(host, code, resume);
         });
         ack({ ok: true, credentials });
       } catch (error) {

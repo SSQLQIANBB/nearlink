@@ -32,6 +32,7 @@ import {
 } from '../../../src/services/remoteControlProtocol';
 
 class Socket {
+  connected = true;
   id = randomUUID();
   data: any = {};
   conn = { readyState: 'open' };
@@ -45,6 +46,7 @@ class Socket {
     this.received.push({ event, value });
   }
   disconnect() {
+    this.connected = false;
     this.handlers.get('disconnect')?.();
   }
   async send(event: string, value: unknown) {
@@ -138,7 +140,7 @@ async function fixture() {
     signer,
     authority,
   );
-  mocks.context = { authority, coordinator, service, store, history, deviceCodes: new RemoteDeviceCodes() };
+  mocks.context = { authority, coordinator, service, store, history, deviceCodes: new RemoteDeviceCodes(), deviceCode: async () => '123456789' };
   let middleware: Function, connected: Function;
   const namespace = {
     use: (fn: Function) => {

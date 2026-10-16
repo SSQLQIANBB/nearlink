@@ -13,6 +13,7 @@ export class RemoteDevice extends Model<
 > {
   declare id: string;
   declare ownerUserId: number;
+  declare deviceCode: CreationOptional<string | null>;
   declare publicKey: string;
   declare fingerprint: string;
   declare keyVersion: CreationOptional<number>;
@@ -26,6 +27,7 @@ RemoteDevice.init(
   {
     id: { type: DataTypes.UUID, primaryKey: true },
     ownerUserId: { type: DataTypes.INTEGER, allowNull: false },
+    deviceCode: { type: DataTypes.STRING(9), allowNull: true, defaultValue: null },
     publicKey: { type: DataTypes.TEXT, allowNull: false },
     fingerprint: { type: DataTypes.STRING(64), allowNull: false, unique: true },
     keyVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
@@ -39,7 +41,8 @@ RemoteDevice.init(
     sequelize,
     tableName: 'remote_devices',
     timestamps: true,
-    indexes: [{ fields: ['ownerUserId', 'revokedAt'] }],
+    indexes: [{ fields: ['ownerUserId', 'revokedAt'] },
+      { name: 'remote_devices_device_code', unique: true, fields: ['deviceCode'] }],
   },
 );
 
