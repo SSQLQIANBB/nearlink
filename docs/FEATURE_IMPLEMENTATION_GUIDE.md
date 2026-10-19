@@ -137,5 +137,5 @@ HTTP 路由主要以 `/api/auth`、`/api/groups`、`/api/messages`、`/api/invit
 1. 群未读游标存浏览器本地，同一账号更换浏览器时不会自动继承旧浏览器的群未读状态；群消息本身仍在 MySQL，可打开群历史查看。
 2. 没有固定的好友关系模型，在线状态仍按所有在线用户广播增量，联系人列表则合并基础用户和实时状态。不能直接把广播缩到“好友”，否则部分联系人会漏更新。
 3. 当前部署为单个 Socket.IO 实例；扩容到多个后端时，内存在线映射、Socket 房间及跨实例事件需要共享适配器。
-4. [router/index.ts](../client-vue/src/router/index.ts) 中 `/chat`、`/socket`、`/share` 标为测试功能路由。`/chat` 对应 [views/chat.vue](../client-vue/src/views/chat.vue) → `POST /api/chat/send` → [router/chat.ts](../backend-koa/src/router/chat.ts)，返回模拟 AI 的 SSE 字符流；[router/sse.ts](../backend-koa/src/router/sse.ts) 另外提供 `GET /api/sse/connect` 演示流。`/socket` 的 [views/socket.vue](../client-vue/src/views/socket.vue) 使用 [hooks/useSocket.ts](../client-vue/src/hooks/useSocket.ts) 做独立 Socket/WebRTC 演示；`/share` 的 [views/share.vue](../client-vue/src/views/share.vue) 在浏览器本地共享、截图、录制。它们不参与上述主业务消息、邀请和通话链路；[config/initializeSocket.ts](../backend-koa/src/config/initializeSocket.ts) 未被当前 [app.ts](../backend-koa/src/app.ts) 调用。
+4. 已移除 AI 聊天、Socket/WebRTC、本地屏幕录制演示页面及其专用后端接口。正式消息、邀请、通话和屏幕共享使用 `/meeting` 主业务通信链路。
 5. `0.6.0-beta.1` 已对群房间、媒体入会、群信令及标注入口查询成员资格；信令限于同一群、类型和开始时间的已入会 Socket。HTTP 退群/删群触发实时退房，配套客户端释放媒体。该协调机制限单个后端进程；多实例与真实设备撤权时延仍需验收，详见[实施进度](plans/todesk-feature-roadmap-20260928/PROGRESS.md)。

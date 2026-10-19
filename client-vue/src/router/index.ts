@@ -69,26 +69,6 @@ const routes = [
     component: () => import('@/views/groupScreen.vue'),
     meta: { requiresAuth: true },
   },
-  //#region 测试功能路由
-  {
-    name: 'Chat',
-    path: '/chat',
-    component: () => import('@/views/chat.vue'),
-    meta: { requiresAuth: false },
-  },
-  {
-    name: 'Socket',
-    path: '/socket',
-    component: () => import('@/views/socket.vue'),
-    meta: { requiresAuth: false },
-  },
-  {
-    name: 'Share',
-    path: '/share',
-    component: () => import('@/views/share.vue'),
-    meta: { requiresAuth: false },
-  },
-  //#endregion 测试功能路由
   {
     path: '/',
     redirect: '/remote',

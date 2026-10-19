@@ -5,7 +5,6 @@ import fs from 'fs';
 import path from 'path';
 import { koaBody } from 'koa-body';
 import setupRouter from './router';
-import initializeSocket from './config/initializeSocket';
 import initialMeeting from './config/meeting';
 import { initializeRemoteControl } from './config/remoteControl';
 import sequelize, { initDatabase } from './config/database';
@@ -56,7 +55,6 @@ async function startServer() {
 
     // 2. 初始化Socket.IO
     console.log(chalk.yellow('🔌 正在初始化 Socket.IO...'));
-    // initializeSocket(httpServer)
     const sockets = initialMeeting(httpServer);
     initializeRemoteControl(sockets);
     const remoteRuntime = initializeRemoteControlRuntime(httpServer);

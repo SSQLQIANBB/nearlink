@@ -1,54 +1,56 @@
 import {
-  accessibleMessage,
-  attachQuote,
-  deleteMessages,
-  type MessageReference,
+  accessibleMessage, // 校验当前用户是否有权访问某条消息（存在性、私聊参与人/群成员资格及当前用户的删除记录）
+  attachQuote, // 将引用消息编码进正文，引用前校验同一会话
+  deleteMessages, // 仅对当前用户隐藏消息：写入 message_deletions，不删除原消息
+  type MessageReference, // 引用/转发的消息标识（kind + id）
 } from '../services/messageActions';
 import {
-  resolveScreenScope,
-  privateScreenMembers,
-  screenShareActions,
-  type MediaScopeId,
-  type ScreenShareScope,
+  resolveScreenScope, // 将屏幕共享范围解析为 MediaScopeId（数字 groupId 或私聊字符串）
+  privateScreenMembers, // 获取私聊屏幕共享的双方 userId
+  screenShareActions, // 屏幕共享 action → socket 事件名映射
+  type MediaScopeId, // 群聊用 number，私聊屏幕共享用 string
+  type ScreenShareScope, // 屏幕共享作用域（群组或私聊）
 } from '../services/screenShareScope';
 import { type Server } from 'http';
 import { onGroupAccessRevoked, runGroupOperation } from '../services/groupAccessCoordinator';
 import { Server as Socket } from 'socket.io';
 import {
-  onLoginSessionsRevoked,
-  validateAuthenticatedSession,
-  type AuthenticatedSessionPayload,
+  onLoginSessionsRevoked, // 订阅单次退出登录、全端下线及修改密码产生的会话撤销事件
+  validateAuthenticatedSession, // 验证 JWT 登录会话是否有效且未撤销
+  type AuthenticatedSessionPayload, // JWT 载荷中的认证字段（userId, sid, authVersion）
 } from '../services/loginSessionService';
 import { File, GroupMember, GroupMessage, Message, User as UserModel } from '../models';
-import { saveReliableMessage } from '../services/reliableMessageService';
+import { saveReliableMessage } from '../services/reliableMessageService'; // 提供 clientMessageId 时按 userId + kind + clientMessageId 去重，并校验目标与内容哈希一致
 import {
-  GroupSessionService,
-  type GroupSession,
-  type GroupSessionType,
+  GroupSessionService, // 群媒体及私聊屏幕共享会话管理（存储由构造参数注入）
+  type GroupSession, // 一次媒体会话（视频/语音/屏幕）的快照
+  type GroupSessionType, // 'video' | 'audio' | 'screen'
 } from '../services/groupSessionService';
-import { MediaRoomRegistry } from '../services/mediaRoomRegistry';
-import { RedisGroupSessionStore } from '../services/redisGroupSessionStore';
-import { RedisScreenAnnotationStore } from '../services/redisScreenAnnotationStore';
+import { MediaRoomRegistry } from '../services/mediaRoomRegistry'; // 媒体房间注册表：channelId → socketIds
+import { RedisGroupSessionStore } from '../services/redisGroupSessionStore'; // 群媒体及私聊屏幕共享会话的 Redis 存储（12 小时 TTL）
+import { RedisScreenAnnotationStore } from '../services/redisScreenAnnotationStore'; // 屏幕标注的 Redis 存储（写入时设置 12 小时 TTL）
 import {
-  ScreenAnnotationService,
-  type AnnotationAction,
-  type AnnotationDraft,
+  ScreenAnnotationService, // 屏幕共享中的画笔标注服务
+  type AnnotationAction, // 一条已完成的标注
+  type AnnotationDraft, // 客户端发来的标注草稿（待校验）
 } from '../services/screenAnnotationService';
 import {
-  createCallHistoryMessage,
-  PrivateCallTracker,
-  serializeChatMessage,
-  type CallHistoryType,
-  type PrivateCallHistoryRecord,
+  createCallHistoryMessage, // 将通话记录序列化为消息内容
+  PrivateCallTracker, // 私聊通话状态追踪（请求/接听/接通/挂断）
+  serializeChatMessage, // 将 DB 消息记录转为客户端推送格式
+  type CallHistoryType, // 'video' | 'screen' | 'audio'
+  type PrivateCallHistoryRecord, // 一次私聊通话的历史记录
 } from '../services/callHistoryService';
 import { createChatMediaMessage, type ChatMediaMessage } from '../services/chatMediaMessageService';
 
 type PresenceStatus = 'online' | 'offline' | 'busy';
 
+// 校验画质参数是否为合法值
 function isScreenQuality(value: unknown): value is 'low' | 'medium' | 'high' | 'ultra' {
   return value === 'low' || value === 'medium' || value === 'high' || value === 'ultra';
 }
 
+// 在线用户的内存表示（与 DB 的 User 模型区分，包含连接标识、展示资料和在线状态）
 type MeetingUser = {
   id: number;
   socketId: string;
@@ -59,16 +61,19 @@ type MeetingUser = {
   bio?: string;
 };
 
+// 群聊设备类型编号：1=视频, 2=屏幕, 3=语音
 function getSessionType(deviceType: number): GroupSessionType {
   if (deviceType === 3) return 'audio';
   return deviceType === 2 ? 'screen' : 'video';
 }
 
+// 群聊设备类型编号的反向映射（用于回传给客户端）
 function getSessionDeviceType(type: GroupSessionType) {
   if (type === 'screen') return 2;
   return type === 'audio' ? 3 : 1;
 }
 
+// 私聊设备类型编号（与群聊编号不同）：0=视频, 1=屏幕, 2=语音
 function getPrivateCallType(deviceType: number): CallHistoryType | null {
   if (deviceType === 0) return 'video';
   if (deviceType === 1) return 'screen';
@@ -76,6 +81,10 @@ function getPrivateCallType(deviceType: number): CallHistoryType | null {
   return null;
 }
 
+// 根据客户端消息数据解析最终的消息正文：
+// - 转发 → 取原始消息内容
+// - 图片/语音 → 校验文件归属后构造媒体消息
+// - 普通文本 → 校验长度和格式
 async function getMessageContent(
   data: {
     message?: string;
@@ -107,6 +116,8 @@ async function getMessageContent(
   return message;
 }
 
+// 初始化 Socket.IO 实时通信服务，挂载路径 /meeting
+// 管理：用户认证、在线状态、私聊消息、群聊消息、群媒体会话（视频/语音/屏幕）、私聊通话、屏幕标注
 const initialMeeting = (server: Server) => {
   const io = new Socket(server, {
     path: '/meeting',
@@ -115,19 +126,28 @@ const initialMeeting = (server: Server) => {
     },
   });
 
+  // socketId → 用户信息（每个已认证的 socket 对应一个 MeetingUser）
   const userMap = new Map<string, MeetingUser>();
+  // socketId → userId（反查：一个用户可能有多台设备/多个 socket）
   const socketToUserMap = new Map<string, number>();
+  // groupId → 已订阅群聊房间的 socketId 集合，用于成员快照和退出清理；不代表数据库中的全部群成员
   const groupRooms = new Map<number, Set<string>>();
+  // 媒体房间注册表：按 channelId 记录参与者的 socketId 和 userId
   const mediaRooms = new MediaRoomRegistry();
   // 与进程内媒体连接同生命周期；加入者领取快照，切换时向当前房间广播。
   const screenQualities = new Map<
     string,
     { groupId: MediaScopeId; startedAt: string; quality: string }
   >();
+  // 对方通过加入请求的会话校验后记录 channelId:startedAt，用于通话历史判定；不代表 WebRTC 已连通
   const connectedPrivateScreens = new Set<string>();
+  // 私聊屏幕共享中每个成员的麦克风权限：channelId → userId → canSpeak
   const privateMicPermissions = new Map<string, Map<number, boolean>>();
+  // 群媒体及私聊屏幕共享会话服务（此处使用 Redis 存储）
   const groupSessionService = new GroupSessionService(new RedisGroupSessionStore());
+  // 屏幕标注服务（底层存 Redis）
   const screenAnnotationService = new ScreenAnnotationService(new RedisScreenAnnotationStore());
+  // 获取所有非 offline 状态的在线用户列表（去重：同一用户多设备只返回一条）
   function getPublicUsers() {
     const users = new Map<number, MeetingUser>();
 
@@ -140,10 +160,12 @@ const initialMeeting = (server: Server) => {
     return [...users.values()];
   }
 
+  // 按 userId 查找在线用户
   function getPublicUser(userId: number): MeetingUser | undefined {
     return getPublicUsers().find((user) => user.id === userId);
   }
 
+  // 比较两个用户信息是否有变化（用于判断是否需要广播 presence 变更）
   function samePublicUser(left?: MeetingUser, right?: MeetingUser) {
     if (!left || !right) return left === right;
     return (
@@ -156,18 +178,25 @@ const initialMeeting = (server: Server) => {
     );
   }
 
+  // 获取用户已认证且未断开的 socketId，包含主动设置为 offline 的连接
   function getUserSockets(userId: number) {
     return [...socketToUserMap.entries()]
       .filter(([, mappedUserId]) => mappedUserId === userId)
       .map(([socketId]) => socketId);
   }
 
+  // 每个 socket 加入的媒体会话：socketId → (channelId → GroupSession)
   const joinedBySocket = new Map<string, Map<string, GroupSession>>();
+  // 所有活跃 socket 的引用（用于遍历、广播）
   const sockets = new Map<string, import('socket.io').Socket>();
 
+  // 消息写入耗时采样（用于 P95 监控）
   const messageWriteMs: number[] = [];
+  // 私聊通话状态追踪器
   const privateCallTracker = new PrivateCallTracker();
+  // 当前周期内私聊/群聊发送处理捕获的异常次数，包含内容校验及保存失败（每分钟归零）
   let messageWriteFailures = 0;
+  // 每 60s 输出一次实时通信监控指标
   const metricsTimer = setInterval(() => {
     const transports = { websocket: 0, polling: 0 };
     for (const client of io.sockets.sockets.values()) {
@@ -191,6 +220,7 @@ const initialMeeting = (server: Server) => {
   metricsTimer.unref();
   server.once?.('close', () => clearInterval(metricsTimer));
 
+  // 向群成员或私聊屏幕共享双方的已认证连接推送媒体会话事件
   async function emitGroupSessionEvent(
     groupId: MediaScopeId,
     event: string,
@@ -206,6 +236,7 @@ const initialMeeting = (server: Server) => {
     if (socketIds.length) io.to(socketIds).emit(event, payload);
   }
 
+  // 保存私聊通话历史到 Message 表，并推送 private_call_history 给双方
   async function savePrivateCallHistory(record: PrivateCallHistoryRecord) {
     const saved = await Message.create({
       fromUserId: record.callerUserId,
@@ -220,6 +251,7 @@ const initialMeeting = (server: Server) => {
     if (socketIds.length) io.to(socketIds).emit('private_call_history', payload);
   }
 
+  // 保存媒体通话历史：私聊屏幕共享写入 Message；群视频、语音和屏幕共享写入 GroupMessage
   async function saveGroupCallHistory(session: GroupSession, user?: MeetingUser | null) {
     const durationSeconds = Math.max(
       1,
@@ -259,6 +291,7 @@ const initialMeeting = (server: Server) => {
     });
   }
 
+  // 记录私聊通话历史（容错：失败只记日志不抛出）
   async function recordPrivateCall(record: PrivateCallHistoryRecord | null) {
     if (!record) return;
     try {
@@ -268,6 +301,7 @@ const initialMeeting = (server: Server) => {
     }
   }
 
+  // 记录群媒体或私聊屏幕共享历史，失败仅记录日志，不阻断调用方
   async function recordGroupCall(session: GroupSession, user?: MeetingUser | null) {
     try {
       await saveGroupCallHistory(session, user);
@@ -276,6 +310,7 @@ const initialMeeting = (server: Server) => {
     }
   }
 
+  // 结束私聊屏幕共享会话：清理服务端媒体房间、通知客户端结束、清除标注并记录历史
   async function finishPrivateScreen(session: GroupSession, rejected = false) {
     if (!(await groupSessionService.end(session.groupId, 'screen', session.ownerUserId, session)))
       return;
@@ -301,12 +336,14 @@ const initialMeeting = (server: Server) => {
     });
   }
 
+  // 向所有客户端广播用户在线状态变更（仅在信息实际变化时）
   function emitPresenceChange(userId: number, previous?: MeetingUser) {
     const next = getPublicUser(userId);
     if (samePublicUser(previous, next)) return;
     io.emit('user_presence', next ? { userId, user: next } : { userId });
   }
 
+  // 向媒体房间广播当前参与成员列表
   function emitMediaPresence(session: GroupSession) {
     io.to(session.channelId).emit('group_call_presence', {
       groupId: session.groupId,
@@ -317,6 +354,7 @@ const initialMeeting = (server: Server) => {
     });
   }
 
+  // 向群聊广播媒体房间已空（成员列表为空）
   function emitEmptyMediaPresence(session: GroupSession) {
     io.to(`group_${session.groupId}`).emit('group_call_presence', {
       groupId: session.groupId,
@@ -327,6 +365,7 @@ const initialMeeting = (server: Server) => {
     });
   }
 
+  // 将 socket 从媒体房间移除并广播成员离开
   function removeFromMediaRoom(socketId: string, session: GroupSession, userId?: number) {
     if (!mediaRooms.leave(session.channelId, socketId)) return;
 
@@ -341,6 +380,7 @@ const initialMeeting = (server: Server) => {
     emitMediaPresence(session);
   }
 
+  // 关闭媒体会话：清理画质/麦克风权限、通知剩余成员会话结束、释放房间资源
   function closeMediaSession(session: GroupSession) {
     if (screenQualities.get(session.channelId)?.startedAt === session.startedAt)
       screenQualities.delete(session.channelId);
@@ -366,15 +406,24 @@ const initialMeeting = (server: Server) => {
     if (!mediaRooms.getSocketIds(session.channelId).length) emitEmptyMediaPresence(session);
   }
 
+  // Socket.IO 连接处理：每个新连接注册所有事件监听器
   io.on('connection', (socket) => {
     const socketId = socket.id;
+    // 当前 socket 的用户信息（认证成功后赋值）
     let currentUser: MeetingUser | null = null;
+    // 当前认证的会话载荷（JWT 解析结果）
     let currentAuth: AuthenticatedSessionPayload | null = null;
+    // 最近认证通过的 token；后续业务事件仍需重新校验
     let currentToken: string | null = null;
+    // 认证尝试计数器（递增后使旧的异步认证流程失效）
     let authenticationAttempt = 0;
+    // token 过期定时器
     let authenticationExpiryTimer: ReturnType<typeof setTimeout> | undefined;
+    // 该 socket 加入的媒体会话：channelId → GroupSession
     const joinedMediaSessions = new Map<string, GroupSession>();
+    // 该 socket 拥有的媒体会话（作为发起者）：channelId → GroupSession
     const ownedSessions = new Map<string, GroupSession>();
+    // 媒体会话启动版本：scopeId:type → 递增计数，使已被结束或撤权操作取代的异步启动失效
     const groupCallStartGenerations = new Map<string, number>();
 
     joinedBySocket.set(socketId, joinedMediaSessions);
@@ -385,6 +434,8 @@ const initialMeeting = (server: Server) => {
       string,
       (data: any, ack?: (result: unknown) => void, privateScope?: boolean) => Promise<void>
     >();
+    // 注册群聊与媒体事件：校验参数和连接状态，并按作用域串行执行
+    // 群聊查询成员资格，私聊屏幕共享构造角色与麦克风权限；启动/结束事件更新版本号供处理器检查
     function onGroup(
       event: string,
       handler: (
@@ -480,6 +531,8 @@ const initialMeeting = (server: Server) => {
       mediaHandlers.set(event, receive);
       socket.on(event, (data, ack) => receive(data, ack));
     }
+    // 屏幕共享统一入口：解析 scope → 分发到对应的 media 事件处理器
+    // 支持群组屏幕共享和私聊屏幕共享两种作用域
     socket.on(
       'screen_share',
       async (request: {
@@ -552,6 +605,7 @@ const initialMeeting = (server: Server) => {
         }
       },
     );
+    // 撤销本 socket 的群访问：退房、使待完成的启动失效、通知当前连接撤权，并清理其媒体会话
     async function revokeLocalGroup(groupId: number) {
       // Drop passive subscriptions before the first await.
       socket.leave(`group_${groupId}`);
@@ -581,11 +635,13 @@ const initialMeeting = (server: Server) => {
         }),
       );
     }
+    // 订阅群访问撤销事件，按 userId 定位成员；未指定 userId 时处理该群的全部连接
     const unsubscribeGroupRevocation = onGroupAccessRevoked((event) => {
       if (!currentUser || (event.userId !== undefined && currentUser.id !== event.userId)) return;
       return revokeLocalGroup(event.groupId);
     });
 
+    // 订阅登录会话撤销事件，匹配用户、会话及认证版本后断开连接
     const unsubscribeRevocation = onLoginSessionsRevoked((event) => {
       if (currentAuth?.userId !== event.userId || (event.sid && currentAuth.sid !== event.sid))
         return;
@@ -602,6 +658,7 @@ const initialMeeting = (server: Server) => {
       socket.emit('auth_error', { message: '登录会话已撤销' });
       socket.disconnect(true);
     });
+    // 入站事件中间件：authenticate 交给认证处理器，其余事件执行前重新验证登录会话
     socket.use(async ([event], next) => {
       if (event === 'authenticate') {
         next();
@@ -627,6 +684,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
+    // 客户端认证：验证 JWT → 加载用户信息 → 注册到 userMap → 广播在线状态
     socket.on(
       'authenticate',
       async (data: { token: string; nickname?: string; avatar?: string }) => {
@@ -692,6 +750,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 更新在线状态（online/offline/busy），同步到 DB 并广播
     socket.on('status_update', async (data: { status: PresenceStatus }) => {
       if (!currentUser || !['online', 'offline', 'busy'].includes(data.status)) return;
       if (currentUser.status === data.status) return;
@@ -704,6 +763,7 @@ const initialMeeting = (server: Server) => {
       emitPresenceChange(currentUser.id, previous);
     });
 
+    // 断线清理：移除用户、清理所有加入的群/媒体会话、结束拥有的会话、记录通话历史
     socket.on('disconnect', async () => {
       authenticationAttempt++;
       currentToken = null;
@@ -779,6 +839,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
+    // 仅对当前用户隐藏消息，并向该用户所有已认证连接推送删除事件
     socket.on('messages_delete', async (data, ack) => {
       if (!currentUser) {
         ack?.({ ok: false, error: '请先登录' });
@@ -794,6 +855,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
+    // 发送私聊消息：校验内容 → 保存（有 clientMessageId 时幂等）→ 非重复消息推送接收方连接并向发送方确认
     socket.on(
       'private_message',
       async (
@@ -857,6 +919,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // WebRTC 信令中继：将 offer/answer/ICE candidate 转发给目标 socket（私聊 P2P）
     socket.on('webrtc_offer', (data) => {
       if (data.to?.socketId) {
         socket.to(data.to.socketId).emit('webrtc_offer', {
@@ -885,6 +948,7 @@ const initialMeeting = (server: Server) => {
       }
     });
 
+    // 发起私聊通话请求（视频/屏幕/语音），记录到通话追踪器并通知对方
     socket.on('webrtc_call_request', (data) => {
       const type = getPrivateCallType(data.deviceType);
       const calleeUserId = data.to?.socketId ? socketToUserMap.get(data.to.socketId) : undefined;
@@ -906,6 +970,7 @@ const initialMeeting = (server: Server) => {
       });
     });
 
+    // 转发振铃音标识（仅当 callId 匹配且通话尚未被接听）
     socket.on('webrtc_call_ringing', (data) => {
       if (!currentUser || typeof data?.callId !== 'string' || !data.to?.socketId) return;
       if (data.tone !== 'default' && data.tone !== 'classic') return;
@@ -917,6 +982,7 @@ const initialMeeting = (server: Server) => {
       });
     });
 
+    // 转发通话响应：接听仅更新追踪状态；拒绝或建立失败时结束追踪并保存历史
     socket.on('webrtc_call_response', async (data) => {
       if (!data.to?.socketId) return;
       const setupFailed = data.accepted === false && data.reason === 'SETUP_FAILED';
@@ -930,11 +996,13 @@ const initialMeeting = (server: Server) => {
       );
     });
 
+    // 接收客户端的接通上报，为已接听且未计时的通话记录开始时间；服务端不直接检测 WebRTC 连接
     socket.on('webrtc_call_connected', (data) => {
       if (!data.to?.socketId) return;
       privateCallTracker.connected(socketId, data.to.socketId);
     });
 
+    // 挂断通话：通知对方 + 记录通话历史
     socket.on('webrtc_hangup', async (data) => {
       if (!data.to?.socketId) return;
       socket.to(data.to.socketId).emit('webrtc_hangup', {
@@ -943,6 +1011,7 @@ const initialMeeting = (server: Server) => {
       await recordPrivateCall(privateCallTracker.finish(socketId, data.to.socketId));
     });
 
+    // 订阅群聊房间：记录当前 socket，返回已订阅连接的成员列表和媒体状态；不新增数据库群成员
     onGroup('join_group', async (data: { groupId: number }) => {
       if (!currentUser || !data.groupId) return;
       const roomName = `group_${data.groupId}`;
@@ -971,6 +1040,7 @@ const initialMeeting = (server: Server) => {
       });
     });
 
+    // 取消当前 socket 的群聊房间订阅并广播离开；不删除数据库群成员关系
     onGroup('leave_group', (data: { groupId: number }) => {
       const roomName = `group_${data.groupId}`;
       const room = groupRooms.get(data.groupId);
@@ -985,6 +1055,7 @@ const initialMeeting = (server: Server) => {
       socket.to(roomName).emit('group_member_left', { socketId, userId: currentUser?.id });
     });
 
+    // 发送群聊消息：校验成员身份和发言权限 → 幂等保存到 DB → 推送到群房间
     onGroup(
       'group_message',
       async (
@@ -1054,6 +1125,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 群媒体/私聊屏幕共享信令中继：校验会话版本、目标资格及双方已加入同一会话后转发
     for (const [event, field] of [
       ['group_webrtc_offer', 'offer'],
       ['group_webrtc_answer', 'answer'],
@@ -1103,6 +1175,7 @@ const initialMeeting = (server: Server) => {
       });
     }
 
+    // 发起群媒体或私聊屏幕共享：检查启动版本 → 创建或复用会话 → 新建时清理旧房间并广播
     onGroup(
       'group_call_start',
       async (
@@ -1169,6 +1242,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 结束群媒体或私聊屏幕共享：仅创建该会话的 socket 可通过此入口结束；屏幕会话同时清除标注
     onGroup(
       'group_call_end',
       async (data: { groupId: MediaScopeId; deviceType?: number; type?: GroupSessionType }) => {
@@ -1216,6 +1290,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 切换屏幕共享画质：仅发起 socket 可调 → 更新内存快照 → 广播给媒体房间全部连接
     onGroup(
       'screen_share_quality',
       async (data: { groupId: MediaScopeId; startedAt: string; quality: unknown }) => {
@@ -1238,6 +1313,8 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 加入群媒体或私聊屏幕共享：校验会话版本并入房；屏幕会话额外返回已有画质和标注快照
+    // 私聊屏幕共享额外检查：同一用户不能从另一台设备重复加入
     onGroup(
       'join_group_call',
       async (data: { groupId: MediaScopeId; deviceType: number; startedAt: string }) => {
@@ -1315,6 +1392,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 离开群媒体通话：私聊屏幕共享直接结束整个会话，群聊仅移除当前成员
     onGroup('leave_group_call', async (data: { groupId: MediaScopeId; deviceType: number }) => {
       const type = getSessionType(data.deviceType);
       const session = joinedMediaSessions.get(`group:${data.groupId}:${type}`);
@@ -1329,6 +1407,7 @@ const initialMeeting = (server: Server) => {
       joinedMediaSessions.delete(session.channelId);
     });
 
+    // 屏幕标注草稿：仅当前屏幕共享者可提交；校验会话、入房状态及内容后广播给其他连接
     onGroup(
       'screen_annotation_draft',
       async (data: { groupId: MediaScopeId; startedAt: string; action: AnnotationDraft }) => {
@@ -1360,6 +1439,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 屏幕标注完成：仅当前屏幕共享者可提交；校验后保存到 Redis 并广播给媒体房间全部连接
     onGroup(
       'screen_annotation_complete',
       async (data: { groupId: MediaScopeId; startedAt: string; action: AnnotationDraft }) => {
@@ -1392,6 +1472,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 撤销屏幕标注（仅当前屏幕共享者）：移除当前会话最后一条标注并广播其 actionId
     onGroup(
       'screen_annotation_undo',
       async (data: { groupId: MediaScopeId; startedAt: string }) => {
@@ -1419,6 +1500,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 清空当前会话的全部屏幕标注（仅当前屏幕共享者）：删除 Redis 快照并广播清空事件
     onGroup(
       'screen_annotation_clear',
       async (data: { groupId: MediaScopeId; startedAt: string }) => {
@@ -1445,6 +1527,9 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 控制同一媒体会话中成员的麦克风权限（群聊仅群主，私聊屏幕共享仅发起者）：
+    // 群聊 → 更新 DB 中 GroupMember.canSpeak
+    // 私聊屏幕共享 → 更新内存中的 privateMicPermissions
     onGroup(
       'control_member_mic',
       async (
@@ -1494,6 +1579,7 @@ const initialMeeting = (server: Server) => {
       },
     );
 
+    // 同步客户端麦克风状态：拒绝被禁言成员的取消静音上报，再广播给同作用域媒体房间的其他连接；不直接操作音轨
     onGroup('toggle_mic', (data: { groupId: MediaScopeId; muted: boolean }, member) => {
       if (typeof data.muted !== 'boolean' || (!data.muted && member.canSpeak === false)) return;
       for (const session of joinedMediaSessions.values()) {
