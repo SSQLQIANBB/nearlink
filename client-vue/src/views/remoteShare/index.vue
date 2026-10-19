@@ -83,7 +83,6 @@
             class="sidebar-profile-actions"
             :class="{ 'sidebar-profile-actions--desktop': desktop }"
           >
-            <DesktopReleaseEntry class="profile-button sidebar-release-entry" />
             <n-button
               class="profile-button"
               size="small"
@@ -292,6 +291,9 @@
             </n-scrollbar>
           </n-tab-pane>
         </n-tabs>
+        <div v-if="!desktop" class="sidebar-download">
+          <DesktopReleaseEntry variant="sidebar" />
+        </div>
       </n-layout-sider>
 
       <div
@@ -1177,9 +1179,12 @@ li[data-selecting='true'] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.sidebar-release-entry {
-  grid-column: 1 / -1;
-  grid-row: 2;
+.sidebar-download {
+  order: 3;
+  flex-shrink: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .sidebar-profile-actions .profile-button {

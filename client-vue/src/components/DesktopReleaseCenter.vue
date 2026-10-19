@@ -71,7 +71,7 @@
     <template v-else>
       <div class="release-version">
         <strong>
-          {{ hasUpdate ? '可更新至' : desktop ? '已发布版本' : '最新已发布版本' }}
+          {{ hasUpdate ? '可更新至' : desktop ? '已发布版本' : '安装包版本' }}
           {{ release.version }}
         </strong>
         <span v-if="desktop && !hasUpdate">当前无需更新</span>

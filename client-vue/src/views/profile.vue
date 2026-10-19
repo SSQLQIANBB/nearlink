@@ -7,22 +7,25 @@
           <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">个人中心</h1>
           <p class="text-gray-500 mt-1">管理您的个人信息</p>
           <p class="mt-1 text-xs text-slate-500">NearLink {{ APP_VERSION_LABEL }}</p>
-          <div class="mt-3"><DesktopReleaseEntry /></div>
+          <div v-if="desktop" class="mt-2"><DesktopReleaseEntry /></div>
         </div>
-        <n-button
-          @click="goBack"
-          secondary
-        >
-          <template #icon>
-            <n-icon>
-              <i
-                class="iconfont icon-arrow-left"
-                aria-hidden="true"
-              ></i>
-            </n-icon>
-          </template>
-          返回
-        </n-button>
+        <div class="flex flex-wrap items-center gap-2">
+          <DesktopReleaseEntry v-if="!desktop" />
+          <n-button
+            @click="goBack"
+            secondary
+          >
+            <template #icon>
+              <n-icon>
+                <i
+                  class="iconfont icon-arrow-left"
+                  aria-hidden="true"
+                ></i>
+              </n-icon>
+            </template>
+            返回
+          </n-button>
+        </div>
       </div>
 
       <!-- 用户信息卡片 -->
