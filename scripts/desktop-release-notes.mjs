@@ -24,7 +24,7 @@ export function desktopReleaseNotes(repository, version) {
 
 ## 远程控制能力说明
 
-Windows x64 和 Apple 芯片 macOS 安装包在构建时制作并嵌入对应平台的远控引擎；Intel Mac 安装包仅用于聊天验证，不包含远控引擎。Apple 芯片远控引擎要求 macOS 13 或更新版本。当前产物保留为草稿，尚未完成实际远控验收；包含引擎不表示权限、授权、传输及停止释放已验收。
+Windows x64、Apple 芯片 macOS 和 Intel Mac 安装包均在构建时制作并嵌入对应架构的远控引擎。两个 macOS 架构的远控引擎均要求 macOS 13 或更新版本。本版本为自动发布的内测版，尚未完成实际远控验收；包含引擎不表示权限、授权、传输及停止释放已验收。
 
 ${['0.5.0-beta.11', '0.5.0-beta.12', '0.5.0-beta.13'].includes(version) ? `本次源码修复了采屏 45 秒和引擎 60 秒的固定退出限制，以及过期输入导致整场协助中断的问题；增加停止原因诊断。带引擎的 macOS Apple 芯片测试包已持续运行超过 3 分 40 秒，跨电脑实际操作和 30 分钟稳定性仍待验收。\n` : ''}
 ${['0.5.0-beta.12', '0.5.0-beta.13'].includes(version) ? '同时修复 Windows CRLF 检出导致版本校验失败的问题，并兼容 Windows 登录页测试中的公共图标资源。\n' : ''}

@@ -2,7 +2,7 @@
 
 开发分支为 `feature/desktop-tauri`。桌面端使用独立的 `desktop-v` 标签前缀，避免与网页版本混淆。下载地址：<https://github.com/SSQLQIANBB/nearlink/releases>。
 
-Windows x64 / Apple 芯片 macOS 的 `pnpm desktop:build` 会自动准备固定版本 SDK、从源码制作引擎，并将完整引擎资源及清单嵌入安装包；制作失败即停止打包。也可用 `pnpm desktop:remote:build --bundle <绝对路径> -- <Tauri 参数>` 选择已有资源。构建机需要 Windows CPython 3.13 与 MSVC，或 macOS CPython 3.13.2 与 Xcode Command Line Tools；可用 `TODE_ENGINE_BUILD_PYTHON` 指定构建解释器。终端用户无需安装 Python/GStreamer，也无需为缺少引擎修改服务器配置。`desktop:build:chat` 仅用于聊天功能验证，不能作为远控版本发布。当前发布流水线尚未准备全平台引擎和实机验收记录，因此不能发布宣称支持远控的安装包。
+Windows x64、macOS ARM64 和 macOS Intel 的 `pnpm desktop:build` 均自动准备固定版本 SDK、从源码制作对应架构引擎，并将完整资源及清单嵌入安装包；制作或校验失败即停止打包。`desktop:build:chat` 保留为兼容入口，但同样包含引擎。CI 和正式 Release 统一使用此流程，Intel Mac 使用原生 Intel runner。构建机需使用与目标架构相同的 Node/Python：Windows CPython 3.13 与 MSVC，或 macOS CPython 3.13.2 与 Xcode Command Line Tools；可用 `TODE_ENGINE_BUILD_PYTHON` 指定构建解释器。也可用 `pnpm desktop:remote:build --bundle <绝对路径> -- <Tauri 参数>` 选择已准备的目标平台资源。裸 `tauri build` 未选择引擎时会在生成安装包前报错；`--no-bundle` 只生成原生测试二进制，不是安装包。Web、桌面前端静态资源和服务端 Docker 不属于桌面安装包，不携带原生引擎。终端用户无需自行安装 Python/GStreamer；引擎入包不代表平台权限、实际传输、签名及实机验收已经完成。
 
 ## 统一产品版本与提交规则
 
@@ -57,7 +57,7 @@ git push origin desktop-v0.2.0-alpha.1
 1. 校验所有自有包、Tauri、Rust 锁文件、平台版本字段与标签是否一致，不一致时在构建前失败。
 2. 运行前端测试、类型检查（打包前执行）、Rust 编译并构建三个安装包。Windows 还运行现有的 WebView2 原生测试。
 3. 三个平台全部成功后，检查安装包数量并生成 `SHA256SUMS.txt`。
-4. 创建 Release 草稿，附加所有安装包及 SHA-256 校验文件；保持草稿，等待精确安装包的实际远控验收后再另行发布。Intel Mac 当前只构建聊天验证包，不能视为全平台远控支持。
+4. 上传期间暂存为 Release 草稿；所有安装包及 SHA-256 校验文件上传成功后，自动发布为 Prerelease，不再停留在草稿状态。三个桌面平台均包含对应引擎，自动发布不代表已完成各平台实机验收。
 
 失败的构建不会发布 Release。若上传阶段中断，可在 Actions 中重跑失败任务，流程会补齐同一个草稿的附件；已公开发布的版本不会被覆盖。
 
@@ -108,7 +108,7 @@ git push origin desktop-v0.2.0-alpha.1
 
 后续如需应用内自动下载、验证、安装和重启，需接入 Tauri updater：建立独立更新签名密钥并将公钥编入客户端，私钥保存在 CI Secrets；生成签名文件、macOS app.tar.gz 与更新清单，安装包和签名全部上传后才公开清单；客户端验证签名并在空闲且用户确认后安装。当前流水线只有 exe/dmg 和 SHA-256 文件，SHA-256 校验文件不能代替 updater 签名，因此此版不展示「一键自动安装」。官方依据：[Tauri 更新插件](https://v2.tauri.app/zh-cn/plugin/updater/)、[GitHub Releases API](https://docs.github.com/en/rest/releases/releases)。
 
-本批已做下载/更新逻辑的针对性检查和浏览器页面验证，不代表 Windows/macOS 覆盖安装或远控验收完成。发布仍保持草稿，需另行明确发布后，Web 才会推荐新包。
+本批已做下载/更新逻辑的针对性检查和浏览器页面验证，不代表 Windows/macOS 覆盖安装或远控验收完成。工作流自动发布完整安装包后，Web 才会推荐新包。
 
 ### 设备初始化不依赖电脑时钟（0.12.0-alpha.2）
 
