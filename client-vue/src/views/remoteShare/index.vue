@@ -79,7 +79,10 @@
             </n-button>
           </div>
           <!-- 快捷操作 -->
-          <div class="sidebar-profile-actions">
+          <div
+            class="sidebar-profile-actions"
+            :class="{ 'sidebar-profile-actions--desktop': desktop }"
+          >
             <DesktopReleaseEntry class="profile-button sidebar-release-entry" />
             <n-button
               class="profile-button"
@@ -1166,8 +1169,12 @@ li[data-selecting='true'] {
 
 .sidebar-profile-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+}
+
+.sidebar-profile-actions--desktop {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .sidebar-release-entry {
