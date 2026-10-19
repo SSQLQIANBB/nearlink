@@ -1,8 +1,9 @@
 <template>
   <section
     v-if="session.visible"
+    ref="sessionElement"
     class="remote-ui remote-session"
-    :class="{ compact }"
+    :class="{ compact: compact && !fullscreen, fullscreen }"
     aria-label="远程协助会话"
   >
     <header>
@@ -15,6 +16,7 @@
         主控设备身份已验证
       </span>
       <n-button
+        v-if="!fullscreen"
         size="small"
         @click="minimize"
       >
@@ -29,6 +31,22 @@
       </n-button>
       <n-button
         size="small"
+        :aria-label="fullscreen ? '退出全屏' : '全屏显示远程画面'"
+        :title="fullscreen ? '退出全屏（Esc）' : '全屏显示远程画面'"
+        :aria-pressed="fullscreen"
+        :disabled="fullscreenBusy || (!fullscreen && !session.stream)"
+        @click="toggleFullscreen"
+      >
+        <template #icon>
+          <i
+            class="iconfont"
+            :class="fullscreen ? 'icon-full-screen-play' : 'icon-full-screen-play-filled'"
+            aria-hidden="true"
+          ></i>
+        </template>
+      </n-button>
+      <n-button
+        size="small"
         type="error"
         secondary
         @click="session.end()"
@@ -36,6 +54,7 @@
         结束协助
       </n-button>
     </header>
+    <p v-if="fullscreenError" class="fullscreen-error" role="alert">{{ fullscreenError }}</p>
     <div
       ref="viewport"
       class="remote-video-area"
@@ -83,7 +102,7 @@
         </div>
       </div>
     </div>
-    <footer v-if="!compact">
+    <footer v-if="!compact && !fullscreen">
       <span>
         {{
           session.scope === 'control'
@@ -205,7 +224,14 @@ import { useRoute } from 'vue-router';
 import { NButton } from 'naive-ui';
 import { useRemoteControlSessionStore } from '@/stores/remoteControlSession';
 import { remoteWheelPixels } from '@/services/remoteControlInput';
+import { useRemoteFullscreen } from '@/hooks/useRemoteFullscreen';
 const session = useRemoteControlSessionStore();
+const sessionElement = ref<HTMLElement | null>(null);
+const { fullscreen, fullscreenBusy, fullscreenError, toggleFullscreen } = useRemoteFullscreen(
+  sessionElement, () => session.visible,
+);
+watch(fullscreen, () => pause());
+watch(fullscreenBusy, (value) => { if (value) pause(); });
 const route = useRoute();
 const auth = useAuthStore();
 const preferences = ref(defaultRemoteViewPreferences());
@@ -213,6 +239,7 @@ const preferenceNotice = ref('');
 const dimensions = ref({ width: 0, height: 0 });
 const videoStyle = computed(() => {
   if (
+    fullscreen.value ||
     compact.value ||
     preferences.value.scale === 'fit' ||
     !dimensions.value.width ||
@@ -584,5 +611,48 @@ footer {
     bottom: 12px;
     width: calc(100vw - 24px);
   }
+}
+.remote-session.fullscreen {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+.fullscreen .remote-video-area {
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: #000;
+}
+.fullscreen header {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  right: 12px;
+  padding: 8px;
+  gap: 8px;
+  border-radius: 10px;
+  opacity: 0.35;
+  transition: opacity 150ms;
+}
+.fullscreen header:hover,
+.fullscreen header:focus-within {
+  opacity: 1;
+}
+.fullscreen header > strong,
+.fullscreen header > span {
+  display: none;
+}
+.fullscreen-error {
+  position: absolute;
+  z-index: 2;
+  top: 64px;
+  right: 12px;
+  padding: 8px 12px;
+  background: #7f1d1d;
+  color: white;
 }
 </style>

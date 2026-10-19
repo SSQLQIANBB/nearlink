@@ -1,7 +1,11 @@
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ session: null as any, auth: null as any }));
+const mocks = vi.hoisted(() => ({ session: null as any, auth: null as any, native: false,
+  window: { isFullscreen: vi.fn(), setFullscreen: vi.fn(), onResized: vi.fn() },
+}));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => mocks.native }));
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => mocks.window }));
 vi.mock('@/stores/remoteControlSession', () => ({
   useRemoteControlSessionStore: () => mocks.session,
 }));
@@ -10,6 +14,24 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ fullPath: '/' }) }));
 import GlobalRemoteControl from '@/components/GlobalRemoteControl.vue';
 const id = '11111111-1111-4111-8111-111111111111';
 beforeEach(() => {
+  mocks.native = false;
+  mocks.window.isFullscreen.mockReset().mockResolvedValue(false);
+  mocks.window.setFullscreen.mockReset().mockResolvedValue(undefined);
+  mocks.window.onResized.mockReset().mockResolvedValue(vi.fn());
+  let element: Element | null = null;
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => element });
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true,
+    value: vi.fn(async function (this: HTMLElement) {
+      element = this;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    }),
+  });
+  Object.defineProperty(document, 'exitFullscreen', { configurable: true,
+    value: vi.fn(async () => {
+      element = null;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    }),
+  });
   localStorage.clear();
   mocks.auth = reactive({ currentUser: { id: 1 }, authGeneration: 1, loggingOut: false });
   mocks.session = reactive({
@@ -30,6 +52,63 @@ beforeEach(() => {
   });
 });
 describe('远程画面显示设置', () => {
+  it('全屏暂时适应屏幕，Esc 退出并恢复原缩放，不转发 Escape', async () => {
+    const wrapper = mount(GlobalRemoteControl);
+    const video = wrapper.get('video');
+    Object.defineProperties(video.element, { videoWidth: { value: 1280 }, videoHeight: { value: 720 } });
+    await video.trigger('loadedmetadata');
+    await wrapper.get('select').setValue('150');
+    await wrapper.get('[aria-label="全屏显示远程画面"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('section').classes()).toContain('fullscreen');
+    expect(wrapper.find('footer').exists()).toBe(false);
+    expect(video.attributes('style') || '').not.toContain('1920px');
+    await video.trigger('keydown', { key: 'Escape', code: 'Escape' });
+    // 未挂到 document 的组件事件不经过 window，显式模拟全局 Esc。
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+    await flushPromises();
+    expect(document.exitFullscreen).toHaveBeenCalledOnce();
+    expect(wrapper.get('section').classes()).not.toContain('fullscreen');
+    expect(wrapper.get('select').element.value).toBe('150');
+    expect(video.attributes('style')).toContain('1920px');
+    expect(mocks.session.sendInput).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+  it('浏览器拒绝全屏时保留原布局并显示错误', async () => {
+    vi.mocked(HTMLElement.prototype.requestFullscreen).mockRejectedValueOnce(new Error('denied'));
+    const wrapper = mount(GlobalRemoteControl);
+    await wrapper.get('[aria-label="全屏显示远程画面"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('section').classes()).not.toContain('fullscreen');
+    expect(wrapper.get('[role="alert"]').text()).toContain('无法进入全屏');
+    wrapper.unmount();
+  });
+  it('原生进入全屏期间结束会话，完成切换后恢复窗口', async () => {
+    mocks.native = true;
+    let entered!: () => void;
+    mocks.window.setFullscreen.mockImplementationOnce(() => new Promise<void>((resolve) => { entered = resolve; }));
+    const wrapper = mount(GlobalRemoteControl);
+    await wrapper.get('[aria-label="全屏显示远程画面"]').trigger('click');
+    await flushPromises();
+    mocks.session.visible = false;
+    await wrapper.vm.$nextTick();
+    entered();
+    await flushPromises();
+    expect(mocks.window.setFullscreen.mock.calls).toEqual([[true], [false]]);
+    wrapper.unmount();
+  });
+  it('原生窗口原本已全屏，退出远控全屏不改变原窗口状态', async () => {
+    mocks.native = true;
+    mocks.window.isFullscreen.mockResolvedValue(true);
+    const wrapper = mount(GlobalRemoteControl);
+    await wrapper.get('[aria-label="全屏显示远程画面"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[aria-label="退出全屏"]').trigger('click');
+    await flushPromises();
+    expect(mocks.window.setFullscreen.mock.calls).toEqual([[true], [true]]);
+    expect(wrapper.get('section').classes()).not.toContain('fullscreen');
+    wrapper.unmount();
+  });
   it('点击画面启用控制，启用点击不下发孤立的抬起事件，后续点击正常发送', async () => {
     mocks.session.scope = 'control';
     const wrapper = mount(GlobalRemoteControl);
