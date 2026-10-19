@@ -47,8 +47,8 @@ function run(command, args, env) {
 }
 
 export async function prepareEngine() {
-  if (!(windows && process.arch === 'x64') && !(process.platform === 'darwin' && process.arch === 'arm64')) {
-    throw new Error('本机远控开发支持 Windows x64 / macOS Apple 芯片。普通聊天开发可运行 npm run desktop:dev:chat。');
+  if (!(windows && process.arch === 'x64') && !(process.platform === 'darwin' && ['arm64', 'x64'].includes(process.arch))) {
+    throw new Error('本机远控开发支持 Windows x64 / macOS ARM64 / macOS Intel。普通聊天开发可运行 npm run desktop:dev:chat。');
   }
   const env = { ...process.env };
   if (windows) {
@@ -73,15 +73,17 @@ export async function prepareEngine() {
     console.log('[远控] 创建隔离 Python 3.13 环境（macOS 要求 3.13.2 framework 版本）…');
     await run(env.TODE_ENGINE_BUILD_PYTHON || (windows ? 'py' : 'python3.13'), [...(windows && !env.TODE_ENGINE_BUILD_PYTHON ? ['-3.13'] : []), '-m', 'venv', venv], env);
   }
-  const query = `import sys,json,importlib.metadata as m
+  const query = `import sys,json,platform,importlib.metadata as m
 names=json.loads(sys.argv[1])
 versions={}
 for name in names:
  try: versions[name]=m.version(name)
  except m.PackageNotFoundError: versions[name]=None
-print(json.dumps({'version':list(sys.version_info[:3]),'base':sys.base_prefix,'packages':versions}))`;
+print(json.dumps({'architecture':platform.machine(),'version':list(sys.version_info[:3]),'base':sys.base_prefix,'packages':versions}))`;
   const { stdout } = await capture(python, ['-c', query, JSON.stringify(packages)], { env });
   const sdk = JSON.parse(stdout);
+  const expectedArch = process.arch === 'arm64' ? 'arm64' : windows ? 'AMD64' : 'x86_64';
+  if (sdk.architecture !== expectedArch) throw new Error(`SDK Python 架构 ${sdk.architecture} 与构建进程 ${expectedArch} 不匹配`);
   if (sdk.version[0] !== 3 || sdk.version[1] !== 13 || (!windows && sdk.version[2] !== 2)) {
     throw new Error('引擎构建需要 Windows CPython 3.13 或 macOS CPython 3.13.2；请使用对应的开发环境。');
   }

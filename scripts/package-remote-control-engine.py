@@ -1,8 +1,9 @@
-"""Build an auditable local macOS arm64 candidate; this is not a release command."""
+"""Build an auditable local macOS candidate; this is not a release command."""
 import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import shutil
@@ -11,7 +12,8 @@ import subprocess
 import sys
 import tempfile
 
-TARGET = "aarch64-apple-darwin"
+ARCH = platform.machine()
+TARGET = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}.get(ARCH)
 SDK_VERSION = "1.28.7"
 PYTHON_VERSION = "3.13.2"
 PACKAGES = ("gstreamer_libs", "gstreamer_plugins", "gstreamer_plugins_libs", "gstreamer_python")
@@ -43,9 +45,11 @@ def macho(path):
 
 
 def native_info(path):
-    commands = run("otool", "-arch", "arm64", "-l", path)
-    dependencies = [line.strip().split(" (compatibility", 1)[0] for line in run("otool", "-arch", "arm64", "-L", path).splitlines()[1:] if line.startswith("\t")]
-    ids = run("otool", "-arch", "arm64", "-D", path).splitlines()[1:]
+    if ARCH not in run("lipo", "-archs", path).split():
+        raise ValueError(f"Missing {ARCH} slice: {path}")
+    commands = run("otool", "-arch", ARCH, "-l", path)
+    dependencies = [line.strip().split(" (compatibility", 1)[0] for line in run("otool", "-arch", ARCH, "-L", path).splitlines()[1:] if line.startswith("\t")]
+    ids = run("otool", "-arch", ARCH, "-D", path).splitlines()[1:]
     identity = next((value.strip() for value in ids if value.strip() and not value.endswith(":")), None)
     rpaths = re.findall(r"cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (.*?) \(offset", commands)
     minimum = re.findall(r"\bminos ([0-9.]+)|\bversion ([0-9.]+)\n\s+sdk", commands)
@@ -58,10 +62,10 @@ def native_info(path):
 
 def sdk_details(python):
     query = r'''
-import importlib.metadata as m,json,sys,sysconfig,os
+import importlib.metadata as m,json,sys,sysconfig,os,platform
 from pathlib import Path
 names=['gstreamer_libs','gstreamer_plugins','gstreamer_plugins_libs','gstreamer_python']
-result={'pythonVersion':'.'.join(map(str,sys.version_info[:3])),'base':sys.base_prefix,'sdk':sysconfig.get_paths()['purelib'],'packages':[]}
+result={'architecture':platform.machine(),'pythonVersion':'.'.join(map(str,sys.version_info[:3])),'base':sys.base_prefix,'sdk':sysconfig.get_paths()['purelib'],'packages':[]}
 for name in names:
  d=m.distribution(name)
  result['packages'].append({'name':name,'version':d.version,'licenseDeclaration':d.metadata.get('License'),'metadata':str(d._path/'METADATA')})
@@ -164,7 +168,7 @@ class Builder:
         for source, info in self.records.items():
             target = self.root / info["path"]
             thin = target.with_name(target.name + ".thin")
-            run("lipo", source, "-thin", "arm64", "-output", thin) if len(run("lipo", "-archs", source).split()) > 1 else shutil.copyfile(source, thin)
+            run("lipo", source, "-thin", ARCH, "-output", thin) if len(run("lipo", "-archs", source).split()) > 1 else shutil.copyfile(source, thin)
             thin.replace(target)
             target.chmod(0o755)
             changes = []
@@ -225,11 +229,11 @@ def build(root, details, scripts):
     (root / "runtime/openssl.cnf").write_text("# No external OpenSSL configuration, includes or provider modules.\n")
     (root / "bin").mkdir(exist_ok=True)
     launcher = root / "bin/remote-control-engine"
-    run("xcrun", "clang", "-arch", "arm64", "-mmacosx-version-min=13.0", "-I" + str(builder.base / "include/python3.13"),
+    run("xcrun", "clang", "-arch", ARCH, "-mmacosx-version-min=13.0", "-I" + str(builder.base / "include/python3.13"),
         scripts / "remote-control-bundle-launcher.c", builder.base / "Python", "-o", launcher)
     builder.copy(launcher)
     screen = root / "bin/remote-control-screen-source"
-    run("xcrun", "swiftc", "-parse-as-library", "-target", "arm64-apple-macos13.0", scripts / "remote-control-screen-source.swift", "-o", screen)
+    run("xcrun", "swiftc", "-parse-as-library", "-target", f"{ARCH}-apple-macos13.0", scripts / "remote-control-screen-source.swift", "-o", screen)
     builder.copy(screen)
     builder.relocate()
     notices = root / "licenses"
@@ -238,7 +242,7 @@ def build(root, details, scripts):
     for package in details["packages"]:
         shutil.copyfile(package["metadata"], notices / (package["name"] + "-METADATA.txt"))
     inventory = {"status": "local-candidate-not-cleared-for-redistribution", "pythonVersion": PYTHON_VERSION, "gstreamerVersion": SDK_VERSION,
-        "target": TARGET, "minimumMacOS": "13.0", "changes": ["arm64 slices only", "relative Mach-O dependencies", "isolated embedded Python launcher", "selected plugins and standard-library modules", "ad-hoc signatures only"],
+        "target": TARGET, "minimumMacOS": "13.0", "changes": [f"{ARCH} slices only", "relative Mach-O dependencies", "isolated embedded Python launcher", "selected plugins and standard-library modules", "ad-hoc signatures only"],
         "packages": [{key: value for key, value in package.items() if key != "metadata"} for package in details["packages"]],
         "plugins": details["plugins"],
         "nativeFiles": [{key: value for key, value in record.items() if key not in {"resolved", "rpaths"}} for record in builder.records.values()],
@@ -269,9 +273,11 @@ def main():
     parser.add_argument("--sdk-python", type=Path, required=True, help="build-time SDK interpreter; never recorded as a runtime path")
     parser.add_argument("--output", type=Path, required=True, help="new candidate directory, usually dist/remote-control-engine")
     args = parser.parse_args()
-    if sys.platform != "darwin" or run("uname", "-m").strip() != "arm64":
-        parser.error("requires an Apple Silicon macOS build host")
+    if sys.platform != "darwin" or TARGET is None:
+        parser.error("requires an arm64 or x86_64 macOS build process")
     details = sdk_details(args.sdk_python)
+    if details["architecture"] != ARCH:
+        parser.error("SDK Python architecture must match the build process")
     if details["pythonVersion"] != PYTHON_VERSION or any(package["version"] != SDK_VERSION for package in details["packages"]):
         parser.error("requires pinned CPython 3.13.2 and GStreamer wheels 1.28.7")
     output = args.output.absolute()

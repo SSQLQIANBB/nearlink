@@ -47,7 +47,7 @@ jobs:
             target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
           - platform: macos-x64
-            runner: macos-latest
+            runner: macos-15-intel
             target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
     runs-on: ${{ matrix.runner }}
@@ -71,22 +71,18 @@ jobs:
           workspaces: client-vue/src-tauri -> target
       - run: node scripts/product-version.mjs check
       - run: pnpm install --frozen-lockfile
-      - run: node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs
+      - run: node --test scripts/product-version.test.mjs scripts/desktop-release.test.mjs scripts/remote-control-desktop-build.test.mjs
       - run: pnpm --filter client-vue test
       - run: cargo check --locked --manifest-path client-vue/src-tauri/Cargo.toml
       - uses: actions/setup-python@v5
-        if: matrix.platform != 'macos-x64'
         with:
           python-version: '3.13.2'
-          architecture: ${{ runner.os == 'Windows' && 'x64' || 'arm64' }}
+          architecture: ${{ matrix.platform == 'macos-arm64' && 'arm64' || 'x64' }}
+      - run: python -m unittest discover -s scripts -p test_remote_control_macos_bundle.py
       - name: Build installer with bundled engine
         env:
           TODE_ENGINE_BUILD_PYTHON: python
-        if: matrix.platform != 'macos-x64'
         run: pnpm --filter client-vue desktop:build ${{ matrix.args }}
-      - name: Build Intel Mac chat-only installer (no supported engine)
-        if: matrix.platform == 'macos-x64'
-        run: pnpm --filter client-vue desktop:build:chat ${{ matrix.args }}
       - name: Build native test binary
         if: runner.os == 'Windows'
         shell: pwsh

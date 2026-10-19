@@ -90,7 +90,7 @@ pnpm desktop:build
 
 自动流程会加载 Windows MSVC x64 开发环境、创建或复用隔离 Python 环境、安装固定 GStreamer 1.28.7 wheels，并按源码摘要缓存引擎到已忽略的 `dist/remote-control-dev`。Windows 优先复用 `%LOCALAPPDATA%/NearLink/remote-engine-dev` 中已有 SDK。首次准备需要网络和构建时间，失败时直接停止并输出原因，不会退回无引擎模式。
 
-开发机器需有 Windows x64 CPython 3.13、Visual Studio 桌面 C++ 工作负载及 Windows SDK；macOS Apple 芯片需 CPython 3.13.2 framework 版本与 Xcode Command Line Tools。这些是开发依赖，最终用户不需要单独安装远控插件。Intel Mac 的本机被控引擎尚不支持，可用 `npm run desktop:dev:chat` 开发普通聊天功能。
+开发机器需有 Windows x64 CPython 3.13、Visual Studio 桌面 C++ 工作负载及 Windows SDK；macOS ARM64 / Intel 均需对应架构的 CPython 3.13.2 framework 版本与 Xcode Command Line Tools。这些是开发依赖，最终用户不需要单独安装远控插件。Intel Mac 已接入同架构引擎构建流程，实际采屏、输入和权限仍需在 Intel 设备验收；`npm run desktop:dev:chat` 仅用于不启动引擎的聊天开发。
 
 `desktop:dev:chat` 和普通 `desktop:build` 不自动选择引擎。分发远控安装包仍须显式选择已经验收的资源，不会使用开发缓存自动发布。
 
@@ -102,7 +102,7 @@ pnpm desktop:remote:dev --bundle "D:/absolute/path/to/engine-bundle"
 pnpm desktop:remote:build --bundle "D:/absolute/path/to/engine-bundle"
 ```
 
-macOS 使用相同命令，将路径换成对应 Apple 芯片引擎目录。包装入口同时设置编译期清单和 Tauri 资源映射，Windows 直接通过 Node 启动 Tauri CLI，避免直接 spawn `.cmd` 的兼容问题。资源检查、引擎握手和系统权限仍需通过，选择引擎不等于已开放或验收通过。
+macOS 使用相同命令，将路径换成对应 ARM64 或 Intel 架构的引擎目录。包装入口同时设置编译期清单和 Tauri 资源映射，Windows 直接通过 Node 启动 Tauri CLI，避免直接 spawn `.cmd` 的兼容问题。资源检查、引擎握手和系统权限仍需通过，选择引擎不等于已开放或验收通过。
 
 页面提供“刷新可用状态”更新权限和服务端状态；引擎探测结果在当前进程内缓存，修复资源或启动失败后必须重启桌面程序。
 

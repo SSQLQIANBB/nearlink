@@ -70,7 +70,7 @@ pub fn parse(bytes: &[u8], target: &str) -> Result<BundleManifest> {
         serde_json::from_slice(bytes).map_err(|_| fail("invalid manifest"))?;
     if manifest.format != FORMAT
         || manifest.target != target
-        || !matches!(target, "aarch64-apple-darwin" | "x86_64-pc-windows-msvc")
+        || !matches!(target, "aarch64-apple-darwin" | "x86_64-apple-darwin" | "x86_64-pc-windows-msvc")
         || manifest.entrypoint != (if target == "x86_64-pc-windows-msvc" { "bin/remote-control-engine.exe" } else { "bin/remote-control-engine" })
         || manifest.files.is_empty()
         || manifest.files.len() > MAX_FILES
@@ -361,6 +361,36 @@ pub fn verify(_root: &Path, _expected: &[u8], _target: &str) -> Result<VerifiedT
 mod windows_bundle;
 #[cfg(windows)]
 pub use windows_bundle::{read_manifest, verify};
+
+#[cfg(test)]
+mod architecture_tests {
+    use super::*;
+
+    #[test]
+    fn macos_manifests_accept_both_architectures_but_never_the_wrong_target() {
+        for target in ["aarch64-apple-darwin", "x86_64-apple-darwin"] {
+            let manifest = BundleManifest {
+                format: FORMAT.into(),
+                target: target.into(),
+                entrypoint: "bin/remote-control-engine".into(),
+                files: vec![BundleFile {
+                    path: "bin/remote-control-engine".into(),
+                    size: 1,
+                    sha256: sha256(b"x"),
+                    executable: true,
+                }],
+            };
+            let bytes = serde_json::to_vec(&manifest).unwrap();
+            assert!(parse(&bytes, target).is_ok());
+            let other = if target.starts_with("aarch64") {
+                "x86_64-apple-darwin"
+            } else {
+                "aarch64-apple-darwin"
+            };
+            assert!(parse(&bytes, other).is_err());
+        }
+    }
+}
 
 #[cfg(all(test, unix))]
 mod tests {

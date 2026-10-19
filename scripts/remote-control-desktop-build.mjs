@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Optional build-time resource selection. Runtime paths never come from here. */
+/** Required build-time engine selection. Runtime paths never come from here. */
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -40,7 +40,7 @@ export function options(argv) {
     );
   }
   if (dev && !bundle) throw new Error('--dev requires --bundle with a platform engine bundle');
-  if (!dev && !bundle) throw new Error('桌面安装包必须使用 --bundle 指定对应平台的远控引擎；仅聊天构建请使用 desktop:build:chat');
+  if (!dev && !bundle) throw new Error('桌面安装包必须使用 --bundle 指定对应平台的远控引擎；自动准备引擎请使用 desktop:build');
   return { bundle, plan, dev, tauri };
 }
 function run(command, args, env) {
@@ -82,7 +82,7 @@ async function main() {
     const manifest = JSON.parse(bytes);
     if (
       manifest.format !== 'todesk-engine-bundle-v1' ||
-      !['aarch64-apple-darwin', 'x86_64-pc-windows-msvc'].includes(manifest.target) ||
+      !['aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-pc-windows-msvc'].includes(manifest.target) ||
       manifest.entrypoint !== (manifest.target === 'x86_64-pc-windows-msvc'
         ? 'bin/remote-control-engine.exe' : 'bin/remote-control-engine')
     )

@@ -1,19 +1,20 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NearLink",
-  "version": "0.12.0-alpha.4",
+  "version": "0.12.0-alpha.5",
   "identifier": "top.sycsq.todesk",
   "build": {
     "beforeDevCommand": "pnpm desktop:web:dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm desktop:web:build",
+    "beforeBundleCommand": "node ../scripts/remote-control-require-engine.mjs",
     "frontendDist": "../dist-desktop"
   },
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "NearLink 内测版 0.12.0-alpha.4",
+        "title": "NearLink 内测版 0.12.0-alpha.5",
         "width": 960,
         "height": 640,
         "minWidth": 800,
