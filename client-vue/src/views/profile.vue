@@ -7,10 +7,9 @@
           <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">个人中心</h1>
           <p class="text-gray-500 mt-1">管理您的个人信息</p>
           <p class="mt-1 text-xs text-slate-500">NearLink {{ APP_VERSION_LABEL }}</p>
-          <div v-if="desktop" class="mt-2"><DesktopReleaseEntry /></div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <DesktopReleaseEntry v-if="!desktop" />
+          <DesktopReleaseEntry size="medium" />
           <n-button
             @click="goBack"
             secondary
@@ -209,7 +208,7 @@
                   <n-button
                     type="primary"
                     secondary
-                    @click="showPasswordModal = true"
+                    @click="openPasswordDialog"
                   >
                     修改密码
                   </n-button>
@@ -520,6 +519,9 @@
 </template>
 
 <script setup lang="ts">
+import { useDesktopDialogs } from '@/services/desktopDialogWindows';
+import { blobDataUrl } from '@/services/dialogMedia';
+import { uploadFile } from '@/api/common';
 import DesktopReleaseEntry from '@/components/DesktopReleaseEntry.vue';
 import { APP_VERSION_LABEL } from '@/config/appVersion';
 import { ref, reactive, computed, onMounted } from 'vue';
@@ -544,6 +546,7 @@ import { isValidNewPassword, PASSWORD_RULE_MESSAGE } from '@/utils/passwordPolic
 import { isTauri } from '@tauri-apps/api/core';
 
 const desktop = isTauri();
+const openNativeDialog = useDesktopDialogs();
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();
@@ -737,7 +740,7 @@ async function loadUserInfo() {
 const avatarInput = ref<HTMLInputElement | null>(null);
 const avatarFile = ref<File | null>(null);
 
-function selectAvatar(event: Event) {
+async function selectAvatar(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
@@ -748,6 +751,30 @@ function selectAvatar(event: Event) {
   }
   if (file.size > 20 * 1024 * 1024) {
     message.error('图片大小不能超过 20MB');
+    return;
+  }
+  if (desktop) {
+    try {
+      const url = await openNativeDialog({
+        kind: 'avatar',
+        title: '裁剪头像',
+        width: 460,
+        height: 550,
+        data: { url: await blobDataUrl(file) },
+        actions: {
+          upload: async (value: string) => {
+            const blob = await (await fetch(value)).blob();
+            const form = new FormData();
+            form.append('file', new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
+            form.append('purpose', 'avatar');
+            return uploadFile(form);
+          },
+        },
+      });
+      if (typeof url === 'string') avatarUploaded(url);
+    } catch (error: any) {
+      message.error(error.message);
+    }
     return;
   }
   avatarFile.value = file;
@@ -788,6 +815,39 @@ async function handleSubmit() {
 function handleReset() {
   loadUserInfo();
   message.info('已重置');
+}
+
+async function openPasswordDialog() {
+  if (!desktop) {
+    showPasswordModal.value = true;
+    return;
+  }
+  try {
+    const changed = await openNativeDialog({
+      kind: 'password',
+      title: '修改密码',
+      width: 500,
+      height: 600,
+      data: { email: verifiedEmail.value, cooldown: passwordCooldown.value },
+      actions: {
+        code: async () => {
+          if (!verifiedEmail.value) throw new Error('请先绑定邮箱');
+          if (passwordCooldown.value > 0) return passwordCooldown.value;
+          await sendEmailCode('change-password', verifiedEmail.value);
+          emailCodeCooldown.start('change-password', verifiedEmail.value);
+          return passwordCooldown.value;
+        },
+        save: (value: typeof passwordForm) =>
+          changePassword(value.oldPassword, value.newPassword, value.emailCode),
+      },
+    });
+    if (changed) {
+      message.success('密码修改成功，请重新登录');
+      await authStore.logout({ navigate: true });
+    }
+  } catch (error: any) {
+    message.error(error.message);
+  }
 }
 
 // 修改密码

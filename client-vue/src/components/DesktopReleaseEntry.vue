@@ -3,26 +3,35 @@
     v-if="variant === 'sidebar'"
     type="button"
     class="desktop-download-card"
-    aria-label="下载桌面端"
+    :aria-label="desktop ? '检查更新' : '下载桌面端'"
     @click="openDesktopRelease"
   >
-    <i class="iconfont icon-desktop desktop-download-icon" aria-hidden="true"></i>
+    <i
+      class="iconfont icon-desktop desktop-download-icon"
+      aria-hidden="true"
+    ></i>
     <span class="desktop-download-copy">
       <strong>NearLink 桌面端</strong>
-      <span>获取桌面内测版</span>
+      <span>{{ desktop ? (hasUpdate ? '发现新版本' : '检查更新') : '获取桌面内测版' }}</span>
     </span>
-    <i class="iconfont icon-download" aria-hidden="true"></i>
+    <i
+      :class="['iconfont', desktop ? 'icon-refresh' : 'icon-download']"
+      aria-hidden="true"
+    ></i>
   </button>
   <n-button
     v-else
-    :size="desktop ? 'small' : 'medium'"
+    :size="size"
     type="primary"
     secondary
     class="desktop-release-entry"
     @click="openDesktopRelease"
   >
     <template #icon>
-      <i :class="['iconfont', desktop ? 'icon-refresh' : 'icon-download']" aria-hidden="true"></i>
+      <i
+        :class="['iconfont', desktop ? 'icon-refresh' : 'icon-download']"
+        aria-hidden="true"
+      ></i>
     </template>
     <span
       v-if="hasUpdate"
@@ -35,7 +44,10 @@
 <script setup lang="ts">
 import { NButton } from 'naive-ui';
 import { desktop, hasUpdate, openDesktopRelease } from '@/services/desktopRelease';
-withDefaults(defineProps<{ variant?: 'button' | 'sidebar' }>(), { variant: 'button' });
+withDefaults(defineProps<{ variant?: 'button' | 'sidebar'; size?: 'small' | 'medium' }>(), {
+  variant: 'button',
+  size: desktop ? 'small' : 'medium',
+});
 </script>
 <style scoped>
 .desktop-release-entry {
@@ -54,7 +66,9 @@ withDefaults(defineProps<{ variant?: 'button' | 'sidebar' }>(), { variant: 'butt
   color: #2563eb;
   text-align: left;
   cursor: pointer;
-  transition: background 150ms, border-color 150ms;
+  transition:
+    background 150ms,
+    border-color 150ms;
 }
 .desktop-download-card:hover {
   background: #e0edff;

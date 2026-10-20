@@ -5,7 +5,7 @@ import { openScreenShare, createScreenShareApi, type ScreenShareId } from '@/fea
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { isAppInBackground } from '@/services/appVisibility';
 import { onBeforeUnmount, watch } from 'vue';
-import { useDialog, type DialogReactive } from 'naive-ui';
+import { useWindowDialog } from '@/services/useWindowDialog';
 import { useRouter } from 'vue-router';
 import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
@@ -14,11 +14,11 @@ import notificationService from '@/services/notificationService';
 import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
 import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 
-const dialog = useDialog();
+const dialog = useWindowDialog();
 const router = useRouter();
 const socketStore = useSocketStore();
 const authStore = useAuthStore();
-const pending = new Map<string, DialogReactive>();
+const pending = new Map<string, { destroy: () => void }>();
 const pendingPaths = new Map<string, string>();
 const ringtoneKeys = new Map<string, string>();
 const seen = new Set<string>();

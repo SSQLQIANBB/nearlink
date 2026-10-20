@@ -51,7 +51,9 @@ const Modal = defineComponent({
 });
 function render() {
   return mount(GlobalPrivateCall, {
-    global: { stubs: { Modal: Modal, NModal: Modal, NIcon: true, NSpin: true } },
+    global: {
+      stubs: { DialogSurface: Modal, Modal: Modal, NModal: Modal, NIcon: true, NSpin: true },
+    },
   });
 }
 function request(type: number) {
@@ -243,10 +245,15 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     wrapper.findComponent(Modal).vm.$emit('positive-click');
     await flushPromises();
     expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
-      to: { socketId: 'alice' }, accepted: true,
+      to: { socketId: 'alice' },
+      accepted: true,
     });
-    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
-    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', { direction: 'recvonly' });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', {
+      direction: 'recvonly',
+    });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', {
+      direction: 'recvonly',
+    });
     expect(usePrivateCallStore().busy).toBe(true);
     wrapper.unmount();
   });
@@ -262,9 +269,12 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     wrapper.findComponent(Modal).vm.$emit('positive-click');
     await flushPromises();
     expect(mocks.getUserMedia).toHaveBeenCalledWith({ audio: false, video: expect.anything() });
-    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', {
+      direction: 'recvonly',
+    });
     expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
-      to: { socketId: 'alice' }, accepted: true,
+      to: { socketId: 'alice' },
+      accepted: true,
     });
     wrapper.unmount();
   });
@@ -273,11 +283,18 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     const wrapper = render();
     usePrivateCallStore().request = { user: { id: 1, socketId: 'alice' }, type: 0 };
     await flushPromises();
-    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_request', expect.objectContaining({ deviceType: 0 }));
+    expect(mocks.emit).toHaveBeenCalledWith(
+      'webrtc_call_request',
+      expect.objectContaining({ deviceType: 0 }),
+    );
     mocks.handlers.get('webrtc_call_response')!({ from: 'alice', accepted: true });
     await flushPromises();
-    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', { direction: 'recvonly' });
-    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', { direction: 'recvonly' });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('audio', {
+      direction: 'recvonly',
+    });
+    expect(mocks.peerInstance.addTransceiver).toHaveBeenCalledWith('video', {
+      direction: 'recvonly',
+    });
     expect(mocks.emit).toHaveBeenCalledWith('webrtc_offer', expect.anything());
     wrapper.unmount();
   });

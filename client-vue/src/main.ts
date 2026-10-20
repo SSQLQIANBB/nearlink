@@ -10,10 +10,16 @@ import './style/desktop.css';
 import './style/remote-control.css';
 import setupStore from '@/stores/index';
 import { isAuxiliaryWindow, isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { isDialogWindow } from '@/services/desktopDialogWindows';
 
 const isShareOverlay = isDesktopWindow && new URLSearchParams(location.search).has('share-overlay');
 
-if (import.meta.env.VITE_DESKTOP === 'true' && !isAuxiliaryWindow && !isShareOverlay) {
+if (
+  import.meta.env.VITE_DESKTOP === 'true' &&
+  !isAuxiliaryWindow &&
+  !isShareOverlay &&
+  !isDialogWindow
+) {
   document.documentElement.classList.add('desktop-app');
   if (/Mac/.test(navigator.platform)) document.documentElement.classList.add('desktop-macos');
   if (/Win/.test(navigator.platform)) document.documentElement.classList.add('desktop-windows');
@@ -26,6 +32,13 @@ if (isAuxiliaryWindow && getCurrentWindow().label === 'media-call') {
 document.title = `NearLink ${APP_VERSION_LABEL}`;
 
 async function startApp() {
+  if (isDialogWindow) {
+    const { initializeDialogClient } = await import('@/services/desktopDialogClient');
+    await initializeDialogClient();
+    const { default: DialogApp } = await import('./DesktopDialogApp.vue');
+    createApp(DialogApp).mount('#app');
+    return;
+  }
   if (isShareOverlay) {
     const { default: Overlay } = await import('./DesktopShareOverlay.vue');
     createApp(Overlay).mount('#app');

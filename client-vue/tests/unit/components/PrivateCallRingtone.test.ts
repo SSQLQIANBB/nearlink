@@ -135,7 +135,7 @@ describe('私聊回铃生命周期', () => {
       tone: 'classic',
     });
     expect(mocks.incomingStart).toHaveBeenCalledWith('private:alice');
-    wrapper.findComponent({ name: 'Modal' }).vm.$emit('negative-click');
+    wrapper.findComponent({ name: 'DialogSurface' }).vm.$emit('negative-click');
     await flushPromises();
     expect(mocks.incomingStop).toHaveBeenCalledWith('private:alice');
     wrapper.unmount();

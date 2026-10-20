@@ -137,6 +137,16 @@ fn main() {
                     }
                 }
             }
+            if matches!(webview.label(), "main" | "media-call")
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                let prefix = format!("dialog-{}-", webview.label());
+                for (label, window) in webview.app_handle().webview_windows() {
+                    if label.starts_with(&prefix) {
+                        let _ = window.destroy();
+                    }
+                }
+            }
         })
         .on_window_event(|window, event| {
             if matches!(window.label(), "media-call" | "share-toolbar")

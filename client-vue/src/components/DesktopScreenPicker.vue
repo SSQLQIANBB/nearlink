@@ -1,5 +1,8 @@
 <template>
-  <div class="share-picker-backdrop">
+  <div
+    class="share-picker-backdrop"
+    :class="{ 'share-picker-standalone': standalone }"
+  >
     <section
       class="share-picker"
       role="dialog"
@@ -21,7 +24,7 @@
           <h2>桌面</h2>
           <button
             @click="load"
-            :disabled="loading"
+            :disabled="loading || loadingPreviews"
           >
             刷新列表
           </button>
@@ -136,7 +139,7 @@
           <button
             class="share-picker__start"
             :disabled="!selected || loading || failed.has(selected)"
-            @click="screenPicker?.select({ id: selected, smooth })"
+            @click="selectSource"
           >
             开始共享
           </button>
@@ -149,6 +152,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { screenPicker, type DesktopShareSource } from '@/services/desktopScreenShare';
+const props = defineProps<{
+  standalone?: boolean;
+  request?: <T>(name: string, args?: Record<string, unknown>) => Promise<T>;
+}>();
+const emit = defineEmits<{ select: [value: { id: string; smooth: boolean }]; cancel: [] }>();
+const request = <T,>(name: string, args?: Record<string, unknown>): Promise<T> =>
+  (props.request || invoke)<T>(name, args);
+function selectSource() {
+  const selection = { id: selected.value, smooth: smooth.value };
+  if (props.standalone) emit('select', selection);
+  else screenPicker.value?.select(selection);
+}
 const sources = ref<DesktopShareSource[]>([]);
 const previews = ref<Record<string, string>>({});
 const failed = ref(new Set<string>());
@@ -156,6 +171,7 @@ const selected = ref('');
 const filter = ref('全部');
 const smooth = ref(false);
 const loading = ref(false);
+const loadingPreviews = ref(false);
 const error = ref('');
 let generation = 0;
 const displays = computed(() => sources.value.filter((s) => s.kind === 'display'));
@@ -169,7 +185,8 @@ const windows = computed(() =>
   ),
 );
 function cancel() {
-  screenPicker.value?.cancel();
+  if (props.standalone) emit('cancel');
+  else screenPicker.value?.cancel();
 }
 function clearPreviews() {
   Object.values(previews.value).forEach(URL.revokeObjectURL);
@@ -181,19 +198,24 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const list = await invoke<DesktopShareSource[]>('screen_share_sources');
+    const list = await request<DesktopShareSource[]>('screen_share_sources');
     if (attempt !== generation) return;
     clearPreviews();
     sources.value = list;
     if (!list.some((s) => s.id === selected.value)) selected.value = list[0]?.id || '';
     if (!apps.value.includes(filter.value)) filter.value = '全部';
     loading.value = false;
+    loadingPreviews.value = true;
     // One capture at a time avoids overwhelming native capture/IPC with many windows.
     for (const source of list) {
       try {
-        const bytes = await invoke<ArrayBuffer>('screen_share_preview', { id: source.id });
+        const bytes = await request<ArrayBuffer | number[]>('screen_share_preview', {
+          id: source.id,
+        });
         if (attempt !== generation) return;
-        previews.value[source.id] = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        previews.value[source.id] = URL.createObjectURL(
+          new Blob([Array.isArray(bytes) ? new Uint8Array(bytes) : bytes], { type: 'image/jpeg' }),
+        );
       } catch {
         if (attempt !== generation) return;
         failed.value.add(source.id);
@@ -203,7 +225,10 @@ async function load() {
     if (attempt !== generation) return;
     error.value = `无法读取共享源：${String(cause)}`;
   } finally {
-    if (attempt === generation) loading.value = false;
+    if (attempt === generation) {
+      loading.value = false;
+      loadingPreviews.value = false;
+    }
   }
 }
 function onKey(event: KeyboardEvent) {
@@ -220,6 +245,15 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
+.share-picker-backdrop.share-picker-standalone {
+  padding: 0;
+}
+.share-picker-standalone .share-picker {
+  height: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+}
 .share-picker-backdrop {
   position: fixed;
   inset: 0;

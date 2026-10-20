@@ -291,7 +291,7 @@
             </n-scrollbar>
           </n-tab-pane>
         </n-tabs>
-        <div v-if="!desktop" class="sidebar-download">
+        <div class="sidebar-download">
           <DesktopReleaseEntry variant="sidebar" />
         </div>
       </n-layout-sider>
@@ -504,6 +504,7 @@
 </template>
 
 <script lang="ts" setup>
+import { useWindowDialog } from '@/services/useWindowDialog';
 import { isTauri } from '@tauri-apps/api/core';
 import RemoteControlWorkbench from '@/components/RemoteControlWorkbench.vue';
 import { isAppInBackground } from '@/services/appVisibility';
@@ -610,6 +611,7 @@ type MessageInfo = {
 
 const message = useMessage();
 const dialog = useDialog();
+const windowDialog = useWindowDialog();
 
 const contactUser = ref<User | null>(null);
 const knownContacts = ref<BasicUser[]>([]);
@@ -705,7 +707,7 @@ const scrollbarRef = ref();
 
 // 退出登录
 function handleLogout() {
-  dialog.info({
+  windowDialog.info({
     positiveButtonProps: { type: 'primary' },
     title: '退出登录？',
     content: '确认退出当前账号吗？',

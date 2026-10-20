@@ -1,5 +1,6 @@
 <template>
-  <n-modal
+  <DialogSurface
+    :standalone="standalone"
     :show="true"
     preset="card"
     title="裁剪头像"
@@ -50,16 +51,17 @@
         </n-button>
       </div>
     </template>
-  </n-modal>
+  </DialogSurface>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { NButton, NModal, useMessage } from 'naive-ui';
+import { NButton, useMessage } from 'naive-ui';
+import DialogSurface from './DialogSurface.vue';
 import { uploadFile } from '@/api/common';
 import { useImageGestures } from '@/hooks/useImageGestures';
 
-const props = defineProps<{ file: File }>();
+const props = defineProps<{ file: File; standalone?: boolean; uploadFile?: typeof uploadFile }>();
 const emit = defineEmits<{ cancel: []; uploaded: [url: string] }>();
 const message = useMessage();
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -114,7 +116,7 @@ async function upload() {
     const form = new FormData();
     form.append('file', new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
     form.append('purpose', 'avatar');
-    const { file } = await uploadFile(form);
+    const { file } = await (props.uploadFile || uploadFile)(form);
     if (!disposed) emit('uploaded', file.fileUrl);
   } catch (error: any) {
     if (!disposed) message.error('上传失败: ' + error.message);

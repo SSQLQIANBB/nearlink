@@ -120,6 +120,16 @@ export function checkDesktopRelease(force = false): Promise<void> {
   return pending;
 }
 export function openDesktopRelease() {
+  if (desktop) {
+    void import('./desktopDialogWindows')
+      .then(({ openDialogWindow }) =>
+        openDialogWindow({ kind: 'release', title: '桌面端更新', width: 560, height: 740 }),
+      )
+      .catch(() => {
+        releaseError.value = '无法打开更新窗口，请重试。';
+      });
+    return;
+  }
   releaseOpen.value = true;
   void checkDesktopRelease(true);
 }

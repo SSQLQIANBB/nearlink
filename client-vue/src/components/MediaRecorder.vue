@@ -85,6 +85,7 @@
 
     <!-- 录制完成对话框 -->
     <n-modal
+      v-if="!isDesktopWindow"
       v-model:show="showSaveDialog"
       preset="card"
       :mask-closable="!saving"
@@ -148,6 +149,9 @@
 </template>
 
 <script setup lang="ts">
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { useDesktopDialogs } from '@/services/desktopDialogWindows';
+const openNativeDialog = useDesktopDialogs();
 import { ref, computed, onUnmounted } from 'vue';
 import { useMessage } from 'naive-ui';
 import { saveFile } from '@/services/saveFile';
@@ -190,7 +194,7 @@ const recordingExtension = computed(() =>
   getVideoFileExtension(recordedBlob.value?.type || recordingMimeType.value),
 );
 const canRecord = computed(() => {
-  return props.stream && !!recordingMimeType.value;
+  return props.stream && !!recordingMimeType.value && !showSaveDialog.value;
 });
 
 // 开始录制
@@ -290,6 +294,36 @@ function handleRecordingStop() {
 
   // 显示保存对话框
   showSaveDialog.value = true;
+  if (isDesktopWindow) {
+    void openNativeDialog({
+      kind: 'recording',
+      title: '录制完成',
+      width: 640,
+      height: 620,
+      data: {
+        url: recordedUrl.value,
+        duration: formatTime(recordingTime.value),
+        size: formatFileSize(recordedBlob.value.size),
+        filename: fileName.value,
+        extension: recordingExtension.value,
+      },
+      actions: {
+        save: async (name: string) => {
+          const saved = await saveFile(recordedBlob.value!, `${name}.${recordingExtension.value}`);
+          return saved;
+        },
+      },
+    })
+      .then((result) => {
+        if (result === 'saved') message.success('保存成功');
+        showSaveDialog.value = false;
+        resetRecording();
+      })
+      .catch((error) => {
+        showSaveDialog.value = false;
+        message.error(error.message);
+      });
+  }
 
   message.success('录制完成');
   emit('recording-stop', recordedBlob.value);

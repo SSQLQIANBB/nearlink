@@ -176,7 +176,9 @@
   </div>
 
   <!-- 来电提示 -->
-  <n-modal
+  <DialogSurface
+    v-if="incomingCallShow || !isAuxiliaryWindow"
+    :standalone="isAuxiliaryWindow"
     v-model:show="incomingCallShow"
     :mask-closable="false"
     :close-on-esc="false"
@@ -212,10 +214,25 @@
         {{ incomingCallTitle }}
       </p>
     </div>
-  </n-modal>
+    <template
+      v-if="isAuxiliaryWindow"
+      #footer
+    >
+      <div class="flex justify-end gap-3">
+        <n-button @click="rejectCall">拒绝</n-button>
+        <n-button
+          type="primary"
+          @click="acceptCall"
+        >
+          接听
+        </n-button>
+      </div>
+    </template>
+  </DialogSurface>
 </template>
 
 <script lang="ts" setup>
+import DialogSurface from './DialogSurface.vue';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 import { openScreenShare } from '@/features/screenShare';
@@ -229,7 +246,7 @@ import { usePrivateCallStore } from '@/stores/privateCall';
 import notificationService from '@/services/notificationService';
 import { cameraConstraints } from '@/views/remoteShare/components/config';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
-import { useMessage, NModal, NIcon, NAvatar } from 'naive-ui';
+import { useMessage, NIcon, NAvatar, NButton } from 'naive-ui';
 
 enum DEVICE_TYPE {
   CAMERA = 0,
@@ -488,7 +505,10 @@ async function initDeviceMedia(type = DEVICE_TYPE.CAMERA) {
         stream = await mediaDevices.getUserMedia(cameraConstraints);
       } catch {
         try {
-          stream = await mediaDevices.getUserMedia({ audio: false, video: cameraConstraints.video });
+          stream = await mediaDevices.getUserMedia({
+            audio: false,
+            video: cameraConstraints.video,
+          });
         } catch {
           stream = await mediaDevices.getUserMedia({ audio: true, video: false });
         }

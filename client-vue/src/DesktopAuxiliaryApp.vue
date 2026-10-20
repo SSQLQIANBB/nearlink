@@ -15,7 +15,6 @@
             <GlobalPrivateCall />
           </template>
           <RouterView v-else />
-          <DesktopScreenPicker v-if="screenPicker" />
           <div
             v-if="desktopShareStarting"
             class="desktop-share-launch"
@@ -47,9 +46,7 @@ import {
 } from 'naive-ui';
 import ChatImagePreview from '@/components/ChatImagePreview.vue';
 import GlobalPrivateCall from '@/components/GlobalPrivateCall.vue';
-import DesktopScreenPicker from '@/components/DesktopScreenPicker.vue';
 import {
-  screenPicker,
   desktopShareStarting,
   desktopShareError,
   cancelDesktopScreenShare,

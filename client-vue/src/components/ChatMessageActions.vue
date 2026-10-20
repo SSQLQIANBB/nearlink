@@ -58,6 +58,7 @@
     @clickoutside="menu = null"
   />
   <n-modal
+    v-if="!isDesktopWindow"
     :show="forwardMessages.length > 0"
     :mask-closable="!sending"
     @update:show="closeForward"
@@ -157,6 +158,13 @@
 </template>
 
 <script setup lang="ts">
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import {
+  useDesktopDialogs,
+  closeDesktopDialog,
+  focusDesktopDialog,
+} from '@/services/desktopDialogWindows';
+const openNativeDialog = useDesktopDialogs();
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useDialog, useMessage } from 'naive-ui';
 import {
@@ -387,6 +395,10 @@ const selectedTargets = computed(() =>
 const deliveries = new Map<string, { id: string; done: boolean }>();
 let forwardGeneration = 0;
 async function openForward(items: ActionMessage[]) {
+  if (isDesktopWindow && forwardMessages.value.length) {
+    await focusDesktopDialog('forward');
+    return;
+  }
   forwardMessages.value = [...items];
   targets.value = [];
   recipientKeys.value = [];
@@ -419,6 +431,29 @@ async function openForward(items: ActionMessage[]) {
     toast.error(error instanceof Error ? error.message : '加载会话失败');
   } finally {
     if (generation === forwardGeneration) loading.value = false;
+  }
+  if (isDesktopWindow && generation === forwardGeneration) {
+    try {
+      await openNativeDialog({
+        kind: 'forward',
+        title: '转发消息',
+        width: 620,
+        height: 720,
+        data: { messages: items },
+        actions: {
+          people: () => targets.value,
+          send: async (value: { selected: string[]; note: string }) => {
+            recipientKeys.value = value.selected;
+            note.value = value.note;
+            await sendForward();
+          },
+        },
+      });
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      closeForward();
+    }
   }
 }
 function closeForward() {
@@ -467,6 +502,7 @@ async function sendForward() {
     exitSelection();
     emit('forwarded');
   } catch (error) {
+    if (isDesktopWindow) throw error;
     toast.error(error instanceof Error ? error.message : '转发失败');
   } finally {
     sending.value = false;
@@ -484,6 +520,7 @@ watch(
     menu.value = null;
     quote.value = null;
     exitSelection();
+    if (isDesktopWindow) void closeDesktopDialog('forward');
     forwardGeneration++;
     forwardMessages.value = [];
   },

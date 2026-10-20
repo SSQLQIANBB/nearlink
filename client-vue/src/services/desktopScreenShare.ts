@@ -1,3 +1,4 @@
+import { openDialogWindow } from './desktopDialogWindows';
 import { shallowRef } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -72,8 +73,8 @@ export async function captureDesktopScreen(
   };
   try {
     const selection = await new Promise<Selection>((resolve, reject) => {
-      screenPicker.value = {
-        select(value) {
+      const picker = {
+        select(value: Selection) {
           screenPicker.value = null;
           resolve(value);
         },
@@ -82,6 +83,39 @@ export async function captureDesktopScreen(
           reject(new DOMException('已取消共享', 'AbortError'));
         },
       };
+      screenPicker.value = picker;
+      void openDialogWindow({
+        kind: 'screen-picker',
+        title: '选择共享内容',
+        width: 1000,
+        height: 700,
+        actions: {
+          screen_share_sources: () => invoke<DesktopShareSource[]>('screen_share_sources'),
+          screen_share_preview: async ({ id }: { id: string }) => {
+            const bytes = await invoke<ArrayBuffer>('screen_share_preview', { id });
+            return Array.from(new Uint8Array(bytes));
+          },
+        },
+      })
+        .then(async (handle) => {
+          if (screenPicker.value !== picker) {
+            await handle.close();
+            return;
+          }
+          const cancel = picker.cancel;
+          picker.cancel = () => {
+            void handle.close();
+            cancel();
+          };
+          const value = await handle.result;
+          if (screenPicker.value !== picker) return;
+          if (value) picker.select(value as Selection);
+          else picker.cancel();
+        })
+        .catch((error) => {
+          screenPicker.value = null;
+          reject(error);
+        });
     });
     assertActive();
     desktopShareStarting.value = true;

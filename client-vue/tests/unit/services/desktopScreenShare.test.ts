@@ -6,6 +6,8 @@ const native = vi.hoisted(() => ({
   handler: null as any,
   detach: vi.fn(),
 }));
+const dialog = vi.hoisted(() => ({ open: vi.fn(), close: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@/services/desktopDialogWindows', () => ({ openDialogWindow: dialog.open }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }));
 vi.mock('@tauri-apps/api/event', () => ({
   emitTo: native.emitTo,
@@ -26,6 +28,7 @@ let nativeTrackStop: () => void;
 let rejectFrame: (reason: Error) => void;
 const draw = vi.fn();
 beforeEach(() => {
+  dialog.open.mockReset().mockResolvedValue({ result: new Promise(() => {}), close: dialog.close });
   vi.useFakeTimers();
   native.invoke.mockReset();
   native.emitTo.mockReset().mockResolvedValue(undefined);

@@ -2,6 +2,10 @@ import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ScreenAnnotation from '../../../src/components/ScreenAnnotation.vue';
+vi.mock('naive-ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('naive-ui')>()),
+  useMessage: () => ({ error: vi.fn() }),
+}));
 
 const context = {
   beginPath: vi.fn(),

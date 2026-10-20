@@ -28,7 +28,7 @@
           <n-button
             class="create-group-button"
             type="primary"
-            @click="showCreateModal = true"
+            @click="openCreateGroup"
           >
             <template #icon>
               <i
@@ -205,7 +205,7 @@
                 <template #extra>
                   <n-button
                     type="primary"
-                    @click="showCreateModal = true"
+                    @click="openCreateGroup"
                   >
                     创建第一个群组
                   </n-button>
@@ -617,6 +617,7 @@
 </template>
 
 <script setup lang="ts">
+import { useGroupDialogWindows } from '@/services/groupDialogWindows';
 import { openScreenShare } from '@/features/screenShare';
 import { h, ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -645,6 +646,12 @@ const message = useMessage();
 const dialog = useDialog();
 const socketStore = useSocketStore();
 const unread = useUnreadStore();
+const openGroupDialog = useGroupDialogWindows(loadGroups);
+function openCreateGroup() {
+  if (isDesktopWindow)
+    void openGroupDialog('create').catch((error) => message.error(error.message));
+  else showCreateModal.value = true;
+}
 
 const loading = ref(false);
 const createLoading = ref(false);
@@ -745,6 +752,14 @@ async function handleCreate() {
 
 // 点击群组卡片
 async function handleGroupClick(group: Group) {
+  if (isDesktopWindow) {
+    try {
+      await openGroupDialog('detail', group);
+    } catch (error: any) {
+      message.error(error.message);
+    }
+    return;
+  }
   currentGroup.value = group;
   showDetailModal.value = true;
   await loadGroupDetail(group.id);
@@ -851,6 +866,14 @@ function getGroupOptions(group: Group) {
 // 处理群组操作
 async function handleGroupAction(key: string, group: Group) {
   if (key === 'edit') {
+    if (isDesktopWindow) {
+      try {
+        await openGroupDialog('edit', group);
+      } catch (error: any) {
+        message.error(error.message);
+      }
+      return;
+    }
     // 编辑群组
     currentGroup.value = group;
     editForm.name = group.name;

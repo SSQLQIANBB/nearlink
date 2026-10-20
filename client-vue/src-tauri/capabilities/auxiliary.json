@@ -5,6 +5,11 @@
   "windows": ["image-preview", "media-call"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
+    "core:window:allow-destroy",
     "core:window:allow-toggle-maximize",
     "notification:default",
     "dialog:allow-save",

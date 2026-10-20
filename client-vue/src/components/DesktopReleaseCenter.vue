@@ -1,6 +1,12 @@
 <template>
   <aside
-    v-if="hasUpdate && !releaseError && dismissedVersion !== release?.version && !releaseOpen"
+    v-if="
+      !standalone &&
+      hasUpdate &&
+      !releaseError &&
+      dismissedVersion !== release?.version &&
+      !releaseOpen
+    "
     class="update-notice"
     aria-live="polite"
   >
@@ -24,7 +30,8 @@
       稍后
     </n-button>
   </aside>
-  <n-modal
+  <DialogSurface
+    :standalone="standalone"
     v-model:show="releaseOpen"
     preset="card"
     :title="desktop ? '桌面端更新' : '下载 NearLink 桌面端'"
@@ -151,11 +158,13 @@
         检查新版
       </n-button>
     </div>
-  </n-modal>
+  </DialogSurface>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { NModal, NButton, NSpin } from 'naive-ui';
+import { NButton, NSpin } from 'naive-ui';
+import DialogSurface from './DialogSurface.vue';
+const { standalone = false } = defineProps<{ standalone?: boolean }>();
 import {
   desktop,
   release,

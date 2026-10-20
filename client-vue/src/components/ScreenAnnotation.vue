@@ -146,6 +146,7 @@
 
     <!-- 文字输入对话框 -->
     <n-modal
+      v-if="!isDesktopWindow"
       v-model:show="showTextInput"
       preset="dialog"
       title="输入文字"
@@ -170,6 +171,11 @@
 </template>
 
 <script setup lang="ts">
+import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
+import { useDesktopDialogs } from '@/services/desktopDialogWindows';
+import { useMessage } from 'naive-ui';
+const openNativeDialog = useDesktopDialogs();
+const message = useMessage();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   type AnnotationAction,
@@ -381,7 +387,7 @@ function getCurrentDraft(): AnnotationDraft {
 }
 
 function startDrawing(event: PointerEvent) {
-  if (!props.editable) return;
+  if (!props.editable || showTextInput.value) return;
   event.preventDefault();
   currentActionId.value = createActionId();
   currentPoints.value = [getRelativePoint(event)];
@@ -389,6 +395,17 @@ function startDrawing(event: PointerEvent) {
   if (currentTool.value === 'text') {
     textPosition.value = currentPoints.value[0]!;
     showTextInput.value = true;
+    if (isDesktopWindow) {
+      void openNativeDialog({ kind: 'annotation', title: '输入文字', height: 360 })
+        .then((value) => {
+          textInput.value = typeof value === 'string' ? value : '';
+          confirmText();
+        })
+        .catch((error) => {
+          showTextInput.value = false;
+          message.error(error.message);
+        });
+    }
     return;
   }
 

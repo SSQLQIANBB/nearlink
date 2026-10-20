@@ -41,12 +41,20 @@ import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useRemoteControlStore } from '@/stores/remoteControl';
 
 import { appTheme } from '@/theme';
+import { closeDesktopDialogs } from '@/services/desktopDialogWindows';
 
 const authStore = useAuthStore();
 const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const notificationSettings = useNotificationSettingsStore();
 const remoteControl = useRemoteControlStore();
+watch(
+  () => authStore.loggingOut,
+  (value) => {
+    if (value && isDesktopWindow) void closeDesktopDialogs();
+  },
+  { flush: 'sync' },
+);
 const refreshRemoteCapabilities = () => {
   if (token.value && currentUser.value && !authStore.loggingOut)
     void remoteControl.refreshCapabilities();
@@ -56,6 +64,7 @@ onUnmounted(() => window.removeEventListener('focus', refreshRemoteCapabilities)
 watch(
   () => [currentUser.value?.id, authStore.authGeneration],
   () => {
+    if (isDesktopWindow) void closeDesktopDialogs();
     remoteControl.reset();
     refreshRemoteCapabilities();
   },
