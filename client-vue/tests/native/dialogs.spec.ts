@@ -134,6 +134,19 @@ test('Windows 独立窗口：更新、表单校验、删除确认与主窗口刷
       .dispatchEvent('click');
     expect(context.pages().filter((page) => page.url().includes('dialog='))).toHaveLength(1);
     await update.screenshot({ path: testInfo.outputPath('native-update.png') });
+    // Emulate a short content viewport, as on a scaled display or resized window.
+    await update.setViewportSize({ width: 560, height: 400 });
+    const viewport = update.locator('.desktop-dialog-viewport');
+    const download = update.getByRole('button', { name: '下载更新安装包' });
+    await expect(download).not.toBeInViewport();
+    await update.mouse.move(280, 200);
+    await update.mouse.wheel(0, 2000);
+    await expect(download).toBeInViewport();
+    await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await update.screenshot({ path: testInfo.outputPath('native-update-scrolled.png') });
+    await update.mouse.wheel(0, -2000);
+    await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0);
+    await expect(update.getByText('桌面端更新', { exact: true })).toBeInViewport();
     // Native close event traverses child -> owning window -> destroy.
     await main.evaluate(() =>
       (window as any).__TAURI_INTERNALS__.invoke('plugin:window|close', {
@@ -145,9 +158,7 @@ test('Windows 独立窗口：更新、表单校验、删除确认与主窗口刷
     await main.getByPlaceholder('请输入登录密码').fill('Password123');
     await main.getByRole('button', { name: '登录', exact: true }).dispatchEvent('click');
     await expect(main.getByRole('button', { name: '个人中心', exact: true })).toBeVisible();
-    await expect(
-      main.locator('.sidebar-download').getByRole('button', { name: '检查更新' }),
-    ).toBeVisible();
+    await expect(main.locator('.sidebar-download')).toHaveCount(0);
     await main.screenshot({
       path: testInfo.outputPath('native-sidebar.png'),
       animations: 'disabled',

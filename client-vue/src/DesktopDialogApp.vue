@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme-overrides="appTheme">
+  <n-config-provider class="desktop-dialog-viewport" :theme-overrides="appTheme">
     <n-message-provider>
       <n-dialog-provider><DesktopDialogContent /></n-dialog-provider>
     </n-message-provider>
@@ -30,6 +30,11 @@ body {
 }
 .desktop-dialog-content {
   padding: 24px;
+}
+/* 主应用根节点隐藏溢出，独立窗口在自己的可视区域内滚动。 */
+.desktop-dialog-viewport {
+  height: 100dvh;
+  overflow: auto;
 }
 .desktop-dialog-content h1 {
   font-size: 20px;

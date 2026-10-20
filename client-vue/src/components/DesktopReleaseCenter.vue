@@ -161,7 +161,7 @@
   </DialogSurface>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { NButton, NSpin } from 'naive-ui';
 import DialogSurface from './DialogSurface.vue';
 const { standalone = false } = defineProps<{ standalone?: boolean }>();
@@ -204,14 +204,9 @@ async function download() {
     opening.value = false;
   }
 }
-const refresh = () => {
-  if (desktop) void checkDesktopRelease();
-};
 onMounted(() => {
-  refresh();
-  window.addEventListener('focus', refresh);
+  if (desktop) void checkDesktopRelease();
 });
-onUnmounted(() => window.removeEventListener('focus', refresh));
 </script>
 <style scoped>
 .release-hero {

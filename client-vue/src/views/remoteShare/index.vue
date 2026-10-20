@@ -291,7 +291,10 @@
             </n-scrollbar>
           </n-tab-pane>
         </n-tabs>
-        <div class="sidebar-download">
+        <div
+          v-if="!desktop"
+          class="sidebar-download"
+        >
           <DesktopReleaseEntry variant="sidebar" />
         </div>
       </n-layout-sider>
