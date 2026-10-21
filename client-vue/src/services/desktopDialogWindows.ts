@@ -66,7 +66,7 @@ export async function openDialogWindow(options: DialogOptions): Promise<DialogHa
     width: options.width || 540,
     height: options.height || 620,
     minWidth: 360,
-    minHeight: 280,
+    minHeight: 180,
     center: true,
     visible: false,
     decorations: true,

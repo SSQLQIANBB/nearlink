@@ -19,6 +19,7 @@ declare module 'vue' {
     ChatMediaComposer: typeof import('./src/components/ChatMediaComposer.vue')['default']
     ChatMessageActions: typeof import('./src/components/ChatMessageActions.vue')['default']
     ChatMessageContent: typeof import('./src/components/ChatMessageContent.vue')['default']
+    ChatMessageListState: typeof import('./src/components/ChatMessageListState.vue')['default']
     ChatTextMessage: typeof import('./src/components/ChatTextMessage.vue')['default']
     ChatVoiceMessage: typeof import('./src/components/ChatVoiceMessage.vue')['default']
     DesktopAuxiliaryHost: typeof import('./src/components/DesktopAuxiliaryHost.vue')['default']

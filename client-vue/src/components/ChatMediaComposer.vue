@@ -10,74 +10,77 @@
       accept="image/*"
       @change="handleImageSelected"
     />
-    <n-button
-      aria-label="发送图片"
-      title="发送图片"
-      size="small"
-      secondary
-      :loading="uploadingType === 'image'"
-      :disabled="disabled || uploading || recording"
-      @click="imageInput?.click()"
-    >
-      <template #icon>
+    <div class="composer-toolbar">
+      <slot name="toolbar" />
+      <n-button
+        aria-label="发送图片"
+        title="发送图片"
+        :loading="uploadingType === 'image'"
+        :disabled="disabled || uploading || recording"
+        @click="imageInput?.click()"
+      >
+        <template #icon>
+          <i
+            class="iconfont composer-image-icon icon-image1"
+            aria-hidden="true"
+          ></i>
+        </template>
+        <span>发送图片</span>
+      </n-button>
+    </div>
+    <div class="composer-input-row">
+      <button
+        v-if="compact"
+        type="button"
+        class="voice-mode-toggle"
+        :class="{ 'voice-mode-toggle--active': voiceMode }"
+        :aria-label="voiceMode ? '切换文字输入' : '切换语音输入'"
+        :title="voiceMode ? '切换文字输入' : '切换语音输入'"
+        :disabled="disabled || uploading || recording"
+        @click="toggleVoiceMode"
+      >
         <i
-          class="iconfont icon-image1"
+          class="iconfont"
+          :class="voiceMode ? 'icon-keyboard' : 'icon-yuyin'"
           aria-hidden="true"
         ></i>
-      </template>
-      <span v-if="!compact">发送图片</span>
-    </n-button>
-    <button
-      v-if="compact"
-      type="button"
-      class="voice-mode-toggle"
-      :class="{ 'voice-mode-toggle--active': voiceMode }"
-      :aria-label="voiceMode ? '切换文字输入' : '切换语音输入'"
-      :title="voiceMode ? '切换文字输入' : '切换语音输入'"
-      :disabled="disabled || uploading || recording"
-      @click="toggleVoiceMode"
-    >
-      <i
-        class="iconfont"
-        :class="voiceMode ? 'icon-keyboard' : 'icon-yuyin'"
-        aria-hidden="true"
-      ></i>
-    </button>
-    <div
-      v-if="compact"
-      v-show="!voiceMode"
-      class="text-mode"
-    >
-      <slot />
-    </div>
-    <button
-      v-if="!compact || voiceMode"
-      type="button"
-      class="hold-to-talk"
-      aria-label="按住说话，松开发送"
-      title="按住说话，松开发送"
-      :class="{ 'hold-to-talk--active': recording, 'hold-to-talk--cancel': cancelIntent }"
-      :disabled="disabled || uploading"
-      @pointerdown.prevent="startRecording"
-      @pointerup.prevent="finishRecording"
-      @pointermove="updateCancelIntent"
-      @lostpointercapture="isPressing && cancelRecording()"
-      @keydown.esc.prevent="cancelRecording"
-      @blur="isPressing && cancelRecording()"
-      @pointercancel="cancelRecording"
-      @keydown.space.prevent="startRecording"
-      @keyup.space.prevent="finishRecording"
-      @contextmenu.prevent
-    >
-      <AudioWaveform
-        v-if="recording && recordingStream"
-        :stream="recordingStream"
+      </button>
+      <div
+        v-if="compact"
+        v-show="!voiceMode"
+        class="text-mode"
       >
-        <span>{{ cancelIntent ? '松开取消' : '松开 发送' }}</span>
-        <small>{{ elapsedSeconds || 1 }}s</small>
-      </AudioWaveform>
-      <span v-else>{{ uploadingType === 'voice' ? '发送中…' : '按住 说话' }}</span>
-    </button>
+        <slot />
+      </div>
+      <button
+        v-if="!compact || voiceMode"
+        type="button"
+        class="hold-to-talk"
+        aria-label="按住说话，松开发送"
+        title="按住说话，松开发送"
+        :class="{ 'hold-to-talk--active': recording, 'hold-to-talk--cancel': cancelIntent }"
+        :disabled="disabled || uploading"
+        @pointerdown.prevent="startRecording"
+        @pointerup.prevent="finishRecording"
+        @pointermove="updateCancelIntent"
+        @lostpointercapture="isPressing && cancelRecording()"
+        @keydown.esc.prevent="cancelRecording"
+        @blur="isPressing && cancelRecording()"
+        @pointercancel="cancelRecording"
+        @keydown.space.prevent="startRecording"
+        @keyup.space.prevent="finishRecording"
+        @contextmenu.prevent
+      >
+        <AudioWaveform
+          v-if="recording && recordingStream"
+          :stream="recordingStream"
+        >
+          <span>{{ cancelIntent ? '松开取消' : '松开 发送' }}</span>
+          <small>{{ elapsedSeconds || 1 }}s</small>
+        </AudioWaveform>
+        <span v-else>{{ uploadingType === 'voice' ? '发送中…' : '按住 说话' }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -262,9 +265,9 @@ onBeforeUnmount(cancelRecording);
 <style scoped>
 .chat-media-composer {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
 }
 
 .hold-to-talk {
@@ -324,7 +327,6 @@ onBeforeUnmount(cancelRecording);
 .compact {
   --icon-size-composer: 24px;
   flex-wrap: nowrap;
-  gap: 8px;
 }
 
 .text-mode {
@@ -332,17 +334,27 @@ onBeforeUnmount(cancelRecording);
   min-width: 0;
 }
 
-.compact :deep(.n-button),
 .voice-mode-toggle {
-  flex: none;
-  width: 24px;
-  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+}
+.voice-mode-toggle:hover:not(:disabled) {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.voice-mode-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .voice-mode-toggle--active {
@@ -353,29 +365,58 @@ onBeforeUnmount(cancelRecording);
   cursor: not-allowed;
 }
 
-.compact :deep(.n-button__icon) {
-  margin: 0;
-}
-
-.compact :deep(.iconfont),
 .voice-mode-toggle .iconfont {
-  font-size: 22px;
+  font-size: 24px;
+  line-height: 1;
 }
 
-.voice-mode-toggle {
-  display: inline-flex;
+.composer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  width: 100%;
 }
-
-.compact :deep(.n-button__border),
-.compact :deep(.n-button__state-border) {
-  display: none;
+.composer-toolbar :deep(.call-toolbar) {
+  display: contents;
 }
-
+.composer-toolbar :deep(.n-button) {
+  --icon-size-control: 18px;
+  --n-color: #f1f5f9 !important;
+  --n-color-hover: #e2e8f0 !important;
+  --n-color-pressed: #cbd5e1 !important;
+  --n-text-color: #475569 !important;
+  --n-text-color-hover: #1e293b !important;
+  --n-border: 1px solid transparent !important;
+  --n-border-hover: 1px solid transparent !important;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.composer-image-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 16px;
+}
+.composer-input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid #e2e8f0;
+}
 @media (max-width: 767px) {
-  .compact {
-    gap: 4px;
+  .composer-toolbar {
+    gap: 6px;
+    padding-top: 9px;
+  }
+  .composer-toolbar :deep(.n-button) {
+    padding-inline: 10px;
+  }
+  .composer-input-row {
+    padding: 14px 10px;
+    gap: 8px;
   }
 }
 </style>

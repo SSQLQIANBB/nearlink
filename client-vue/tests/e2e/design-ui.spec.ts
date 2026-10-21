@@ -379,9 +379,7 @@ for (const width of [1440, 375]) {
     const imageBox = (await image.boundingBox())!;
     const editorBox = (await editor.boundingBox())!;
     const sendBox = (await send.boundingBox())!;
-    expect(
-      Math.abs(imageBox.y + imageBox.height / 2 - editorBox.y - editorBox.height / 2),
-    ).toBeLessThan(2);
+    expect(imageBox.y + imageBox.height).toBeLessThan(editorBox.y);
     expect(
       Math.abs(sendBox.y + sendBox.height / 2 - editorBox.y - editorBox.height / 2),
     ).toBeLessThan(2);
@@ -472,6 +470,108 @@ test('登录自动填充保持深色输入框', async ({ page }) => {
     });
   expect(style.shadow).toContain('rgb(17, 26, 46)');
   expect(style.text).toBe('rgb(255, 255, 255)');
+});
+
+for (const width of [1440, 375]) {
+  for (const chat of ['private', 'group']) {
+    test(`会话工具栏布局 ${chat} ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await prepare(page);
+      await page.goto(chat === 'private' ? '/remote' : '/group-chat/7');
+      if (chat === 'private') {
+        if (width < 768)
+          await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
+        await page.locator('.contact-item').first().click();
+      }
+      const toolbar = page.locator('.composer-toolbar');
+      const image = toolbar.getByRole('button', { name: '发送图片', exact: true });
+      await expect(image).toBeVisible();
+      const input = page.locator('.composer-input-row');
+      const inputBox = (await input.boundingBox())!;
+      const toolbarBox = (await toolbar.boundingBox())!;
+      expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(inputBox.y + 1);
+      const buttons = await toolbar.getByRole('button').all();
+      const imageHeight = (await image.boundingBox())!.height;
+      for (const button of buttons) {
+        expect((await button.boundingBox())!.height).toBe(imageHeight);
+      }
+      const toggle = input.getByRole('button', { name: '切换语音输入' });
+      await expect(toggle).toHaveCSS('width', '40px');
+      await expect(toggle).toHaveCSS('height', '40px');
+      await expect(input).toHaveCSS('padding', width === 375 ? '14px 10px' : '12px 16px');
+      if (chat === 'group') {
+        await expect(
+          page.locator('.group-chat-sider').getByRole('button', { name: /发起.*(通话|共享)/ }),
+        ).toHaveCount(0);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({ path: testInfo.outputPath('composer-toolbar.png') });
+      await toggle.click();
+      await expect(input.getByRole('button', { name: '切换文字输入' })).toHaveCSS('width', '40px');
+      await expect(input.locator('.hold-to-talk')).toBeVisible();
+    });
+  }
+}
+
+for (const chat of ['private', 'group']) {
+  test(`消息加载与空状态 ${chat}`, async ({ page }, testInfo) => {
+    await prepare(page);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const endpoint = chat === 'private' ? '**/api/messages/private?*' : '**/api/messages/group/7?*';
+    await page.route(endpoint, async (route) => {
+      await pending;
+      await route.fulfill({ json: { messages: [], hasMore: false } });
+    });
+    await page.goto(chat === 'private' ? '/remote' : '/group-chat/7');
+    if (chat === 'private') await page.locator('.contact-item').first().click();
+    await expect(page.getByRole('status', { name: '获取消息中...' })).toBeVisible();
+    await expect(page.locator('.message-empty')).toHaveCount(0);
+    await expect(page.locator('.loading-dots span')).toHaveCount(3);
+    await expect(page.locator('.loading-dots span').first()).toHaveCSS(
+      'animation-duration',
+      '1.2s',
+    );
+    await page.screenshot({ path: testInfo.outputPath('history-loading.png') });
+    release();
+    await expect(page.locator('.history-loading')).toHaveCount(0);
+    await expect(page.getByText('还没有消息', { exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('history-empty.png') });
+    await page.route(endpoint, (route) =>
+      route.fulfill({ status: 500, json: { message: 'test failure' } }),
+    );
+    if (chat === 'private') await page.locator('.contact-item').first().click();
+    else await page.reload();
+    await expect(page.locator('.history-error')).toBeVisible();
+    await expect(page.locator('.message-empty')).toHaveCount(0);
+    await page.route(endpoint, (route) =>
+      route.fulfill({ json: { messages: [], hasMore: false } }),
+    );
+    await page.getByRole('button', { name: '重新获取', exact: true }).click();
+    await expect(page.getByText('还没有消息', { exact: true })).toBeVisible();
+  });
+}
+
+test('切换联系人时旧请求不结束新会话加载', async ({ page }) => {
+  await prepare(page);
+  const requests: Array<import('@playwright/test').Route> = [];
+  await page.route('**/api/messages/private?*', (route) => {
+    requests.push(route);
+  });
+  await page.goto('/remote');
+  await page.locator('.contact-item').nth(0).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await page.locator('.contact-item').nth(1).click();
+  await expect.poll(() => requests.length).toBe(2);
+  await requests[0]!.fulfill({ json: { messages: [], hasMore: false } });
+  await expect(page.locator('.history-loading')).toBeVisible();
+  await expect(page.locator('.message-empty')).toHaveCount(0);
+  await requests[1]!.fulfill({ json: { messages: [], hasMore: false } });
+  await expect(page.getByText('还没有消息', { exact: true })).toBeVisible();
 });
 
 test.describe('语音输入', () => {

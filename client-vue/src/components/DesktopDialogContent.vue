@@ -541,6 +541,7 @@ onMounted(
 </script>
 <style scoped>
 .dialog-description {
+  margin: 0;
   color: #475569;
   line-height: 1.8;
   white-space: pre-wrap;
@@ -572,8 +573,25 @@ onMounted(
   display: block;
   font-size: 12px;
 }
+.dialog-person + .dialog-person {
+  border-top: 1px solid #f1f5f9;
+}
+label.dialog-person {
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+label.dialog-person:hover,
+label.dialog-person:has(input:checked) {
+  background: #eff6ff;
+}
+.dialog-person input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
 .dialog-recipient-list {
-  max-height: 45vh;
+  max-height: 320px;
   overflow: auto;
   margin: 16px 0;
 }
@@ -597,7 +615,7 @@ onMounted(
 .dialog-recording {
   display: block;
   width: 100%;
-  max-height: 45vh;
+  max-height: 320px;
   margin: 16px 0;
   background: #0f172a;
 }

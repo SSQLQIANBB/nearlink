@@ -369,7 +369,15 @@
             class="message-scrollbar grow"
             ref="scrollbarRef"
           >
-            <ul class="message-list space-y-4">
+            <ChatMessageListState
+              :status="historyStatus"
+              :empty="currentMessageList.length === 0"
+              @retry="selectContact(contactUser)"
+            />
+            <ul
+              v-if="currentMessageList.length"
+              class="message-list space-y-4"
+            >
               <li
                 class="message-item flex flex-col w-full relative"
                 @click.capture="actions?.click($event, actionMessage(msg))"
@@ -455,15 +463,13 @@
             v-show="!actions?.selecting"
             class="message-composer-shell"
           >
-            <ToolBar
-              class="chat-toolbar"
-              :contact-user="contactUser"
-            />
             <ChatMediaComposer
               compact
-              class="message-editor"
               @send="sendMedia"
             >
+              <template #toolbar>
+                <ToolBar :contact-user="contactUser" />
+              </template>
               <TextMsg
                 placeholder="请输入消息..."
                 @send="sendMsg"
@@ -540,6 +546,7 @@ import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
 import ChatMessageActions from '@/components/ChatMessageActions.vue';
+import ChatMessageListState from '@/components/ChatMessageListState.vue';
 import type { MessageQuote } from '@/api/message';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
@@ -669,6 +676,8 @@ async function loadContacts() {
   }
 }
 const currentMessageList = ref<MessageInfo[]>([]);
+const historyStatus = ref<'loading' | 'ready' | 'error'>('ready');
+let historyRequest = 0;
 
 const deletedMessageIds = new Set<number>();
 const actions = ref<InstanceType<typeof ChatMessageActions> | null>(null);
@@ -793,6 +802,9 @@ function unbindPageSocketEvents(target: Socket | null | undefined) {
 }
 
 async function selectContact(user: User) {
+  const request = ++historyRequest;
+  historyStatus.value = 'loading';
+  currentMessageList.value = privateMessageMap.get(user.id) || [];
   showRemoteControl.value = false;
   mobileSidebarOpen.value = false;
   contactUser.value = user;
@@ -800,7 +812,7 @@ async function selectContact(user: User) {
 
   try {
     const res = await getPrivateMessages(user.id);
-    if (contactUser.value?.id !== user.id) return;
+    if (request !== historyRequest) return;
     const history = res.messages
       .filter((msg) => !deletedMessageIds.has(msg.id))
       .map((msg) => ({
@@ -820,6 +832,7 @@ async function selectContact(user: User) {
       }));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
+    historyStatus.value = 'ready';
     scrollToBottom('auto');
     if (!isAppInBackground()) {
       const ids = res.messages
@@ -829,6 +842,8 @@ async function selectContact(user: User) {
       unread.readPrivate(user.id);
     }
   } catch (error: any) {
+    if (request !== historyRequest) return;
+    if (historyStatus.value === 'loading') historyStatus.value = 'error';
     message.error('加载聊天记录失败: ' + error.message);
     currentMessageList.value = privateMessageMap.get(user.id) || [];
     scrollToBottom('auto');
@@ -1088,6 +1103,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  historyRequest++;
   unbindPageSocketEvents(socket.value);
   unread.activePrivateUserId = null;
   document.removeEventListener('visibilitychange', handleVisible);
@@ -1347,30 +1363,6 @@ li[data-selecting='true'] {
   box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.025);
 }
 
-:deep(.chat-toolbar) {
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 16px;
-  border: 0;
-}
-
-:deep(.chat-toolbar .n-button) {
-  --n-color: #f1f5f9 !important;
-  --n-color-hover: #e2e8f0 !important;
-  --n-color-pressed: #cbd5e1 !important;
-  --n-text-color: #475569 !important;
-  --n-text-color-hover: #1e293b !important;
-  --n-border: 1px solid transparent !important;
-  --n-border-hover: 1px solid transparent !important;
-  border-radius: 999px;
-  font-size: 12px;
-}
-
-.message-editor {
-  padding: 12px 16px;
-  border-top: 1px solid #e2e8f0;
-}
-
 .mobile-sidebar-toggle,
 .mobile-sidebar-close {
   display: none;
@@ -1438,19 +1430,6 @@ li[data-selecting='true'] {
 
   .message-composer-shell {
     padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  :deep(.chat-toolbar) {
-    gap: 6px;
-    padding-top: 9px;
-  }
-
-  :deep(.chat-toolbar .n-button) {
-    padding-inline: 10px;
-  }
-
-  .message-editor {
-    padding: 14px 10px;
   }
 
   .chat-empty-state {
@@ -1525,7 +1504,12 @@ li[data-selecting='true'] {
   border-radius: 24px;
   font-size: 30px;
   margin-bottom: 24px;
-  box-shadow: inset 0 2px 4px #0000000d;
+  border: 1px solid #dbeafe;
+  box-shadow: 0 8px 24px #2563eb0a;
+}
+.empty-icon .iconfont {
+  font-size: 38px;
+  line-height: 1;
 }
 .chat-empty-state h3 {
   font-size: 18px;

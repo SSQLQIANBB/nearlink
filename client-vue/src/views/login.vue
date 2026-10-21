@@ -775,6 +775,12 @@ async function handleRegister() {
   border-radius: 12px;
   font-size: 12px;
 }
+:deep(.login-card .desktop-release-entry) {
+  --n-text-color: #fff !important;
+  --n-text-color-hover: #fff !important;
+  --n-text-color-pressed: #fff !important;
+  --n-text-color-focus: #fff !important;
+}
 :deep(.login-card .n-button--primary-type:not(.login-link)) {
   --n-color: #10b981 !important;
   --n-color-hover: #059669 !important;

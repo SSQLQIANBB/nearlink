@@ -3,5 +3,10 @@
   "identifier": "dialogs",
   "description": "功能独立窗口仅接收所属窗口提供的数据和操作结果，不持有远控或账号权限",
   "windows": ["dialog-*"],
-  "permissions": ["core:default", "allow-desktop-release-info", "allow-desktop-release-download"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-size",
+    "allow-desktop-release-info",
+    "allow-desktop-release-download"
+  ]
 }

@@ -122,45 +122,6 @@
           <n-button
             block
             secondary
-            @click="handleVideoCall"
-          >
-            <template #icon>
-              <i
-                class="iconfont call-action-icon icon-video"
-                aria-hidden="true"
-              ></i>
-            </template>
-            {{ groupSessionState.getButtonLabel(groupId, 'video') }}
-          </n-button>
-          <n-button
-            block
-            secondary
-            @click="handleAudioCall"
-          >
-            <template #icon>
-              <i
-                class="iconfont call-action-icon icon-dianhua"
-                aria-hidden="true"
-              ></i>
-            </template>
-            {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
-          </n-button>
-          <n-button
-            block
-            secondary
-            @click="handleScreenShare"
-          >
-            <template #icon>
-              <i
-                class="iconfont call-action-icon icon-gongxiangpingmu"
-                aria-hidden="true"
-              ></i>
-            </template>
-            {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
-          </n-button>
-          <n-button
-            block
-            secondary
             @click="goBack"
           >
             <template #icon>
@@ -215,10 +176,19 @@
 
           <!-- 消息列表 -->
           <n-scrollbar
-            class="flex-1 p-4"
+            class="flex-1"
             ref="scrollbarRef"
           >
-            <ul class="space-y-4">
+            <ChatMessageListState
+              :status="historyStatus"
+              :empty="messages.length === 0"
+              group
+              @retry="loadGroupHistory"
+            />
+            <ul
+              v-if="messages.length"
+              class="space-y-4 p-6"
+            >
               <li
                 v-for="(msg, index) in messages"
                 :key="msg.id || msg.clientMessageId || index"
@@ -291,13 +261,6 @@
                   </div>
                 </div>
               </li>
-
-              <n-empty
-                v-if="messages.length === 0"
-                class="py-20"
-                description="暂无消息，开始聊天吧"
-                size="large"
-              />
             </ul>
           </n-scrollbar>
 
@@ -314,7 +277,7 @@
           <!-- 输入框 -->
           <footer
             v-show="!actions?.selecting"
-            class="group-chat-composer p-4 border-t bg-white"
+            class="group-chat-composer border-t bg-white"
           >
             <ChatMediaComposer
               compact
@@ -322,6 +285,35 @@
               :group-id="groupId"
               @send="sendGroupMedia"
             >
+              <template #toolbar>
+                <n-button @click="handleVideoCall">
+                  <template #icon>
+                    <i
+                      class="iconfont call-action-icon icon-video"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  {{ groupSessionState.getButtonLabel(groupId, 'video') }}
+                </n-button>
+                <n-button @click="handleAudioCall">
+                  <template #icon>
+                    <i
+                      class="iconfont call-action-icon icon-dianhua"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  {{ groupSessionState.getButtonLabel(groupId, 'audio') }}
+                </n-button>
+                <n-button @click="handleScreenShare">
+                  <template #icon>
+                    <i
+                      class="iconfont call-action-icon icon-gongxiangpingmu"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  {{ groupSessionState.getButtonLabel(groupId, 'screen') }}
+                </n-button>
+              </template>
               <TextMsg
                 placeholder="请输入消息..."
                 :disabled="!canSpeak"
@@ -363,6 +355,7 @@ import TextMsg from '@/components/TextMsg.vue';
 import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
 import ChatMessageActions from '@/components/ChatMessageActions.vue';
+import ChatMessageListState from '@/components/ChatMessageListState.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -380,6 +373,8 @@ const scrollbarRef = ref<ScrollbarInst | null>(null);
 const groupInfo = ref<any>(null);
 const members = ref<(GroupMember & { online?: boolean })[]>([]);
 const messages = ref<any[]>([]);
+const historyStatus = ref<'loading' | 'ready' | 'error'>('loading');
+let historyRequest = 0;
 
 const deletedMessageIds = new Set<number>();
 const actions = ref<InstanceType<typeof ChatMessageActions> | null>(null);
@@ -433,8 +428,11 @@ async function loadGroupDetail() {
 
 // 初始化Socket连接
 async function loadGroupHistory() {
+  const request = ++historyRequest;
+  historyStatus.value = 'loading';
   try {
     const res = await getGroupMessages(groupId.value);
+    if (request !== historyRequest) return;
     messages.value = res.messages
       .filter((msg) => !deletedMessageIds.has(msg.id))
       .map((msg) => ({
@@ -448,8 +446,11 @@ async function loadGroupHistory() {
         call: msg.call,
         media: msg.media,
       }));
+    historyStatus.value = 'ready';
     scrollToBottom('auto');
   } catch (error: any) {
+    if (request !== historyRequest) return;
+    historyStatus.value = 'error';
     message.error('加载群聊记录失败: ' + error.message);
   }
 }
@@ -641,6 +642,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  historyRequest++;
   document.removeEventListener('visibilitychange', clearVisibleUnread);
   window.removeEventListener('focus', clearVisibleUnread);
   socket.value?.off('group_members', handleGroupMembers);
@@ -743,8 +745,14 @@ li[data-selecting='true'] {
   border: 0;
   background: transparent;
 }
-.group-chat-composer :deep(.chat-media-composer) {
-  padding: 4px 0;
+.group-chat-composer {
+  flex: none;
+  padding: 0;
+}
+@media (max-width: 767px) {
+  .group-chat-composer {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 .group-sidebar-backdrop {
   display: none;

@@ -1,5 +1,5 @@
 <template>
-  <div class="call-toolbar flex gap-2 border-t p-3">
+  <div class="call-toolbar">
     <n-button
       :disabled="!contactUser || calls.busy || mediaBusy"
       @click="start(1)"
