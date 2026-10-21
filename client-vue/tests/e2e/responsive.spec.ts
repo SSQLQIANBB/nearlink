@@ -348,7 +348,7 @@ test.describe('响应式布局', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await preparePage(page);
     await page.goto('/groups');
-    await page.getByRole('button', { name: '发起屏幕共享' }).click();
+    await page.getByRole('button', { name: '屏幕共享' }).click();
     await page.getByRole('button', { name: '开启标注' }).click();
     const toolbar = page.getByRole('toolbar', { name: '共享标注工具栏' });
     await expect(toolbar).toBeVisible();

@@ -52,8 +52,8 @@ export function createGroupSessionState() {
       if (type === 'video') return '进入视频';
       return type === 'audio' ? '进入语音' : '进入共享';
     }
-    if (type === 'video') return '发起视频通话';
-    return type === 'audio' ? '发起语音通话' : '发起屏幕共享';
+    if (type === 'video') return '视频通话';
+    return type === 'audio' ? '语音通话' : '屏幕共享';
   }
 
   function clearGroup(groupId: number) {

@@ -1,6 +1,6 @@
 {
   "name": "nearlink",
-  "version": "0.12.0-alpha.8",
+  "version": "0.12.0-alpha.9",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -30,7 +30,7 @@
   "dependencies": {
     "uuid": "^13.0.0"
   },
-  "desktopBuildNumber": 53,
+  "desktopBuildNumber": 54,
   "devDependencies": {
     "prettier": "3.6.2"
   }

@@ -56,8 +56,8 @@ describe('groupSessionState', () => {
     state.applyEnded(7, 'video');
     state.applyEnded(7, 'screen');
 
-    expect(state.getButtonLabel(7, 'video')).toBe('发起视频通话');
-    expect(state.getButtonLabel(7, 'screen')).toBe('发起屏幕共享');
+    expect(state.getButtonLabel(7, 'video')).toBe('视频通话');
+    expect(state.getButtonLabel(7, 'screen')).toBe('屏幕共享');
   });
 
   it('删除群组时清理该群组的视频和共享状态，不影响其他群组', () => {

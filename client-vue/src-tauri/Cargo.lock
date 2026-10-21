@@ -2576,7 +2576,7 @@ dependencies = [
 
 [[package]]
 name = "nearlink-desktop"
-version = "0.12.0-alpha.8"
+version = "0.12.0-alpha.9"
 dependencies = [
  "base64 0.22.1",
  "block2",

@@ -501,7 +501,7 @@ for (const width of [1440, 375]) {
       await expect(input).toHaveCSS('padding', width === 375 ? '14px 10px' : '12px 16px');
       if (chat === 'group') {
         await expect(
-          page.locator('.group-chat-sider').getByRole('button', { name: /发起.*(通话|共享)/ }),
+          page.locator('.group-chat-sider').getByRole('button', { name: /视频通话|语音通话|屏幕共享/ }),
         ).toHaveCount(0);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
