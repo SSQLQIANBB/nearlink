@@ -8,7 +8,7 @@
         <n-dialog-provider>
           <GroupCallInvitations />
           <DesktopAuxiliaryHost v-if="isDesktopWindow" />
-          <GlobalPrivateCall v-else />
+          <GlobalPrivateCall :invitation-only="isDesktopWindow" />
           <GlobalRemoteControl />
           <GlobalRemoteControlHost />
           <GlobalMessages />

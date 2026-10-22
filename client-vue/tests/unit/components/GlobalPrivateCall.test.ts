@@ -6,6 +6,9 @@ import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { usePrivateCallStore } from '@/stores/privateCall';
 
 const mocks = vi.hoisted(() => ({
+  auxiliary: false,
+  accepted: false,
+  openAuxiliaryWindow: vi.fn().mockResolvedValue(undefined),
   handlers: new Map<string, Function>(),
   emit: vi.fn(),
   getUserMedia: vi.fn(),
@@ -18,6 +21,14 @@ const mocks = vi.hoisted(() => ({
   startRingtone: vi.fn(),
   stopRingtone: vi.fn(),
 }));
+vi.mock('@/services/desktopAuxiliaryContext', () => ({
+  get isAuxiliaryWindow() { return mocks.auxiliary; },
+  isDesktopWindow: false,
+}));
+vi.mock('@/services/desktopAuxiliaryClient', () => ({
+  auxiliaryContent: { get value() { return { kind: 'private', accepted: mocks.accepted, incoming: { from: 'alice' } }; } },
+}));
+vi.mock('@/services/desktopAuxiliaryWindows', () => ({ openAuxiliaryWindow: mocks.openAuxiliaryWindow }));
 vi.mock('@/stores/socket', () => ({
   useSocketStore: () => ({
     userList: [],
@@ -49,8 +60,9 @@ const Modal = defineComponent({
   emits: ['positive-click', 'negative-click', 'close'],
   template: '<div v-if="show"><slot /></div>',
 });
-function render() {
+function render(invitationOnly = false) {
   return mount(GlobalPrivateCall, {
+    props: { invitationOnly },
     global: {
       stubs: { DialogSurface: Modal, Modal: Modal, NModal: Modal, NIcon: true, NSpin: true },
     },
@@ -66,6 +78,8 @@ function request(type: number) {
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
+  mocks.auxiliary = false;
+  mocks.accepted = false;
   mocks.handlers.clear();
   mocks.audioTrack.enabled = true;
   mocks.videoTrack.enabled = true;
@@ -364,4 +378,66 @@ describe('全局单人邀请（无需挂载聊天页或选择联系人）', () =
     wrapper.unmount();
     remote.release();
   });
+});
+
+
+describe('桌面主窗口邀请', () => {
+  it.each([0, 2])('类型 %s 收到邀请不创建窗口，接听才移交通话', async (type) => {
+    const wrapper = render(true);
+    request(type);
+    await nextTick();
+    expect(wrapper.text()).toContain('Alice');
+    expect(mocks.openAuxiliaryWindow).not.toHaveBeenCalled();
+    expect(mocks.getUserMedia).not.toHaveBeenCalled();
+    wrapper.findComponent(Modal).vm.$emit('positive-click');
+    await flushPromises();
+    expect(mocks.openAuxiliaryWindow).toHaveBeenCalledWith({
+      kind: 'private', accepted: true,
+      incoming: expect.objectContaining({ from: 'alice', deviceType: type }),
+    });
+    expect(mocks.getUserMedia).not.toHaveBeenCalled();
+    expect(mocks.emit).not.toHaveBeenCalledWith('webrtc_hangup', expect.anything());
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('private:alice');
+    expect(mediaOccupancy.current.value).toBeNull();
+    wrapper.unmount();
+  });
+  it.each(['negative-click', 'close'])('拒绝或关闭邀请（%s）不打开原生窗口', async (event) => {
+    const wrapper = render(true);
+    request(0);
+    wrapper.findComponent(Modal).vm.$emit(event);
+    await flushPromises();
+    expect(mocks.openAuxiliaryWindow).not.toHaveBeenCalled();
+    expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
+      to: { socketId: 'alice' }, accepted: false,
+    });
+    expect(usePrivateCallStore().busy).toBe(false);
+    wrapper.unmount();
+  });
+  it('对方取消邀请后关闭弹窗并停止铃声', async () => {
+    const wrapper = render(true);
+    request(0);
+    mocks.handlers.get('webrtc_hangup')!({ from: 'alice' });
+    await nextTick();
+    expect(wrapper.text()).not.toContain('Alice');
+    expect(mocks.stopRingtone).toHaveBeenCalledWith('private:alice');
+    expect(usePrivateCallStore().busy).toBe(false);
+    expect(mocks.openAuxiliaryWindow).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+});
+
+
+it('已在主窗口接受的来电在媒体窗口直接接通，不重复显示邀请或响铃', async () => {
+  mocks.auxiliary = true;
+  mocks.accepted = true;
+  const wrapper = render();
+  request(0);
+  await flushPromises();
+  expect(mocks.getUserMedia).toHaveBeenCalled();
+  expect(mocks.startRingtone).not.toHaveBeenCalled();
+  expect(mocks.emit).toHaveBeenCalledWith('webrtc_call_response', {
+    to: { socketId: 'alice' }, accepted: true,
+  });
+  expect(wrapper.find('.private-call').exists()).toBe(true);
+  wrapper.unmount();
 });

@@ -233,7 +233,8 @@
 
 <script lang="ts" setup>
 import DialogSurface from './DialogSurface.vue';
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { openAuxiliaryWindow } from '@/services/desktopAuxiliaryWindows';
+import { auxiliaryContent } from '@/services/desktopAuxiliaryClient';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 import { openScreenShare } from '@/features/screenShare';
@@ -248,6 +249,10 @@ import notificationService from '@/services/notificationService';
 import { cameraConstraints } from '@/views/remoteShare/components/config';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useMessage, NIcon, NAvatar, NButton } from 'naive-ui';
+
+const props = defineProps<{ invitationOnly?: boolean }>();
+let handoffFrom = '';
+let acceptedBootstrapConsumed = false;
 
 enum DEVICE_TYPE {
   CAMERA = 0,
@@ -733,6 +738,15 @@ function handleIncomingCall(data: {
   incomingCallFromSocketId.value = data.from;
   incomingCallFrom.value = contactUserName.value;
   incomingCallType.value = data.deviceType;
+  if (
+    isAuxiliaryWindow && !acceptedBootstrapConsumed &&
+    auxiliaryContent.value?.kind === 'private' && auxiliaryContent.value.accepted &&
+    auxiliaryContent.value.incoming?.from === data.from
+  ) {
+    acceptedBootstrapConsumed = true;
+    void acceptCall();
+    return;
+  }
   incomingCallShow.value = true;
   notificationService.startCallRingtone(`private:${data.from}`);
   if (data.callId) {
@@ -752,16 +766,31 @@ function handleIncomingCall(data: {
 
 // 接听来电
 async function acceptCall() {
+  if (props.invitationOnly) {
+    if (!incomingCallShow.value || handoffFrom) return;
+    const incoming = {
+      from: incomingCallFromSocketId.value,
+      deviceType: incomingCallType.value,
+      user: activePeer.value || undefined,
+    };
+    // 主窗口只处理邀请；接听后移交媒体窗口，仍使用同一个 socket 端点。
+    handoffFrom = incoming.from;
+    cleanup();
+    try {
+      await openAuxiliaryWindow({ kind: 'private', incoming, accepted: true });
+    } catch (error) {
+      socket.value?.emit('webrtc_call_response', {
+        to: { socketId: incoming.from }, accepted: false, reason: 'SETUP_FAILED',
+      });
+      message.error(`无法打开通话窗口：${String(error)}`);
+    } finally {
+      handoffFrom = '';
+    }
+    return;
+  }
   const attempt = generation;
   try {
     notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
-    if (isAuxiliaryWindow) {
-      const callWindow = getCurrentWindow();
-      await callWindow.setSize(new LogicalSize(1100, 760));
-      await callWindow.setMinSize(new LogicalSize(640, 480));
-      await callWindow.center();
-      if (attempt !== generation) return;
-    }
     incomingCallShow.value = false;
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
@@ -842,6 +871,7 @@ function hangup() {
 }
 
 function cleanup() {
+  if (props.invitationOnly && incomingCallShow.value) callStore.busy = false;
   mediaClaim?.release();
   mediaClaim = null;
   generation++;
@@ -887,7 +917,8 @@ function handleHangup() {
 watch(
   [isConnecting, isConnected, incomingCallShow],
   (values) => {
-    callStore.busy = values.some(Boolean);
+    if (!props.invitationOnly || incomingCallShow.value || activePeer.value)
+      callStore.busy = values.some(Boolean);
   },
   { flush: 'sync' },
 );
@@ -895,7 +926,7 @@ watch(
 watch(
   () => callStore.request,
   (request) => {
-    if (!request) return;
+    if (!request || props.invitationOnly) return;
     callStore.request = null;
     if (activePeer.value) {
       message.warning('已有进行中的通话');
@@ -926,7 +957,15 @@ const handlers: Record<string, (data: any) => void> = {
     outgoingRinging = true;
     notificationService.startOutgoingRingtone(data.tone);
   },
-  webrtc_call_request: handleIncomingCall,
+  webrtc_call_request: (data) => {
+    if (handoffFrom) {
+      if (data.from !== handoffFrom)
+        socket.value?.emit('webrtc_call_response', { to: { socketId: data.from }, accepted: false });
+      return;
+    }
+    if (props.invitationOnly && callStore.busy && !incomingCallShow.value) return;
+    handleIncomingCall(data);
+  },
   webrtc_offer: (data) => {
     if (data.from === activePeer.value?.socketId && !incomingCallShow.value)
       void handleOffer(data.offer);

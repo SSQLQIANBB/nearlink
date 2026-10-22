@@ -5,7 +5,7 @@ import { openScreenShare, createScreenShareApi, type ScreenShareId } from '@/fea
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 import { isAppInBackground } from '@/services/appVisibility';
 import { onBeforeUnmount, watch } from 'vue';
-import { useWindowDialog } from '@/services/useWindowDialog';
+import { useDialog } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import { useSocketStore } from '@/stores/socket';
 import { useAuthStore } from '@/stores/auth';
@@ -14,7 +14,7 @@ import notificationService from '@/services/notificationService';
 import { isDesktopWindow } from '@/services/desktopAuxiliaryContext';
 import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
 
-const dialog = useWindowDialog();
+const dialog = useDialog();
 const router = useRouter();
 const socketStore = useSocketStore();
 const authStore = useAuthStore();

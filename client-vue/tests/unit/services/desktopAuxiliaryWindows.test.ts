@@ -109,6 +109,16 @@ const outgoing = {
 };
 
 describe('桌面独立窗口', () => {
+  it('主窗口内展示邀请时，不注册创建来电原生窗口的监听', () => {
+    dispose = service.installDesktopAuxiliaryHost(vi.fn(), true);
+    expect(events.has('webrtc_call_request')).toBe(false);
+  });
+  it('已接受的来电直接创建完整通话窗口', async () => {
+    await service.openAuxiliaryWindow({
+      kind: 'private', accepted: true, incoming: { from: 'peer', deviceType: 0 },
+    });
+    expect(mocks.windows[0].options).toMatchObject({ width: 1100, height: 760 });
+  });
   it.each([0, 2] as const)('来电邀请使用紧凑窗口（类型 %s）', async (deviceType) => {
     await service.openAuxiliaryWindow({ kind: 'private', incoming: { from: 'peer', deviceType } });
     expect(mocks.windows[0].options).toMatchObject({

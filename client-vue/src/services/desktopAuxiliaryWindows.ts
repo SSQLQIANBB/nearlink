@@ -13,7 +13,7 @@ export type AuxiliaryContent =
   | { kind: 'image'; src: string; alt: string }
   | { kind: 'screen'; path: string; scope: ScreenShareScope }
   | { kind: 'group'; path: string; groupId: number; deviceType: number }
-  | { kind: 'private'; request?: { user: CallUser; type: 0 | 1 | 2 }; incoming?: IncomingCall };
+  | { kind: 'private'; request?: { user: CallUser; type: 0 | 1 | 2 }; incoming?: IncomingCall; accepted?: boolean };
 type IncomingCall = { from: string; callId?: string; deviceType: 0 | 1 | 2; user?: CallUser };
 export interface AuxiliaryBootstrap {
   content: AuxiliaryContent;
@@ -134,7 +134,7 @@ export async function openAuxiliaryWindow(content: AuxiliaryContent) {
     content.kind === 'group' || content.kind === 'screen'
       ? content.path
       : `/desktop-${content.kind}`;
-  const incoming = content.kind === 'private' && !!content.incoming;
+  const incoming = content.kind === 'private' && !!content.incoming && !content.accepted;
   const child = new WebviewWindow(label, {
     url: `index.html?auxiliary=${id}#${path}`,
     title: content.kind === 'image' ? '图片预览 · NearLink' : '通话 · NearLink',
@@ -259,7 +259,7 @@ export async function openDesktopGroupWindow(path: string) {
   return true;
 }
 
-export function installDesktopAuxiliaryHost(onError: (error: unknown) => void) {
+export function installDesktopAuxiliaryHost(onError: (error: unknown) => void, inlineInvitations = false) {
   const store = useSocketStore();
   const calls = usePrivateCallStore();
   const auth = useAuthStore();
@@ -298,7 +298,7 @@ export function installDesktopAuxiliaryHost(onError: (error: unknown) => void) {
       detach(previous || null);
       if (previous) disconnected();
       socket?.onAny(relay);
-      socket?.on('webrtc_call_request', incoming);
+      if (!inlineInvitations) socket?.on('webrtc_call_request', incoming);
       socket?.on('disconnect', disconnected);
     },
     { immediate: true, flush: 'sync' },
