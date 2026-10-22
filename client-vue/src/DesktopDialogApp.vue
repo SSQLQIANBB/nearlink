@@ -84,7 +84,8 @@ body {
   box-sizing: border-box;
 }
 .desktop-dialog-content {
-  padding: 20px 24px;
+  padding: 20px 24px 0;
+  display: flow-root;
 }
 /* 主应用根节点隐藏溢出，独立窗口在自己的可视区域内滚动。 */
 .desktop-dialog-viewport {
@@ -102,7 +103,7 @@ body {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-  margin: 20px -24px -20px;
+  margin: 20px -24px 0;
   padding: 16px 24px;
   border-top: 1px solid #eef0f4;
   background: #f8fafc;

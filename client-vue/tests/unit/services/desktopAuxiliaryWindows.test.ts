@@ -109,6 +109,18 @@ const outgoing = {
 };
 
 describe('桌面独立窗口', () => {
+  it.each([0, 2] as const)('来电邀请使用紧凑窗口（类型 %s）', async (deviceType) => {
+    await service.openAuxiliaryWindow({ kind: 'private', incoming: { from: 'peer', deviceType } });
+    expect(mocks.windows[0].options).toMatchObject({
+      width: 440, height: 260, minWidth: 440, minHeight: 260,
+    });
+  });
+  it('主动通话保留完整媒体窗口尺寸', async () => {
+    await service.openAuxiliaryWindow(outgoing);
+    expect(mocks.windows[0].options).toMatchObject({
+      width: 1100, height: 760, minWidth: 640, minHeight: 480,
+    });
+  });
   it('连续点击等待同一个原生窗口创建完成再唤起', async () => {
     await Promise.all([
       service.openAuxiliaryWindow(outgoing),

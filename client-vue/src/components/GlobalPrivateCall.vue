@@ -185,27 +185,27 @@
     preset="dialog"
     class="private-invite"
     :style="{
-      background: '#172033',
-      color: '#f8fafc',
+      background: '#fff',
+      color: '#1e293b',
       width: 'min(340px, calc(100vw - 24px))',
       borderRadius: '18px',
       boxShadow: '0 18px 48px #02061766',
     }"
-    title="来电提示"
+    :title="incomingCallType === DEVICE_TYPE.AUDIO ? '语音通话邀请' : '视频通话邀请'"
     @close="rejectCall"
     positive-text="接听"
     negative-text="拒绝"
     @positive-click="acceptCall"
     @negative-click="rejectCall"
   >
-    <div class="text-center py-4">
+    <div class="private-invite__content">
       <n-icon
         size="60"
         color="#2563eb"
-        class="mb-4"
       >
         <i
-          class="iconfont icon-video"
+          class="iconfont"
+          :class="incomingCallType === DEVICE_TYPE.AUDIO ? 'icon-phone' : 'icon-video'"
           aria-hidden="true"
         ></i>
       </n-icon>
@@ -233,6 +233,7 @@
 
 <script lang="ts" setup>
 import DialogSurface from './DialogSurface.vue';
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { mediaOccupancy, type MediaClaim } from '@/services/mediaOccupancy';
 import { isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 import { openScreenShare } from '@/features/screenShare';
@@ -754,6 +755,13 @@ async function acceptCall() {
   const attempt = generation;
   try {
     notificationService.stopCallRingtone(`private:${incomingCallFromSocketId.value}`);
+    if (isAuxiliaryWindow) {
+      const callWindow = getCurrentWindow();
+      await callWindow.setSize(new LogicalSize(1100, 760));
+      await callWindow.setMinSize(new LogicalSize(640, 480));
+      await callWindow.center();
+      if (attempt !== generation) return;
+    }
     incomingCallShow.value = false;
     isConnecting.value = true;
     connectionStatus.value = 'connecting';
@@ -1185,8 +1193,31 @@ window.addEventListener('resize', clampFloatingPosition);
   right: 8px;
 }
 :global(.private-invite .n-dialog__title),
-:global(.private-invite .n-dialog__content) {
-  color: #f8fafc;
+:global(.private-invite .n-dialog__content),
+:global(.private-invite .n-card-header__main) {
+  color: #1e293b;
+}
+:global(.private-invite.dialog-surface) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  height: 100dvh;
+  overflow: auto;
+}
+.private-invite__content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+.private-invite__content .n-icon {
+  flex-shrink: 0;
+}
+.private-invite p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.private-invite .iconfont {
+  font-size: 40px;
 }
 @media (max-width: 600px) {
   .private-call__stage {

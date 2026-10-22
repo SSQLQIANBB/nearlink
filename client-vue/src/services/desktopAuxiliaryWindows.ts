@@ -134,16 +134,19 @@ export async function openAuxiliaryWindow(content: AuxiliaryContent) {
     content.kind === 'group' || content.kind === 'screen'
       ? content.path
       : `/desktop-${content.kind}`;
+  const incoming = content.kind === 'private' && !!content.incoming;
   const child = new WebviewWindow(label, {
     url: `index.html?auxiliary=${id}#${path}`,
     title: content.kind === 'image' ? '图片预览 · NearLink' : '通话 · NearLink',
-    width: content.kind === 'image' ? 1000 : 1100,
-    height: 760,
-    minWidth: 640,
-    minHeight: 480,
+    width: incoming ? 440 : content.kind === 'image' ? 1000 : 1100,
+    height: incoming ? 260 : 760,
+    minWidth: incoming ? 440 : 640,
+    minHeight: incoming ? 260 : 480,
     center: true,
     decorations: true,
-    ...(content.kind !== 'image' ? { backgroundColor: '#0b1220', theme: 'dark' as const } : {}),
+    ...(content.kind !== 'image'
+      ? { backgroundColor: incoming ? '#ffffff' : '#0b1220', theme: incoming ? 'light' as const : 'dark' as const }
+      : {}),
     dragDropEnabled: false,
   });
   const created = new Promise<void>((resolve, reject) => {
