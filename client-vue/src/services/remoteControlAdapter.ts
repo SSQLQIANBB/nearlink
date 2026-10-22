@@ -125,7 +125,6 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
   private queuedBytes = 0;
   private connectReject: (() => void) | null = null;
   private readonly bindingAbort = new AbortController();
-  private tokenDeadline: ReturnType<typeof setTimeout>;
   private readonly instanceId = createRequestId();
   private readonly identity: { userId: number; sid: string; authVersion: string; exp: number };
 
@@ -147,7 +146,7 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
       !isId(this.identity.sid) ||
       !isId(this.identity.authVersion) ||
       !isInteger(this.identity.exp) ||
-      this.identity.exp * 1000 <= Date.now()
+      !Number.isSafeInteger(this.identity.exp * 1000)
     )
       throw new Error('REMOTE_AUTH_REQUIRED');
     if (deviceBinding && (platform === 'web' || !isId(deviceBinding.deviceId)))
@@ -194,9 +193,7 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
             (value.revision < this.state.revision ||
               !['pending', 'connecting'].includes(this.state.state) ||
               value.authorizationRevision < this.state.authorizationRevision ||
-              value.controlEpoch < this.state.controlEpoch)) ||
-          value.hardDeadline <= Date.now() ||
-          value.hardDeadline > Date.now() + 60 * 60 * 1000
+              value.controlEpoch < this.state.controlEpoch))
         ) {
           this.stop('REMOTE_CONNECTING_INVALID');
           return;
@@ -291,10 +288,8 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
         if (value?.sessionId === this.sessionId) this.stop('REMOTE_SESSION_ENDED');
       }),
     );
-    this.tokenDeadline = setTimeout(
-      () => this.stop('REMOTE_AUTH_EXPIRED'),
-      Math.min(2147483647, this.identity.exp * 1000 - Date.now()),
-    );
+    // The authenticated namespace expires tokens and sessions using server time.
+    // Client clock settings must not reject an otherwise valid connection.
   }
 
   async request(target: RemoteCodeConnection, scope: 'view' | 'control') {
@@ -451,7 +446,6 @@ export class SocketRemoteControllerAdapter implements RemoteControllerAdapter {
     this.closed = true;
     this.bindingAbort.abort();
     this.connectReject?.();
-    clearTimeout(this.tokenDeadline);
     this.eventQueue = [];
     this.queuedBytes = 0;
     this.socket.removeAllListeners();

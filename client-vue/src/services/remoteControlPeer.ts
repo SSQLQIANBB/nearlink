@@ -522,23 +522,9 @@ export class RemoteControlPeer {
     const binding = this.binding();
     if (purpose === 'lease' && this.expectedApproval)
       binding.consentNonce = this.expectedApproval.consentNonce;
-    const verify = () =>
-      (this.options.verifyProof || verifyRemoteProof)(proof, this.options.keys, binding, purpose, {
-        wall: Date.now(),
-        monotonic: this.now(),
-      });
-    try {
-      return await verify();
-    } catch (error) {
-      // A fresh proof can arrive before its signed issue time on a slightly
-      // slower local clock. Wait once, then run the same strict verification
-      // against fresh clocks. Never add leeway to expiry or extend the lease.
-      if (!(error instanceof Error) || error.message !== 'REMOTE_PROOF_EXPIRED' || this.stopped)
-        throw error;
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      if (this.stopped) throw new Error('REMOTE_SESSION_ENDED');
-      return verify();
-    }
+    return (this.options.verifyProof || verifyRemoteProof)(proof, this.options.keys, binding, purpose, {
+      monotonic: this.now(),
+    });
   }
   private signalBinding() {
     return {

@@ -11,7 +11,6 @@ export interface RemoteIceConfiguration {
 export function validateRemoteIceConfiguration(
   value: RemoteIceConfiguration,
   sessionDeadline: number,
-  now = Date.now(),
 ): void {
   const fail = () => {
     throw new Error('REMOTE_ICE_CONFIGURATION');
@@ -19,8 +18,7 @@ export function validateRemoteIceConfiguration(
   if (
     !value ||
     !Number.isSafeInteger(sessionDeadline) ||
-    sessionDeadline <= now ||
-    sessionDeadline > now + 3_600_000 ||
+    sessionDeadline <= 0 ||
     !Number.isSafeInteger(value.expiresAt) ||
     value.expiresAt <= sessionDeadline ||
     value.expiresAt > sessionDeadline + 300_000 ||

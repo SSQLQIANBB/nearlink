@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 use zeroize::Zeroizing;
 
@@ -26,9 +26,10 @@ pub(super) fn trusted_keys() -> Result<PinnedKeys, &'static str> {
         serde_json::from_str(COMPILED_KEYS).map_err(|_| "REMOTE_TRUST_NOT_CONFIGURED")?;
     PinnedKeys::new(keys).map_err(|_| "REMOTE_TRUST_NOT_CONFIGURED")
 }
+#[cfg(any(test, feature = "remote-control-harness"))]
 pub(super) fn wall_ms() -> Result<u64, &'static str> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
         .ok()
         .and_then(|d| u64::try_from(d.as_millis()).ok())
         .filter(|v| *v <= MAX_SAFE)
@@ -244,7 +245,8 @@ pub(super) struct IdentityState {
     generation: u64,
     pending: Option<u64>,
     next_ticket: u64,
-    used: HashMap<String, Instant>,
+    used: HashMap<String, u64>,
+    highest_approval_time: u64,
     consent: Option<LocalConsent>,
     runtime_claimed: bool,
     consent_key_version: u64,
@@ -455,6 +457,7 @@ impl IdentityState {
                 || local.screen_id != claims.screen_id
                 || claims.authorization_revision <= local.authorization_revision
                 || claims.control_epoch <= local.control_epoch
+                || claims.session_expires_at > local.server_expires_at
             {
                 return Err("REMOTE_LOCAL_CONSENT_REQUIRED");
             }
@@ -467,7 +470,13 @@ impl IdentityState {
         {
             return Err("REMOTE_LOCAL_SESSION_BUSY");
         }
-        self.used.retain(|_, deadline| now < *deadline);
+        // Advance replay bookkeeping only with authenticated server timestamps.
+        // Local elapsed time must not make an old approval usable again.
+        if claims.issued_at < self.highest_approval_time {
+            return Err("REMOTE_APPROVAL_REPLAY");
+        }
+        self.highest_approval_time = claims.issued_at;
+        self.used.retain(|_, expires| claims.issued_at < *expires);
         if self.used.contains_key(&claims.approval_id) {
             return Err("REMOTE_APPROVAL_REPLAY");
         }
@@ -475,7 +484,7 @@ impl IdentityState {
             return Err("REMOTE_APPROVAL_RATE_LIMITED");
         }
         self.used
-            .insert(claims.approval_id.clone(), request.deadline);
+            .insert(claims.approval_id.clone(), claims.expires_at);
         Ok(request)
     }
     pub fn approve_with_memory(
@@ -558,6 +567,7 @@ impl IdentityState {
                 authorization_revision: c.authorization_revision,
                 control_epoch: c.control_epoch,
                 deadline: request.session_deadline,
+                server_expires_at: c.session_expires_at,
             });
         }
         Ok(ConsentResponse { consent })
@@ -944,6 +954,57 @@ mod tests {
         state.finish(op).unwrap();
         state.stop();
         assert!(state.consent.is_none());
+    }
+    #[test]
+    fn server_clock_keeps_approval_expiry_replay_and_stop_enforced() {
+        use super::super::server_clock::ServerClock;
+        let (_, store, keys, token, ms, now) = fixture();
+        let clock = ServerClock::from_proof(&keys, &token, now).unwrap();
+        let mut state = IdentityState::default();
+        let op = state.begin().unwrap();
+        let request = prepare(&mut state, op, &store, &keys, &token, clock.now(now).unwrap(), now).unwrap();
+        let later = now + Duration::from_secs(2);
+        let response = state.approve(op, request, Decision::Control, clock.now(later).unwrap(), later).unwrap();
+        let claims: Value = serde_json::from_slice(&decode(&response.consent.payload, None).unwrap()).unwrap();
+        assert_eq!(claims["issuedAt"], ms + 2000);
+        state.finish(op).unwrap();
+        let replay_op = state.begin().unwrap();
+        assert!(prepare(&mut state, replay_op, &store, &keys, &token, clock.now(later).unwrap(), later).is_err());
+        state.stop();
+        assert!(state.approved_for_runtime(later).is_err());
+
+        let mut state = IdentityState::default();
+        let op = state.begin().unwrap();
+        let request = prepare(&mut state, op, &store, &keys, &token, clock.now(now).unwrap(), now).unwrap();
+        let expired = now + Duration::from_secs(45);
+        assert!(state.approve(op, request, Decision::Control, clock.now(expired).unwrap(), expired).is_err());
+        assert!(state.approved_for_runtime(expired).is_err());
+    }
+    #[test]
+    fn expired_approval_cannot_be_reanchored_after_stop_or_replay_cache_cleanup() {
+        use super::super::server_clock::ServerClock;
+        let (_, store, keys, token, ms, now) = fixture();
+        let mut state = IdentityState::default();
+        let op = state.begin().unwrap();
+        prepare(&mut state, op, &store, &keys, &token, ms, now).unwrap();
+        state.finish(op).unwrap();
+        state.stop();
+        let later = now + Duration::from_secs(60);
+        let replay = ServerClock::from_proof(&keys, &token, later).unwrap();
+        let op = state.begin().unwrap();
+        assert!(matches!(prepare(&mut state, op, &store, &keys, &token, replay.now(later).unwrap(), later), Err("REMOTE_APPROVAL_REPLAY")));
+        state.finish(op).unwrap();
+        let newer = changed(&token, |c| {
+            c["approvalId"] = serde_json::json!("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+            c["issuedAt"] = serde_json::json!(ms + 60_000);
+            c["expiresAt"] = serde_json::json!(ms + 105_000);
+        });
+        let op = state.begin().unwrap();
+        prepare(&mut state, op, &store, &keys, &newer, ms + 60_000, later).unwrap();
+        state.finish(op).unwrap();
+        assert_eq!(state.used.len(), 1);
+        let op = state.begin().unwrap();
+        assert!(matches!(prepare(&mut state, op, &store, &keys, &token, replay.now(later).unwrap(), later), Err("REMOTE_APPROVAL_REPLAY")));
     }
     #[test]
     fn wrong_trust_device_context_and_signed_schema_are_rejected() {

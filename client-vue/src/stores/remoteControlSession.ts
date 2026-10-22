@@ -164,10 +164,13 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
       phase.value = 'connecting';
       statusMessage.value = '正在建立安全连接';
       sessionId.value = event.value.sessionId;
+      // Server enforces the absolute session deadline; this is an independent
+      // local upper bound that remains stable when the computer clock changes.
+      const sessionDeadline = performance.now() + 3_600_000;
       if (deadline) clearTimeout(deadline);
       deadline = setTimeout(
         () => end('REMOTE_CONNECT_TIMEOUT'),
-        Math.min(30000, event.value.hardDeadline - Date.now()),
+        30000,
       );
       const [ice, keyset] = await Promise.all([
         getRemoteSessionIce(event.value.sessionId),
@@ -206,7 +209,7 @@ export const useRemoteControlSessionStore = defineStore('remoteControlSession', 
               if (deadline) clearTimeout(deadline);
               deadline = setTimeout(
                 () => end('REMOTE_SESSION_EXPIRED'),
-                event.value.hardDeadline - Date.now(),
+                Math.max(0, sessionDeadline - performance.now()),
               );
             }
             phase.value = 'active';

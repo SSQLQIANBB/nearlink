@@ -15,14 +15,14 @@ struct Challenge {
     challenge: String, issued_at: u64, expires_at: u64,
 }
 pub(super) fn prove(store: &impl SeedStore, keys: &PinnedKeys, envelope: &SignedEnvelope,
-    expected: ExpectedController, now: u64) -> Result<SignedEnvelope, &'static str> {
+    expected: ExpectedController) -> Result<SignedEnvelope, &'static str> {
     let started = Instant::now();
-    let (bytes, before, after) = keys.verify_payload(envelope, now).map_err(|_| "INVALID_CONTROLLER_CHALLENGE")?;
+    let (bytes, before, after) = keys.verify_signature(envelope).map_err(|_| "INVALID_CONTROLLER_CHALLENGE")?;
     let c: Challenge = serde_json::from_slice(&bytes).map_err(|_| "INVALID_CONTROLLER_CHALLENGE")?;
     if c.protocol_version != 1 || c.issuer != "todesk-remote-control" || c.audience != "todesk-native-controller"
         || c.purpose != "controller-challenge" || !c.controller.valid() || !uuid(&c.device_id) || !positive(c.key_version)
         || c.controller != expected.controller || c.device_id != expected.device_id || decode(&c.challenge, Some(32)).is_err()
-        || c.issued_at > now || c.issued_at < before || c.expires_at <= now || c.expires_at > after
+        || c.issued_at < before || c.expires_at <= c.issued_at || c.expires_at > after
         || c.expires_at.saturating_sub(c.issued_at) > 30_000 {
         return Err("INVALID_CONTROLLER_CHALLENGE");
     }
@@ -30,9 +30,9 @@ pub(super) fn prove(store: &impl SeedStore, keys: &PinnedKeys, envelope: &Signed
     let mut signer = c.controller.clone(); signer.endpoint_id = c.device_id.clone();
     let result = identity::sign_native_fact(store, &signer, c.key_version, json!({
         "protocolVersion":1, "purpose":"native-controller-binding", "controller":c.controller,
-        "deviceId":c.device_id, "challenge":c.challenge, "issuedAt":now, "expiresAt":c.expires_at
+        "deviceId":c.device_id, "challenge":c.challenge, "issuedAt":c.issued_at, "expiresAt":c.expires_at
     }))?;
-    if started.elapsed() >= Duration::from_millis(c.expires_at - now) { return Err("INVALID_CONTROLLER_CHALLENGE"); }
+    if started.elapsed() >= Duration::from_millis(c.expires_at - c.issued_at) { return Err("INVALID_CONTROLLER_CHALLENGE"); }
     Ok(result)
 }
 
@@ -58,7 +58,7 @@ mod tests {
     fn signed_controller_proof_matches_node_fixture() {
         let (v, store, keys) = data();
         let proof = prove(&store, &keys, &serde_json::from_value(v["challenge"].clone()).unwrap(),
-            serde_json::from_value(v["expected"].clone()).unwrap(), v["now"].as_u64().unwrap()).unwrap();
+            serde_json::from_value(v["expected"].clone()).unwrap()).unwrap();
         assert_eq!(proof.payload, v["proof"]["payload"]);
         assert_eq!(proof.signature, v["proof"]["signature"]);
         assert_eq!(proof.key_id, v["proof"]["keyId"]);
@@ -66,19 +66,17 @@ mod tests {
     #[test]
     fn refuses_substituted_socket_device_key_expiry_and_other_signed_purpose() {
         let (v, store, keys) = data();
-        let ms = v["now"].as_u64().unwrap();
         let envelope: SignedEnvelope = serde_json::from_value(v["challenge"].clone()).unwrap();
         for (field, value) in [("connectionId", json!("other")), ("sid", json!("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")), ("generation", json!(3))] {
             let mut expected = v["expected"].clone(); expected["controller"][field] = value;
-            assert!(prove(&store, &keys, &envelope, serde_json::from_value(expected).unwrap(), ms).is_err());
+            assert!(prove(&store, &keys, &envelope, serde_json::from_value(expected).unwrap()).is_err());
         }
         let mut expected = v["expected"].clone(); expected["deviceId"] = json!("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
-        assert!(prove(&store, &keys, &envelope, serde_json::from_value(expected).unwrap(), ms).is_err());
-        assert!(prove(&Store(vec![8;32]), &keys, &envelope, serde_json::from_value(v["expected"].clone()).unwrap(), ms).is_err());
-        assert!(prove(&store, &keys, &envelope, serde_json::from_value(v["expected"].clone()).unwrap(), ms+30000).is_err());
+        assert!(prove(&store, &keys, &envelope, serde_json::from_value(expected).unwrap()).is_err());
+        assert!(prove(&Store(vec![8;32]), &keys, &envelope, serde_json::from_value(v["expected"].clone()).unwrap()).is_err());
         let other: Value = serde_json::from_str(include_str!("../../../../fixtures/remote-control-native-approval-v1.json")).unwrap();
-        assert!(prove(&store, &keys, &serde_json::from_value(other["approval"].clone()).unwrap(), serde_json::from_value(v["expected"].clone()).unwrap(), ms).is_err());
+        assert!(prove(&store, &keys, &serde_json::from_value(other["approval"].clone()).unwrap(), serde_json::from_value(v["expected"].clone()).unwrap()).is_err());
         let mut tampered = envelope; tampered.payload.push('A');
-        assert!(prove(&store, &keys, &tampered, serde_json::from_value(v["expected"].clone()).unwrap(), ms).is_err());
+        assert!(prove(&store, &keys, &tampered, serde_json::from_value(v["expected"].clone()).unwrap()).is_err());
     }
 }

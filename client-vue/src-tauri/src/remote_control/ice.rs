@@ -7,7 +7,7 @@ use super::{
 use serde::{Deserialize, Serialize};
 use std::{
     net::IpAddr,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -79,8 +79,9 @@ pub(super) fn verify(
         || c.expires_at <= c.session_expires_at
         || c.expires_at - c.session_expires_at > 300_000
         || now >= local.deadline
-        || Duration::from_millis(c.session_expires_at - wall)
-            > local.deadline.duration_since(now) + Duration::from_secs(1)
+        // Compare the two signed server deadlines directly. Their separate
+        // receive-time clocks can have different network delays.
+        || c.session_expires_at > local.server_expires_at
         || c.ice_servers.len() > 4
     {
         return Err("REMOTE_ICE_CONFIGURATION");

@@ -749,6 +749,7 @@ pub(super) mod test_support {
             authorization_revision: epoch,
             control_epoch: epoch,
             deadline: now + Duration::from_secs(60),
+            server_expires_at: ms + 60_000,
         };
         let transport = ObservedTransport {
             negotiation_id: claims["negotiationId"].as_str().unwrap().into(),

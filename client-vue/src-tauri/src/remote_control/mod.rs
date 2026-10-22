@@ -29,6 +29,7 @@ mod identity;
 mod native_host;
 mod native_presence;
 mod platform;
+mod server_clock;
 #[cfg(target_os = "windows")]
 mod windows_capture;
 #[cfg(target_os = "windows")]
@@ -108,6 +109,7 @@ impl RemoteControlState {
         mut driver: Box<dyn host_runtime::MediaDriver>,
         input: Box<dyn input::InputExecutor>,
         probe: host_runtime::AvailabilityProbe,
+        now_ms: u64,
     ) -> Result<Arc<Mutex<host_runtime::HostRuntime>>, &'static str> {
         if !transport.belongs_to(&self.identity) {
             let _ = driver.terminate();
@@ -127,9 +129,9 @@ impl RemoteControlState {
                 host.stop(guard::StopReason::LocalStop)?;
                 *slot = None;
             }
-            Ok((slot, identity::trusted_keys()?, identity::wall_ms()?))
+            Ok((slot, identity::trusted_keys()?))
         })();
-        let (mut slot, keys, now_ms) = match prepared {
+        let (mut slot, keys) = match prepared {
             Ok(value) => value,
             Err(error) => {
                 let _ = driver.terminate();
@@ -174,7 +176,6 @@ pub async fn remote_control_presence(
             digest,
             capture == platform::PermissionState::Granted,
             input == platform::PermissionState::Granted,
-            identity::wall_ms()?,
         )
     })
     .await
@@ -202,11 +203,13 @@ pub async fn remote_control_start_host(
             return Err("REMOTE_LOCAL_SESSION_BUSY");
         }
         slot.take();
+        let keys = identity::trusted_keys()?;
+        let clock = server_clock::ServerClock::from_proof(&keys, &ice_proof, Instant::now())?;
         let mut prepared = host_transport::PreparedHost::bundled(&app, state.identity.clone())?;
         prepared.configure_ice(
-            &identity::trusted_keys()?,
+            &keys,
             &ice_proof,
-            identity::wall_ms()?,
+            clock.now(Instant::now())?,
             Instant::now(),
         )?;
         *slot = Some(native_host::launch(app.clone(), prepared, events)?);
@@ -279,10 +282,7 @@ fn capabilities(engine_ready: bool) -> RemoteControlCapabilities {
         controller_device_binding_ready: probe.candidate_platform,
         device_identity_reset_ready: probe.candidate_platform,
         consent_prompt_ready: probe.candidate_platform
-            && identity::trusted_keys()
-                .ok()
-                .zip(identity::wall_ms().ok())
-                .is_some_and(|(keys, now)| keys.has_current_key(now)),
+            && identity::trusted_keys().is_ok(),
         permissions: Permissions {
             screen_capture: probe.screen_capture.as_str(),
             input_control: probe.input_control.as_str(),
@@ -387,7 +387,6 @@ pub async fn remote_control_bind_controller(
             &identity::trusted_keys()?,
             &challenge,
             expected,
-            identity::wall_ms()?,
         );
         worker_state
             .lock()
@@ -424,11 +423,12 @@ pub async fn remote_control_confirm_request(
         .begin()?;
     let worker_state = state.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let clock = server_clock::ServerClock::from_proof(&keys, &request, Instant::now())?;
         let verified = identity::VerifiedApproval::verify(
             &device_store::OsSeedStore,
             &keys,
             &request,
-            identity::wall_ms()?,
+            clock.now(Instant::now())?,
             Instant::now(),
         )?;
         let verified = worker_state
@@ -460,7 +460,7 @@ pub async fn remote_control_confirm_request(
         // Expired/cancelled/replayed operations must pass native approval before
         // any signed remembered choice is written to disk.
         let (response, save) = native_identity.approve_with_memory(
-            operation, verified, choice, &mut preferences, identity::wall_ms()?, Instant::now(),
+            operation, verified, choice, &mut preferences, clock.now(Instant::now())?, Instant::now(),
         )?;
         if save {
             if let Err(error) = preferences.save(&memory_path) {

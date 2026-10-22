@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises } from '@vue/test-utils';
 const mocks = vi.hoisted(() => ({
@@ -106,6 +106,11 @@ beforeEach(() => {
   });
   mocks.keys.mockResolvedValue({ keys: [] });
 });
+afterEach(() => {
+  mediaOccupancy.stop('TEST_CLEANUP');
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 async function connected() {
   const store = useRemoteControlSessionStore();
   await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
@@ -114,6 +119,38 @@ async function connected() {
   return store;
 }
 describe('远控主控会话接线', () => {
+  it.each([-86_400_000, 86_400_000])('本机时钟偏差 %i 毫秒不提前终止连接；本地一小时上限仍生效', async (offset) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    vi.spyOn(Date, 'now').mockReturnValue(bootstrap.hardDeadline + offset);
+    const store = await connected();
+    expect(store.phase).toBe('connecting');
+    await vi.advanceTimersByTimeAsync(10000);
+    mocks.peers[0].options.onAuthorization('control');
+    expect(store.phase).toBe('active');
+    await vi.advanceTimersByTimeAsync(3_590_000 - 1);
+    expect(store.phase).toBe('active');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.phase).toBe('ended');
+    expect(mocks.adapters[0].end).toHaveBeenCalledWith('REMOTE_SESSION_EXPIRED');
+    expect(mediaOccupancy.current.value).toBeNull();
+  });
+  it('连接等待仍有30秒上限；服务器提前结束仍会释放本地资源', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const store = await connected();
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(store.phase).toBe('connecting');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.phase).toBe('ended');
+    expect(mocks.adapters[0].end).toHaveBeenCalledWith('REMOTE_CONNECT_TIMEOUT');
+    await store.start({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
+    mocks.adapters[1].event({ type: 'connecting', value: bootstrap });
+    await flushPromises();
+    mocks.peers[1].options.onAuthorization('control');
+    mocks.adapters[1].event({ type: 'ended', reason: 'REMOTE_SESSION_ENDED' });
+    expect(store.phase).toBe('ended');
+    expect(mocks.peers[1].end).toHaveBeenCalledWith('REMOTE_SESSION_ENDED');
+    expect(mediaOccupancy.current.value).toBeNull();
+  });
   it('已识别的桌面使用设备绑定；旧版缺少能力时拒绝而不降级', async () => {
     mocks.localDeviceId = '11111111-1111-4111-8111-111111111111';
     mocks.capabilities.capabilities = {

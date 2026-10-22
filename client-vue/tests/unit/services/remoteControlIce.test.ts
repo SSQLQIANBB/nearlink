@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isMdnsCandidate,
   withoutMdnsCandidates,
@@ -17,14 +17,21 @@ const config = (): RemoteIceConfiguration => ({
   expiresAt: 360000,
   proof: { format: 'rc-signed-v1', keyId: 'test', payload: 'test', signature: 'test' },
 });
+afterEach(() => vi.restoreAllMocks());
 describe('远控ICE配置', () => {
+  it.each([-86_400_000, 86_400_000])('本机时钟偏差 %i 毫秒不拒绝服务器ICE配置', (offset) => {
+    vi.spyOn(Date, 'now').mockReturnValue(60000 + offset);
+    expect(() => validateRemoteIceConfiguration(config(), 60000)).not.toThrow();
+    for (const deadline of [0, -1, NaN, Number.MAX_SAFE_INTEGER + 1])
+      expect(() => validateRemoteIceConfiguration(config(), deadline)).toThrow();
+  });
   it('all模式允许无中继配置', () => {
-    expect(() => validateRemoteIceConfiguration({ ...config(), iceTransportPolicy: 'all', iceServers: [] }, 60000, 0)).not.toThrow();
+    expect(() => validateRemoteIceConfiguration({ ...config(), iceTransportPolicy: 'all', iceServers: [] }, 60000)).not.toThrow();
   });
   it('接受覆盖会话寿命的配置，拒绝过短、超期及固定密码URL', () => {
-    expect(() => validateRemoteIceConfiguration(config(), 60000, 0)).not.toThrow();
+    expect(() => validateRemoteIceConfiguration(config(), 60000)).not.toThrow();
     for (const expiresAt of [60000, 360001, NaN])
-      expect(() => validateRemoteIceConfiguration({ ...config(), expiresAt }, 60000, 0)).toThrow();
+      expect(() => validateRemoteIceConfiguration({ ...config(), expiresAt }, 60000)).toThrow();
     for (const url of [
       'turn:user:pass@host:3478?transport=udp',
       'turn:host:0?transport=udp',
@@ -33,16 +40,15 @@ describe('远控ICE配置', () => {
     ]) {
       const c = config();
       c.iceServers[0]!.urls = [url];
-      expect(() => validateRemoteIceConfiguration(c, 60000, 0)).toThrow();
+      expect(() => validateRemoteIceConfiguration(c, 60000)).toThrow();
     }
     expect(() =>
-      validateRemoteIceConfiguration({ ...config(), iceServers: [] }, 60000, 0),
+      validateRemoteIceConfiguration({ ...config(), iceServers: [] }, 60000),
     ).toThrow();
     expect(() =>
       validateRemoteIceConfiguration(
         { ...config(), iceServers: [{ urls: ['stun:host:3478'] }] },
         60000,
-        0,
       ),
     ).toThrow();
   });

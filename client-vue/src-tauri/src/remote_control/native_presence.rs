@@ -1,6 +1,6 @@
 //! Device liveness only. This proof cannot create consent, start media or inject input.
 use super::{
-    authorization::{decode, positive, Endpoint, PinnedKeys, SignedEnvelope},
+    authorization::{decode, positive, AuthorityError, Endpoint, PinnedKeys, SignedEnvelope},
     device_store::SeedStore,
     identity,
 };
@@ -28,11 +28,13 @@ pub(super) fn prove(
     engine_digest: String,
     capture: bool,
     input: bool,
-    now: u64,
 ) -> Result<SignedEnvelope, &'static str> {
     let (bytes, before, after) = keys
-        .verify_payload(envelope, now)
-        .map_err(|_| "INVALID_PRESENCE_CHALLENGE")?;
+        .verify_signature(envelope)
+        .map_err(|reason| match reason {
+            AuthorityError::UntrustedKey => "PRESENCE_SIGNING_KEY_UNTRUSTED",
+            _ => "INVALID_PRESENCE_CHALLENGE",
+        })?;
     let c: Challenge = serde_json::from_slice(&bytes).map_err(|_| "INVALID_PRESENCE_CHALLENGE")?;
     if c.protocol_version != 1
         || c.issuer != "todesk-remote-control"
@@ -41,10 +43,9 @@ pub(super) fn prove(
         || !c.host.valid()
         || !positive(c.host_key_version)
         || decode(&c.challenge, Some(32)).is_err()
-        || c.issued_at > now
         || c.issued_at < before
-        || c.expires_at <= now
         || c.expires_at > after
+        || c.expires_at <= c.issued_at
         || c.expires_at.saturating_sub(c.issued_at) > 30_000
         || engine_digest.len() != 64
         || !engine_digest.bytes().all(|b| b.is_ascii_hexdigit())
@@ -54,6 +55,8 @@ pub(super) fn prove(
     if identity::identity_fingerprint(store, c.host.user_id)? != c.host_key_fingerprint {
         return Err("REMOTE_DEVICE_KEY_MISMATCH");
     }
+    // Freshness is anchored to the signed, one-use server challenge, not a
+    // second machine clock. Never extend the server-provided expiry.
     identity::sign_native_fact(
         store,
         &c.host,
@@ -61,7 +64,7 @@ pub(super) fn prove(
         json!({
             "protocolVersion":1, "purpose":"native-presence", "host":c.host, "challenge":c.challenge,
             "platform":std::env::consts::OS, "engineDigest":engine_digest, "canCapture":capture, "canControl":capture && input,
-            "issuedAt":now, "expiresAt":c.expires_at
+            "issuedAt":c.issued_at, "expiresAt":c.expires_at
         }),
     )
 }
@@ -133,6 +136,16 @@ mod tests {
                 signature,
             }
         };
+        let mut expired_key = fixture["key"].clone();
+        expired_key["notAfter"] = json!(ms);
+        let expired_keys = PinnedKeys::new(vec![serde_json::from_value(expired_key).unwrap()]).unwrap();
+        assert_eq!(prove(&store, &expired_keys, &sign(&body), "ab".repeat(32), true, true), Err("INVALID_PRESENCE_CHALLENGE"));
+        let mut unknown = sign(&body);
+        unknown.key_id = "unknown-key".into();
+        assert_eq!(prove(&store, &keys, &unknown, "ab".repeat(32), true, true), Err("PRESENCE_SIGNING_KEY_UNTRUSTED"));
+        let mut tampered = sign(&body);
+        tampered.payload = URL_SAFE_NO_PAD.encode(b"{}");
+        assert_eq!(prove(&store, &keys, &tampered, "ab".repeat(32), true, true), Err("INVALID_PRESENCE_CHALLENGE"));
         let proof = prove(
             &store,
             &keys,
@@ -140,11 +153,12 @@ mod tests {
             "ab".repeat(32),
             false,
             true,
-            ms,
         )
         .unwrap();
         let claims: Value =
             serde_json::from_slice(&URL_SAFE_NO_PAD.decode(proof.payload).unwrap()).unwrap();
+        assert_eq!(claims["issuedAt"], body["issuedAt"]);
+        assert_eq!(claims["expiresAt"], body["expiresAt"]);
         assert_eq!(claims["purpose"], "native-presence");
         assert_eq!(claims["canControl"], false);
         assert_eq!(claims["canCapture"], false);
@@ -155,6 +169,8 @@ mod tests {
             ("audience", json!("todesk-native-approval")),
             ("hostKeyFingerprint", json!("ff".repeat(32))),
             ("expiresAt", json!(ms)),
+            ("expiresAt", json!(ms - 1)),
+            ("expiresAt", json!(ms + 30_001)),
             ("unexpected", json!(true)),
         ] {
             let mut changed = body.clone();
@@ -165,8 +181,7 @@ mod tests {
                 &sign(&changed),
                 "ab".repeat(32),
                 true,
-                true,
-                ms
+                true
             )
             .is_err());
         }
@@ -176,18 +191,7 @@ mod tests {
             &sign(&body),
             "ab".repeat(32),
             true,
-            true,
-            ms
-        )
-        .is_err());
-        assert!(prove(
-            &store,
-            &keys,
-            &sign(&body),
-            "ab".repeat(32),
-            true,
-            true,
-            ms + 30000
+            true
         )
         .is_err());
     }

@@ -108,7 +108,7 @@ export async function verifyRemoteProof(
   keys: readonly RemoteSigningKey[],
   binding: RemotePeerBinding,
   purpose: 'connection' | 'lease',
-  time = { wall: Date.now(), monotonic: performance.now() },
+  time = { monotonic: performance.now() },
 ): Promise<VerifiedRemoteProof> {
   if (!raw || typeof raw !== 'object' || keys.length < 1 || keys.length > 2)
     throw new Error('REMOTE_PROOF_UNTRUSTED');
@@ -124,8 +124,7 @@ export async function verifyRemoteProof(
     !key ||
     !integer(key.notBefore) ||
     !integer(key.notAfter) ||
-    time.wall < key.notBefore ||
-    time.wall >= key.notAfter
+    key.notAfter <= key.notBefore
   )
     throw new Error('REMOTE_PROOF_KEY');
   const payload = decode(envelope.payload, 12288);
@@ -212,11 +211,9 @@ export async function verifyRemoteProof(
     ) ||
     claims.expiresAt <= claims.issuedAt ||
     claims.expiresAt - claims.issuedAt > maxAge ||
-    claims.issuedAt > time.wall ||
     claims.issuedAt < key.notBefore ||
     claims.expiresAt > key.notAfter ||
-    claims.authorizationRevision === 0 ||
-    claims.expiresAt <= time.wall
+    claims.authorizationRevision === 0
   )
     throw new Error('REMOTE_PROOF_EXPIRED');
   if (purpose === 'connection' && ('leaseSeq' in claims || 'challenge' in claims))
@@ -231,7 +228,10 @@ export async function verifyRemoteProof(
     throw new Error('REMOTE_PROOF_CHALLENGE');
   return {
     claims,
-    deadline: time.monotonic + Math.min(maxAge, claims.expiresAt - time.wall),
+    // Server time defines the signed lifetime. The current connection binding
+    // and peer's sequence checks prevent replay from renewing local authority.
+    // Native independently bounds each lease from its own challenge send time.
+    deadline: time.monotonic + (claims.expiresAt - claims.issuedAt),
     envelope: { ...envelope },
   };
 }

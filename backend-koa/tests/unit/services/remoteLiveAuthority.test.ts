@@ -142,6 +142,24 @@ describe('production live authority and native evidence', () => {
     expect(f.authority.host(f.device.id)).toBeUndefined();
     await expect(f.authority.resolveConnection(f.host.handle)).rejects.toThrow('HOST_OFFLINE');
   });
+  it('accepts challenge-clock presence but rejects a client-clock timestamp ahead of the server', async () => {
+    const f = await fixture();
+    const ahead = await f.presence({ issuedAt: f.now() + 200 });
+    await expect(f.authority.acceptPresence(f.host, ahead.proof)).rejects.toThrow('INVALID_NATIVE_EVIDENCE');
+    const anchored = await f.presence();
+    f.advance(10);
+    await f.authority.acceptPresence(f.host, anchored.proof);
+    expect(f.authority.host(f.device.id)).toBeDefined();
+    f.advance(29990);
+    expect(f.authority.host(f.device.id)).toBeUndefined();
+  });
+  it('still rejects a signed presence response after its challenge expires on the server', async () => {
+    const f = await fixture();
+    const presence = await f.presence();
+    f.advance(30000);
+    await expect(f.authority.acceptPresence(f.host, presence.proof)).rejects.toThrow('INVALID_NATIVE_EVIDENCE');
+    expect(f.authority.host(f.device.id)).toBeUndefined();
+  });
   it.each(['purpose', 'connection', 'challenge', 'key', 'expired', 'permissions', 'unknown'])(
     'rejects %s substitution before discovery',
     async (change) => {

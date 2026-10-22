@@ -515,6 +515,28 @@ fn signed_ice_enables_network_once_before_offer_and_requires_engine_ack() {
     assert!(!t.connected);
 }
 #[test]
+fn ice_uses_signed_session_deadline_despite_different_delivery_delays() {
+    use super::super::server_clock::ServerClock;
+    let f = fixture();
+    let (mut local, _) = f.identity.lock().unwrap().approved_for_runtime(f.now).unwrap();
+    // Leave room for the TURN credential grace period inside the fixture key's validity.
+    local.server_expires_at -= 300_000;
+    local.deadline -= Duration::from_secs(300);
+    let proof = signed_ice(&f, |c| {
+        c["sessionExpiresAt"] = json!(local.server_expires_at);
+        c["expiresAt"] = json!(local.server_expires_at + 60_000);
+    });
+    let later = f.now + Duration::from_secs(3);
+    let clock = ServerClock::from_proof(&f.keys, &proof, later).unwrap();
+    assert!(ice::verify(&f.keys, &proof, &local, clock.now(later).unwrap(), later).is_ok());
+    let extended = signed_ice(&f, |c| {
+        c["sessionExpiresAt"] = json!(local.server_expires_at + 1);
+        c["expiresAt"] = json!(local.server_expires_at + 60_000);
+    });
+    assert!(ice::verify(&f.keys, &extended, &local, clock.now(later).unwrap(), later).is_err());
+    assert!(ice::verify(&f.keys, &proof, &local, clock.now(later).unwrap(), local.deadline).is_err());
+}
+#[test]
 fn ice_rejects_tampering_wrong_session_endpoint_purpose_expiry_and_unbounded_servers() {
     for edit in 0..11 {
         let f = fixture();

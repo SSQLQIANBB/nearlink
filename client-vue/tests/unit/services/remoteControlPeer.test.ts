@@ -217,40 +217,45 @@ describe('主控启用输入前报告真实渲染进度', () => {
     expect(allowedRemoteVideoCodecs([...incompatible, supported])).toEqual([supported]);
     expect(allowedRemoteVideoCodecs(incompatible)).toEqual([]);
   });
-  it('时间校验失败只等待一次，并用新时钟重新严格验签', async () => {
+  it.each([-86_400_000, 86_400_000])('本机时钟偏差 %i 毫秒不影响租约使用单调时钟', async (offset) => {
     proofVerifier.mockClear();
-    proofVerifier.mockRejectedValueOnce(new Error('REMOTE_PROOF_EXPIRED'));
-    const before = Date.now();
-    const pending = peer.installMediaLease(envelope);
-    await vi.advanceTimersByTimeAsync(249);
-    expect(proofVerifier).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + offset);
     now = 250;
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(pending).resolves.toBe(true);
-    expect(proofVerifier).toHaveBeenCalledTimes(2);
-    expect(proofVerifier.mock.calls[1]![4]).toEqual({ wall: before + 250, monotonic: 250 });
+    await expect(peer.installMediaLease(envelope)).resolves.toBe(true);
+    expect(proofVerifier).toHaveBeenCalledTimes(1);
+    expect(proofVerifier.mock.calls[0]![4]).toEqual({ monotonic: 250 });
   });
-  it('等待不会让真正过期的凭据通过', async () => {
+  it('无效的签名寿命直接拒绝，不等待本机时钟后重试', async () => {
     proofVerifier.mockClear();
     proofVerifier.mockRejectedValue(new Error('REMOTE_PROOF_EXPIRED'));
-    const rejected = expect(peer.installMediaLease(envelope)).rejects.toThrow(
+    await expect(peer.installMediaLease(envelope)).rejects.toThrow(
       'REMOTE_PROOF_EXPIRED',
     );
-    await vi.advanceTimersByTimeAsync(250);
-    await rejected;
-    expect(proofVerifier).toHaveBeenCalledTimes(2);
-  });
-  it('等待期间结束会话不会再次验签或恢复连接', async () => {
-    proofVerifier.mockClear();
-    proofVerifier.mockRejectedValueOnce(new Error('REMOTE_PROOF_EXPIRED'));
-    const rejected = expect(peer.installMediaLease(envelope)).rejects.toThrow(
-      'REMOTE_SESSION_ENDED',
-    );
-    await vi.advanceTimersByTimeAsync(1);
-    peer.end('REMOTE_LOCAL_END');
-    await vi.advanceTimersByTimeAsync(249);
-    await rejected;
     expect(proofVerifier).toHaveBeenCalledTimes(1);
+  });
+  it('验签期间结束会话后迟到凭据不能恢复连接', async () => {
+    const verified = await proofVerifier.mock.results[proofVerifier.mock.results.length - 1]!.value;
+    let finish!: (value: typeof verified) => void;
+    proofVerifier.mockClear();
+    proofVerifier.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const pending = peer.installMediaLease(envelope);
+    peer.end('REMOTE_LOCAL_END');
+    finish(verified);
+    await expect(pending).resolves.toBe(false);
+    expect(proofVerifier).toHaveBeenCalledTimes(1);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_LOCAL_END');
+    expect(input.close).toHaveBeenCalledOnce();
+    expect(peer.requestInputArm()).toBe(false);
+  });
+  it('重复租约不能重新开始单调有效期；过期后新租约也不能复活会话', async () => {
+    const verified = await proofVerifier.mock.results[proofVerifier.mock.results.length - 1]!.value;
+    proofVerifier.mockResolvedValueOnce({ ...verified, deadline: verified.deadline + 1000 });
+    now = 1000;
+    await expect(peer.installMediaLease(envelope)).rejects.toThrow('REMOTE_LEASE_REPLAY');
+    now = 15000;
+    await expect(peer.installMediaLease(envelope)).resolves.toBe(false);
+    expect(onEnd).toHaveBeenCalledWith('REMOTE_LEASE_EXPIRED');
+    expect(peer.requestInputArm()).toBe(false);
   });
 
   it('握手确认前不发送周期心跳，确认后才开始发送', async () => {

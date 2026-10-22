@@ -5,6 +5,7 @@ use super::{
     host_runtime::{Availability, HostResult, HostRuntime},
     host_transport::PreparedHost,
     identity,
+    server_clock::ServerClock,
     input::PlatformInputExecutor,
     platform, RemoteControlState,
 };
@@ -20,26 +21,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::Manager;
-
-// Waiting never grants authority: each caller still performs full verification
-// afterward with fresh wall/monotonic clocks and the original expiry.
-fn proof_clock_delay(
-    keys: &super::authorization::PinnedKeys,
-    proof: &SignedEnvelope,
-    now: u64,
-) -> HostResult<Duration> {
-    let (bytes, _, _) = keys.verify_payload(proof, now).map_err(|_| "REMOTE_PROOF_INVALID")?;
-    let claims: Value = serde_json::from_slice(&bytes).map_err(|_| "REMOTE_PROOF_INVALID")?;
-    let issued = claims.get("issuedAt").and_then(Value::as_u64).ok_or("REMOTE_PROOF_INVALID")?;
-    let delay = issued.saturating_sub(now);
-    if delay > 250 { return Err("REMOTE_PROOF_CLOCK_AHEAD"); }
-    Ok(Duration::from_millis(delay))
-}
-fn wait_for_proof_clock(proof: &SignedEnvelope) -> HostResult<()> {
-    let delay = proof_clock_delay(&identity::trusted_keys()?, proof, identity::wall_ms()?)?;
-    if !delay.is_zero() { thread::sleep(delay); }
-    Ok(())
-}
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
@@ -101,6 +82,7 @@ pub(super) fn launch(
         let mut runtime: Option<Arc<Mutex<HostRuntime>>> = None;
         let result = (|| -> HostResult<()> {
             let mut connection = None;
+            let mut session_clock: Option<ServerClock> = None;
             let mut last_bridge = Instant::now(); let mut last_heartbeat = last_bridge;
             let mut last_challenge = None; let mut ready_sent = false;
             let emit = |kind: &str, payload: Value| events.send(json!({ "sessionId":id, "type":kind, "payload":payload })).map_err(|_| "REMOTE_HOST_BRIDGE_CLOSED");
@@ -123,12 +105,14 @@ pub(super) fn launch(
                     }
                     Ok(HostCommand::Connection { proof }) => {
                         if connection.is_some() || runtime.is_some() { return Err("REMOTE_CONNECTION_REPLAY"); }
-                        connection = Some(proof);
+                        let clock = ServerClock::from_proof(&identity::trusted_keys()?, &proof, Instant::now())?;
+                        connection = Some((proof, clock));
                     }
                     Ok(HostCommand::Lease { proof }) => {
-                        wait_for_proof_clock(&proof)?;
+                        let clock = ServerClock::from_proof(&identity::trusted_keys()?, &proof, Instant::now())?;
                         runtime.as_ref().ok_or("REMOTE_CONNECTION_REQUIRED")?.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?
-                            .accept_lease(&proof, identity::wall_ms()?, Instant::now())?;
+                            .accept_lease(&proof, clock.now(Instant::now())?, Instant::now())?;
+                        session_clock.as_mut().ok_or("REMOTE_CONNECTION_REQUIRED")?.advance(clock, Instant::now())?;
                     }
                     Ok(HostCommand::Pause) => {
                         runtime.as_ref().ok_or("REMOTE_CONNECTION_REQUIRED")?.lock().map_err(|_| "REMOTE_STATE_UNAVAILABLE")?.pause(StopReason::LocalStop)?;
@@ -155,14 +139,14 @@ pub(super) fn launch(
                     }
                 }
                 if prepared.transport.observed_transport().is_some() && runtime.is_none() {
-                    if let Some(proof) = connection.take() {
-                        wait_for_proof_clock(&proof)?;
+                    if let Some((proof, clock)) = connection.take() {
                         let input = PlatformInputExecutor::new_primary_screen(1).map_err(|_| "REMOTE_INPUT_UNAVAILABLE")?;
                         runtime = Some(app.state::<RemoteControlState>().connect_native_host(&proof, &mut prepared.transport,
                             Box::new(prepared.driver.clone()), Box::new(input), Box::new(|| {
                                 let (capture, input) = platform::permissions();
                                 Availability { capture: capture == platform::PermissionState::Granted, input: input == platform::PermissionState::Granted }
-                            }))?);
+                            }), clock.now(Instant::now())?)?);
+                        session_clock = Some(clock);
                     }
                 }
                 if let Some(shared) = &runtime {
@@ -178,12 +162,12 @@ pub(super) fn launch(
                     if host.is_ready() {
                         let observed = prepared.transport.observed_transport().ok_or("REMOTE_NATIVE_DTLS_REQUIRED")?;
                         if !ready_sent {
-                            emit("native-fact", json!({"proof":host.native_fact(&observed, None, identity::wall_ms()?, Instant::now())?}))?;
+                            emit("native-fact", json!({"proof":host.native_fact(&observed, None, session_clock.as_ref().ok_or("REMOTE_CONNECTION_REQUIRED")?.now(Instant::now())?, Instant::now())?}))?;
                             ready_sent = true;
                         }
                         if last_challenge.is_none_or(|at: Instant| at.elapsed() >= Duration::from_secs(5)) {
                             let challenge = host.challenge(Instant::now())?;
-                            emit("native-fact", json!({"proof":host.native_fact(&observed, Some(challenge), identity::wall_ms()?, Instant::now())?}))?;
+                            emit("native-fact", json!({"proof":host.native_fact(&observed, Some(challenge), session_clock.as_ref().ok_or("REMOTE_CONNECTION_REQUIRED")?.now(Instant::now())?, Instant::now())?}))?;
                             last_challenge = Some(Instant::now());
                         }
                     }
@@ -209,23 +193,4 @@ pub(super) fn launch(
         tx,
         alive,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn only_authenticated_small_future_timestamps_can_delay_verification() {
-        let fixture: Value = serde_json::from_str(include_str!("../../../../fixtures/remote-control-native-approval-v1.json")).unwrap();
-        let keys = super::super::authorization::PinnedKeys::new(vec![serde_json::from_value(fixture["key"].clone()).unwrap()]).unwrap();
-        let proof: SignedEnvelope = serde_json::from_value(fixture["approval"].clone()).unwrap();
-        let now = fixture["approvalClaims"]["issuedAt"].as_u64().unwrap();
-        assert_eq!(proof_clock_delay(&keys, &proof, now - 100).unwrap(), Duration::from_millis(100));
-        assert_eq!(proof_clock_delay(&keys, &proof, now - 250).unwrap(), Duration::from_millis(250));
-        assert_eq!(proof_clock_delay(&keys, &proof, now - 251), Err("REMOTE_PROOF_CLOCK_AHEAD"));
-        assert_eq!(proof_clock_delay(&keys, &proof, now + 1).unwrap(), Duration::ZERO);
-        let mut invalid: SignedEnvelope = serde_json::from_value(fixture["approval"].clone()).unwrap();
-        invalid.signature = "A".repeat(86);
-        assert_eq!(proof_clock_delay(&keys, &invalid, now - 100), Err("REMOTE_PROOF_INVALID"));
-    }
 }

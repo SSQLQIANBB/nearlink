@@ -94,6 +94,23 @@ afterEach(async () => {
   await flush();
 });
 describe('desktop host bridge lifecycle', () => {
+  it.each([
+    ['PRESENCE_SIGNING_KEY_UNTRUSTED', '信任列表'],
+    ['INVALID_PRESENCE_CHALLENGE', '签名或内容校验失败'],
+  ])('explains %s and stays offline without sending presence', async (code, hint) => {
+    const store = useRemoteControlHostStore();
+    await store.start(device);
+    mock.invoke.mockImplementation(async (command) => {
+      if (command === 'remote_control_presence') throw code;
+    });
+    socket.receive('remote:presence-challenge', { proof: {} });
+    await flush();
+    expect(store.phase).toBe('offline');
+    expect(store.error).toContain(hint);
+    expect(store.error).toContain(code);
+    expect(socket.emitWithAck).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalled();
+  });
   it('never opens a host socket from Web or when server release is closed', async () => {
     const store = useRemoteControlHostStore();
     mock.desktop = false;

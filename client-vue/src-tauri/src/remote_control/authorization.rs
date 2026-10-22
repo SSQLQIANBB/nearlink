@@ -177,6 +177,19 @@ impl PinnedKeys {
         envelope: &SignedEnvelope,
         now_ms: u64,
     ) -> Result<(Vec<u8>, u64, u64), AuthorityError> {
+        let (payload, before, after) = self.verify_signature(envelope)?;
+        if now_ms < before || now_ms >= after {
+            return Err(AuthorityError::Expired);
+        }
+        Ok((payload, before, after))
+    }
+
+    /// Authentication only. Callers must validate the signed purpose, bindings,
+    /// key interval and lifetime before using the payload as authority.
+    pub(super) fn verify_signature(
+        &self,
+        envelope: &SignedEnvelope,
+    ) -> Result<(Vec<u8>, u64, u64), AuthorityError> {
         if envelope.format != "rc-signed-v1"
             || envelope.payload.len() > 16_384
             || envelope.signature.len() != 86
@@ -188,9 +201,6 @@ impl PinnedKeys {
             .iter()
             .find(|k| k.key_id == envelope.key_id)
             .ok_or(AuthorityError::UntrustedKey)?;
-        if now_ms < key.not_before || now_ms >= key.not_after {
-            return Err(AuthorityError::Expired);
-        }
         let payload = decode(&envelope.payload, None)?;
         let signature_bytes: [u8; 64] = decode(&envelope.signature, Some(64))?.try_into().unwrap();
         let key_bytes: [u8; 32] = decode(&key.public_key, Some(32))?.try_into().unwrap();
@@ -275,6 +285,7 @@ pub struct LocalConsent {
     pub authorization_revision: u64,
     pub control_epoch: u64,
     pub deadline: Instant,
+    pub server_expires_at: u64,
 }
 
 /// Populated from the actual native PeerConnection's negotiated fingerprints.
@@ -316,6 +327,7 @@ impl VerifiedLease {
             && self.consent.consent_nonce == consent.consent_nonce
             && self.consent.screen_id == consent.screen_id
             && consent.deadline <= self.consent.deadline
+            && consent.server_expires_at <= self.consent.server_expires_at
     }
     pub fn lease_seq(&self) -> u64 {
         self.lease_seq
@@ -595,6 +607,7 @@ mod tests {
             authorization_revision: c.authorization_revision,
             control_epoch: c.control_epoch,
             deadline: now + Duration::from_secs(60),
+            server_expires_at: c.issued_at + 60_000,
         };
         let transport = ObservedTransport {
             negotiation_id: c.negotiation_id,

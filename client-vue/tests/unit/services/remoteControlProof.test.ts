@@ -64,15 +64,15 @@ function envelope(values: object = claims) {
   };
 }
 beforeEach(() => vi.stubGlobal('crypto', webcrypto));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('主控验签与DTLS绑定', () => {
-  it('使用真实Ed25519验签；迟到租约按签名过期时间缩短本地截止', async () => {
+  it.each([-86_400_000, 86_400_000])('本机时钟偏差 %i 毫秒仍以签名寿命和单调时钟验证真实Ed25519凭据', async (offset) => {
+    vi.spyOn(Date, 'now').mockReturnValue(claims.issuedAt + offset);
     const proof = await verifyRemoteProof(envelope(), [key], binding, 'lease', {
-      wall: 15000,
       monotonic: 500,
     });
-    expect(proof.deadline).toBe(1500);
+    expect(proof.deadline).toBe(15500);
   });
   it('payload篡改、未知keyId和不同用途全部拒绝', async () => {
     const signed = envelope();
@@ -82,14 +82,14 @@ describe('主控验签与DTLS绑定', () => {
         [key],
         binding,
         'lease',
-        { wall: 1000, monotonic: 0 },
+        { monotonic: 0 },
       ),
     ).rejects.toThrow('REMOTE_PROOF_SIGNATURE');
     await expect(
       verifyRemoteProof({ ...signed, keyId: 'unknown' }, [key], binding, 'lease'),
     ).rejects.toThrow('REMOTE_PROOF_KEY');
     await expect(
-      verifyRemoteProof(signed, [key], binding, 'connection', { wall: 1000, monotonic: 0 }),
+      verifyRemoteProof(signed, [key], binding, 'connection', { monotonic: 0 }),
     ).rejects.toThrow('REMOTE_PROOF_PURPOSE');
   });
   it('绑定另一DTLS端点、会话或连接代次的有效签名仍然拒绝', async () => {
@@ -99,32 +99,30 @@ describe('主控验签与DTLS绑定', () => {
       { ...binding, host: { ...endpoint, generation: 2 } },
     ]) {
       await expect(
-        verifyRemoteProof(envelope(), [key], changed, 'lease', { wall: 1000, monotonic: 0 }),
+        verifyRemoteProof(envelope(), [key], changed, 'lease', { monotonic: 0 }),
       ).rejects.toThrow('REMOTE_PROOF_BINDING');
     }
   });
-  it('拒绝超过15秒的租约、过期凭据和无challenge租约', async () => {
+  it('拒绝超过15秒或无有效寿命的租约以及无challenge租约', async () => {
     await expect(
       verifyRemoteProof(envelope({ ...claims, expiresAt: 16001 }), [key], binding, 'lease', {
-        wall: 1000,
         monotonic: 0,
       }),
     ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
     await expect(
-      verifyRemoteProof(envelope(), [key], binding, 'lease', { wall: 16000, monotonic: 0 }),
+      verifyRemoteProof(envelope({ ...claims, expiresAt: claims.issuedAt }), [key], binding, 'lease', { monotonic: 0 }),
     ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
     await expect(
       verifyRemoteProof(envelope({ ...claims, challenge: undefined }), [key], binding, 'lease', {
-        wall: 1000,
         monotonic: 0,
       }),
     ).rejects.toThrow('REMOTE_PROOF_CHALLENGE');
   });
-  it('拒绝合法签名下的未知字段、未来时间、key有效期外及连接租约混用', async () => {
+  it('拒绝合法签名下的未知字段、反向时间、key有效期外及连接租约混用', async () => {
     for (const invalid of [
       { ...claims, extra: true },
       { ...claims, host: { ...claims.host, extra: true } },
-      { ...claims, issuedAt: 1001 },
+      { ...claims, issuedAt: claims.expiresAt + 1 },
       { ...claims, authorizationRevision: 0 },
       { ...claims, purpose: 'connection' },
     ])
@@ -134,18 +132,16 @@ describe('主控验签与DTLS绑定', () => {
           [key],
           binding,
           invalid.purpose as 'connection' | 'lease',
-          { wall: 1000, monotonic: 0 },
+          { monotonic: 0 },
         ),
       ).rejects.toThrow();
     await expect(
       verifyRemoteProof(envelope(), [{ ...key, notBefore: 1001 }], binding, 'lease', {
-        wall: 2000,
         monotonic: 0,
       }),
     ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
     await expect(
       verifyRemoteProof(envelope(), [{ ...key, notAfter: 15000 }], binding, 'lease', {
-        wall: 1000,
         monotonic: 0,
       }),
     ).rejects.toThrow('REMOTE_PROOF_EXPIRED');
@@ -155,7 +151,7 @@ describe('主控验签与DTLS绑定', () => {
         [key],
         binding,
         'lease',
-        { wall: 1000, monotonic: 0 },
+        { monotonic: 0 },
       ),
     ).rejects.toThrow('REMOTE_PROOF_FORMAT');
   });
@@ -171,7 +167,7 @@ describe('主控验签与DTLS绑定', () => {
       [fixture.key],
       fixture.claims,
       'connection',
-      { wall: fixture.now, monotonic: 50 },
+      { monotonic: 50 },
     );
     expect(proof.deadline).toBe(30050);
     expect(proof.claims).toEqual(fixture.claims);

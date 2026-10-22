@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const sockets = vi.hoisted(() => ({ io: vi.fn(), sockets: [] as any[] }));
 vi.mock('socket.io-client', () => ({ io: sockets.io }));
 import {
@@ -11,6 +11,7 @@ const authVersion = '22222222-2222-4222-8222-222222222222';
 const target = '33333333-3333-4333-8333-333333333333';
 const sessionId = '44444444-4444-4444-8444-444444444444';
 const token = `header.${btoa(JSON.stringify({ userId: 2, sid, authVersion, exp: Math.floor(Date.now() / 1000) + 3600 }))}.signature`;
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
   vi.clearAllMocks();
   sockets.sockets = [];
@@ -76,6 +77,24 @@ function connecting(instanceId: string) {
   };
 }
 describe('生产远控信令适配器', () => {
+  it.each([-86_400_000, 86_400_000])('本机时钟偏差 %i 毫秒仍接受当前连接，服务器结束事件仍会关闭', async (offset) => {
+    const serverNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(serverNow + offset);
+    const event = vi.fn();
+    const adapter = new SocketRemoteControllerAdapter(token, 'web', event);
+    const pending = adapter.request({ deviceCode: '123456789', temporaryPassword: 'abcdefgh23' }, 'control');
+    await Promise.resolve();
+    const socket = sockets.sockets[0];
+    socket.ack({ ok: true, sessionId, revision: 0, state: 'pending', targetDeviceId: target, canHostControl: true });
+    await pending;
+    const payload = { ...connecting(socket.options.auth.controllerInstanceId), hardDeadline: serverNow + 60000 };
+    socket.receive('remote:connecting', payload);
+    expect(event).toHaveBeenCalledWith({ type: 'connecting', value: payload });
+    socket.receive('remote:ended', { sessionId });
+    expect(event).toHaveBeenCalledWith({ type: 'ended', reason: 'REMOTE_SESSION_ENDED' });
+    expect(socket.disconnect).toHaveBeenCalled();
+    expect(event.mock.calls.filter(([value]) => value.type === 'ended')).toHaveLength(1);
+  });
   it('绑定当前连接的设备证明通过后才请求协助，不改变实例标识', async () => {
     const prove = vi
       .fn()
