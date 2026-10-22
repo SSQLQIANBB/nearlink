@@ -12,7 +12,7 @@ def main():
     os.environ.clear()
     disabled_modules = str(root / "runtime/disabled-modules")
     # No registry cache or external plugin scanner. All plugins load explicitly.
-    os.environ.update(GST_REGISTRY_UPDATE="no", GST_REGISTRY_FORK="no",
+    os.environ.update(GST_REGISTRY_DISABLE="yes", GST_REGISTRY_UPDATE="no", GST_REGISTRY_FORK="no",
                       GST_PLUGIN_SCANNER_1_0="", GI_TYPELIB_PATH=str(root / "typelib"),
                       GIO_MODULE_DIR=disabled_modules, GIO_EXTRA_MODULES=disabled_modules,
                       OPENSSL_MODULES=disabled_modules,

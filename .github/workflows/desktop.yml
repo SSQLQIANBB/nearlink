@@ -78,7 +78,7 @@ jobs:
         with:
           python-version: '3.13.2'
           architecture: ${{ matrix.platform == 'macos-arm64' && 'arm64' || 'x64' }}
-      - run: python -m unittest discover -s scripts -p test_remote_control_macos_bundle.py
+      - run: python -m unittest discover -s scripts -p 'test_remote_control_*bundle.py'
       - name: Build installer with bundled engine
         env:
           TODE_ENGINE_BUILD_PYTHON: python
