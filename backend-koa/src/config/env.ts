@@ -75,6 +75,11 @@ const rawEnvSchema = z
     PRIVATE_FILES_DOMAIN: domainValue('PRIVATE_FILES_DOMAIN'),
     QINIU_ACCESS_KEY: requiredValue('QINIU_ACCESS_KEY'),
     QINIU_SECRET_KEY: requiredValue('QINIU_SECRET_KEY'),
+    MEETINGS_ASR_URL: optionalValue,
+    TENCENT_ASR_APP_ID: optionalValue,
+    TENCENT_ASR_SECRET_ID: optionalValue,
+    TENCENT_ASR_SECRET_KEY: optionalValue,
+    TENCENT_ASR_ENGINE: z.string().trim().default('16k_zh'),
   })
   .superRefine((values, context) => {
     if (values.JWT_SECRET === values.REFRESH_TOKEN_SECRET) {
@@ -126,6 +131,25 @@ const rawEnvSchema = z
           path: ['DB_AUTO_CREATE'],
           message: '生产环境禁止自动创建数据库或自动修改表结构',
         });
+      }
+    }
+
+    // 腾讯云 ASR 三项凭据：要么全填要么全空；只填部分时报配置错误。
+    const tencentFields = [
+      ['TENCENT_ASR_APP_ID', values.TENCENT_ASR_APP_ID],
+      ['TENCENT_ASR_SECRET_ID', values.TENCENT_ASR_SECRET_ID],
+      ['TENCENT_ASR_SECRET_KEY', values.TENCENT_ASR_SECRET_KEY],
+    ] as const;
+    const filledTencent = tencentFields.filter(([, v]) => v).length;
+    if (filledTencent > 0 && filledTencent !== 3) {
+      for (const [name, value] of tencentFields) {
+        if (!value) {
+          context.addIssue({
+            code: 'custom',
+            path: [name],
+            message: '腾讯云 ASR 配置必须三项全部填写或全部留空',
+          });
+        }
       }
     }
   });
@@ -182,6 +206,15 @@ export function createEnv(source: NodeJS.ProcessEnv) {
       secretKey: values.QINIU_SECRET_KEY,
       publicDomain: `https://${values.FILES_DOMAIN}`,
       privateDomain: `https://${values.PRIVATE_FILES_DOMAIN}`,
+    }),
+    meetings: Object.freeze({
+      asrUrl: values.MEETINGS_ASR_URL ?? null,
+      tencent: Object.freeze({
+        appId: values.TENCENT_ASR_APP_ID ?? '',
+        secretId: values.TENCENT_ASR_SECRET_ID ?? '',
+        secretKey: values.TENCENT_ASR_SECRET_KEY ?? '',
+        engine: values.TENCENT_ASR_ENGINE,
+      }),
     }),
     smtp,
   });

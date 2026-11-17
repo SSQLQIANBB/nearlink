@@ -290,6 +290,33 @@
               </div>
             </n-scrollbar>
           </n-tab-pane>
+
+          <!-- 会议 -->
+          <n-tab-pane
+            name="meetings"
+            tab="会议"
+            display-directive="show:lazy"
+            class="flex flex-col h-full min-h-0 pt-0"
+          >
+            <div
+              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between"
+            >
+              <span>会议</span>
+            </div>
+            <n-scrollbar class="flex-1 min-h-0">
+              <div class="p-3 space-y-3">
+                <n-button block type="primary" @click="goToMeetingMinutes">
+                  <template #icon>
+                    <i class="iconfont icon-video" aria-hidden="true"></i>
+                  </template>
+                  开始会议录音
+                </n-button>
+                <p class="text-xs text-gray-400 leading-5 px-1">
+                  独立线下录音与实时转写，无需发起通话；支持暂停和断线重连。
+                </p>
+              </div>
+            </n-scrollbar>
+          </n-tab-pane>
         </n-tabs>
         <div
           v-if="!desktop"
@@ -1031,6 +1058,11 @@ const goToProfile = () => {
 // 跳转到群组管理
 const goToGroups = () => {
   router.push('/groups');
+};
+
+// 开始会议录音
+const goToMeetingMinutes = () => {
+  router.push('/meeting-minutes');
 };
 
 // 跳转到群组聊天

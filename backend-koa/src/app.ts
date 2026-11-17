@@ -7,6 +7,7 @@ import { koaBody } from 'koa-body';
 import setupRouter from './router';
 import initialMeeting from './config/meeting';
 import { initializeRemoteControl } from './config/remoteControl';
+import { initializeMeetingMinutes } from './config/meetingMinutes';
 import sequelize, { initDatabase } from './config/database';
 import redis from './config/redis';
 import { initializeRemoteControlRuntime } from './services/initializeRemoteControlRuntime';
@@ -58,6 +59,9 @@ async function startServer() {
     const sockets = initialMeeting(httpServer);
     initializeRemoteControl(sockets);
     const remoteRuntime = initializeRemoteControlRuntime(httpServer);
+    const meetingMinutes = initializeMeetingMinutes(httpServer);
+    // 启动时等上次遗留会话标记完成，再接收新录音。
+    await meetingMinutes.markOrphanedSessions();
     let shuttingDown = false;
     const shutdown = async () => {
       if (shuttingDown) return;
@@ -66,6 +70,7 @@ async function startServer() {
       deadline.unref();
       try {
         sockets.close();
+        await meetingMinutes.close();
         await remoteRuntime.stop();
         await sequelize.close();
         await redis.quit();

@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS meeting_minutes (
+  sessionId CHAR(36) NOT NULL,
+  userId INT NOT NULL,
+  title VARCHAR(120) NOT NULL DEFAULT '',
+  source VARCHAR(16) NOT NULL DEFAULT 'offline',
+  status VARCHAR(16) NOT NULL DEFAULT 'recording',
+  sourceLanguage VARCHAR(16) NOT NULL DEFAULT '中文',
+  targetLanguage VARCHAR(16) NOT NULL DEFAULT '英语',
+  durationSeconds INT NOT NULL DEFAULT 0,
+  transcript LONGTEXT NOT NULL,
+  transcriptJson LONGTEXT NOT NULL,
+  summary LONGTEXT NULL,
+  keyPoints TEXT NULL,
+  mindmap LONGTEXT NULL,
+  endedAt DATETIME NULL DEFAULT NULL,
+  endReason VARCHAR(32) NULL DEFAULT NULL,
+  createdAt DATETIME NOT NULL,
+  updatedAt DATETIME NOT NULL,
+  PRIMARY KEY (sessionId),
+  KEY meeting_minutes_user_created (userId, createdAt),
+  KEY meeting_minutes_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

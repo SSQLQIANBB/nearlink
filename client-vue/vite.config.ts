@@ -97,7 +97,8 @@ const config = {
         changeOrigin: true,
         // rewrite: path => path.replace(/^\/sse/, '/'),
       },
-      '/meeting': {
+      // Socket.IO 使用带尾部斜杠的路径，预留 /meeting-minutes 给前端页面。
+      '^/meeting(?:-minutes)?/': {
         target: 'http://localhost:3000',
         changeOrigin: true,
         ws: true,

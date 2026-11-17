@@ -12,6 +12,7 @@
           <GlobalRemoteControl />
           <GlobalRemoteControlHost />
           <GlobalMessages />
+          <GlobalMeetingRecording />
           <DesktopReleaseCenter v-if="!isAuxiliaryWindow" />
           <DesktopTitlebar v-if="showDesktopTitlebar" />
           <div class="app-route-content"><RouterView /></div>
@@ -30,12 +31,14 @@ import { isDesktopWindow, isAuxiliaryWindow } from '@/services/desktopAuxiliaryC
 const showDesktopTitlebar = import.meta.env.VITE_DESKTOP === 'true';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '@/stores/auth';
+import { useMeetingMinutesStore } from '@/stores/meetingMinutes';
 import { useSocketStore } from '@/stores/socket';
 import GroupCallInvitations from '@/components/GroupCallInvitations.vue';
 import GlobalPrivateCall from '@/components/GlobalPrivateCall.vue';
 import GlobalRemoteControl from '@/components/GlobalRemoteControl.vue';
 import GlobalRemoteControlHost from '@/components/GlobalRemoteControlHost.vue';
 import GlobalMessages from '@/components/GlobalMessages.vue';
+import GlobalMeetingRecording from '@/components/GlobalMeetingRecording.vue';
 import { useUnreadStore } from '@/stores/unread';
 import { useNotificationSettingsStore } from '@/stores/notificationSettings';
 import { useRemoteControlStore } from '@/stores/remoteControl';
@@ -44,10 +47,17 @@ import { appTheme } from '@/theme';
 import { closeDesktopDialogs } from '@/services/desktopDialogWindows';
 
 const authStore = useAuthStore();
+const meetingMinutes = useMeetingMinutesStore();
 const { token, currentUser } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const notificationSettings = useNotificationSettingsStore();
 const remoteControl = useRemoteControlStore();
+watch(
+  [() => authStore.authGeneration, () => currentUser.value?.id],
+  () => void meetingMinutes.dispose(),
+  { flush: 'sync' },
+);
+onUnmounted(() => void meetingMinutes.dispose());
 watch(
   () => authStore.loggingOut,
   (value) => {
