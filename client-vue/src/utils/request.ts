@@ -217,8 +217,8 @@ export async function request<T = any>(url: string, options: RequestOptions = {}
 
 // 便捷方法
 export const http = {
-  get: <T = any>(url: string) => request<T>(url, { method: 'GET' }),
-  post: <T = any>(url: string, body?: any) => request<T>(url, { method: 'POST', body }),
-  put: <T = any>(url: string, body?: any) => request<T>(url, { method: 'PUT', body }),
-  delete: <T = any>(url: string) => request<T>(url, { method: 'DELETE' }),
+  get: <T = any>(url: string, signal?: AbortSignal) => request<T>(url, { method: 'GET', signal }),
+  post: <T = any>(url: string, body?: any, signal?: AbortSignal) => request<T>(url, { method: 'POST', body, signal }),
+  put: <T = any>(url: string, body?: any, signal?: AbortSignal) => request<T>(url, { method: 'PUT', body, signal }),
+  delete: <T = any>(url: string, signal?: AbortSignal) => request<T>(url, { method: 'DELETE', signal }),
 };
