@@ -18,6 +18,7 @@ type QiniuStorageConfig = {
 };
 
 type QiniuResponse = {
+  resp?: { statusCode?: number };
   data?: { error?: string };
   ok(): boolean;
 };
@@ -156,7 +157,8 @@ export class QiniuStorageService {
       this.getBucket(reference.scope),
       reference.key,
     );
-    if (!response.ok()) {
+    // 删除补偿可能在对象已删、数据库提交前中断；七牛 612 表示目标已不存在。
+    if (!response.ok() && response.resp?.statusCode !== 612) {
       throw new Error(response.data?.error || '七牛云文件删除失败');
     }
   }
