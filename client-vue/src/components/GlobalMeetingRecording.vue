@@ -150,9 +150,11 @@ function expand() {
       class="float-end"
       :loading="isStopping"
       :disabled="!canEnd"
+      :aria-busy="isStopping"
+      :aria-label="isStopping ? '正在结束录音' : undefined"
       @click="confirmVisible = true"
     >
-      {{ needsEndRetry ? '重试' : '结束' }}
+      <template v-if="!isStopping">{{ needsEndRetry ? '重试' : '结束' }}</template>
     </NButton>
 
     <span class="float-divider"></span>
