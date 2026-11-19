@@ -197,3 +197,5 @@ interface TranscriptSegment {
 - 数据库原子状态约束音频重试、删除与纪要生成；删除先标记 deleting 并从列表隐藏，云端和本地均清理成功才删除记录。删除或本地清理失败保留任务，后台每分钟继续处理；七牛 612 按已删除处理。
 - 新增迁移 `20261118-meeting-audio-recovery.up.sql`（audioSize/audioRetryCount/audioRetryAt），与音频字段迁移一起执行。生产暂存目录必须挂载持久化卷。
 - 验收待合入 master 前统一执行：真实麦克风/通话双向声音、静音与拔插、刷新与多标签、暂停后关闭、进程中断各阶段、七牛失败重试与删除补偿、私有签名过期和长音频 Range 拖动。
+
+- ASR 暂存脚本已按 sherpa-onnx v1.10.42 的 `from_transducer / is_ready / decode_stream / get_result / input_finished` 调整，端点切句和时间戳基于累计真实输入样本。参考：[锁定版本 API](https://github.com/k2-fsa/sherpa-onnx/blob/v1.10.42/sherpa-onnx/python/sherpa_onnx/online_recognizer.py)、[官方流式示例](https://github.com/k2-fsa/sherpa-onnx/blob/v1.10.42/python-api-examples/online-decode-files.py)。模型下载改为[官方列出的双语 Zipformer](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/zipformer-transducer-models.html)。尚未部署或验证真实识别效果。
