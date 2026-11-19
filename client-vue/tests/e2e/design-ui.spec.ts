@@ -341,6 +341,7 @@ async function prepare(page: Page) {
 for (const width of [1440, 375]) {
   test(`设计稿布局与邀请选择 ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, socket => socket.close());
     await page.goto('/login');
     await expect(page.locator('.login-card')).toBeVisible();
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('login.png') });
@@ -348,16 +349,15 @@ for (const width of [1440, 375]) {
     await page.goto('/remote');
     await expect(page.getByText('开启高效远程协作')).toBeVisible();
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('empty.png') });
-    await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
     await expect(page.locator('.contact-item').first()).toBeVisible();
-    if (width < 768) {
-      await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('drawer.png') });
-      await page.locator('.sidebar-backdrop').click({ position: { x: width - 5, y: 400 } });
-      await expect(page.locator('.sidebar-backdrop')).toHaveCount(0);
-      await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
-    }
     await page.locator('.contact-item').first().click();
     await expect(page.getByText('一起开始远程协作吧')).toBeVisible();
+    if (width < 768) {
+      await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
+      await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('drawer.png') });
+      await page.getByRole('button', { name: '关闭列表', exact: true }).click();
+      await expect(page.locator('.sidebar-backdrop')).toHaveCount(0);
+    }
     await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('chat.png') });
     const editor = page.getByRole('textbox', { name: '消息', exact: true });
     await expect(editor).toBeVisible();
@@ -896,6 +896,7 @@ for (const chat of ['private', 'group']) {
 }
 
 test('切换联系人时旧请求不结束新会话加载', async ({ page }) => {
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, socket => socket.close());
   await prepare(page);
   const requests: Array<import('@playwright/test').Route> = [];
   await page.route('**/api/messages/private?*', (route) => {
