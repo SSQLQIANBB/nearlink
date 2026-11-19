@@ -1,3 +1,5 @@
+import { RecordingDraftStore } from '@/services/meetingMinutes/recordingDraftStore';
+import { discardMeeting, getMeeting, type MeetingTranscriptItem } from '@/api/meeting';
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import {
@@ -35,9 +37,19 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
   const pendingChunks = ref(0);
   const inFlightChunks = ref(0);
   const volume = ref(0);
-  const waveList = ref<number[]>([]);
   const transcriptList = ref<TranscriptEntry[]>([]);
 
+  const source = ref<'offline' | 'call'>('offline');
+  const ownerCallId = ref('');
+  let callStreams: (() => MediaStream[]) | undefined;
+  // 混音没有可信成员归属，匿名标签仅在当前会话内稳定编号。
+  const speakerNames = new Map<string, string>();
+  function resolveSpeakerName(speakerId: string | null): string {
+    if (!speakerId) return '发言人';
+    if (!speakerNames.has(speakerId)) speakerNames.set(speakerId, `发言人${speakerNames.size + 1}`);
+    return speakerNames.get(speakerId)!;
+  }
+  let pendingStart: Promise<RecordingSnapshot | null> | null = null;
   let manager: RecordingManager | null = null;
   let disposing: Promise<void> | null = null;
 
@@ -76,12 +88,18 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
   function ensureManager(): RecordingManager {
     if (manager) return manager;
     manager = new RecordingManager({
+      drafts: new RecordingDraftStore(auth.currentUser!.id),
+      discardMeeting,
+      context: { source: source.value, callId: ownerCallId.value || undefined },
+      detectSilentInput: source.value === 'offline',
       createAudio: (handlers) =>
         new BrowserAudioRecorder({
+          getStreams: callStreams,
           onChunk: handlers.onChunk,
           onVolume: (data) => {
-            volume.value = data.volume;
-            waveList.value = data.waveList;
+            if (phase.value === PHASE.RECORDING) {
+              volume.value = data.volume;
+            }
             handlers.onVolume(data);
           },
           onFault: handlers.onFault,
@@ -110,33 +128,88 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
     lastAcceptedAudioIndex.value = snapshot.lastAcceptedAudioIndex;
     pendingChunks.value = snapshot.pendingChunks;
     inFlightChunks.value = snapshot.inFlightChunks;
-    if (snapshot.phase === PHASE.IDLE || snapshot.phase === PHASE.ENDED) {
+    if (snapshot.phase !== PHASE.RECORDING) {
       volume.value = 0;
-      waveList.value = [];
     }
   }
 
   function handleTranscript(segments: TranscriptSegment[]) {
     for (const segment of segments) {
-      transcriptList.value = appendTranscriptSegment(
+      const entry = appendTranscriptSegment(
         transcriptList.value,
         segment,
         seconds.value,
       );
+
+      transcriptList.value = entry;
     }
   }
 
-  /** 开始录音；重复点击复用同一次 start。失败时返回 null。 */
-  async function start(): Promise<RecordingSnapshot | null> {
-    if (!auth.token || !auth.currentUser || auth.loggingOut || disposing) return null;
-    const m = ensureManager();
+  function applyFinalTranscript(session: string, segments: MeetingTranscriptItem[]) {
+    if (sessionId.value !== session || phase.value !== PHASE.ENDED) return;
     transcriptList.value = [];
-    issue.value = null;
-    try {
-      return await m.start();
-    } catch {
-      return null;
+    speakerNames.clear();
+    handleTranscript(segments.map(segment => ({ ...segment, isFinal: true })));
+  }
+
+  function start(): Promise<RecordingSnapshot | null> {
+    return begin('offline');
+  }
+
+  function startCall(callId: string, getStreams: () => MediaStream[]): Promise<RecordingSnapshot | null> {
+    return begin('call', callId, getStreams);
+  }
+
+  function begin(kind: 'offline' | 'call', callId = '', getStreams?: () => MediaStream[]): Promise<RecordingSnapshot | null> {
+    if (pendingStart || isActive.value) {
+      if (source.value === kind && ownerCallId.value === callId) return pendingStart ?? Promise.resolve(manager!.getState());
+      issue.value = { type: 'INVALID_OPERATION', message: '已有其他录音进行中', suggestion: '请先结束已有录音，再开启本次会议纪要' };
+      return Promise.resolve(null);
     }
+    if (!auth.token || !auth.currentUser || auth.loggingOut || disposing) return Promise.resolve(null);
+    const userId = auth.currentUser.id;
+    source.value = kind;
+    ownerCallId.value = callId;
+    const task = Promise.resolve().then(async () => {
+      if (manager) { await manager.dispose(); manager = null; }
+      if (pendingStart !== task || disposing || auth.loggingOut || auth.currentUser?.id !== userId || !auth.token) return null;
+      callStreams = getStreams;
+      transcriptList.value = [];
+      speakerNames.clear();
+      issue.value = null;
+      try { return await ensureManager().start(); } catch { return null; }
+    }).finally(() => { if (pendingStart === task) pendingStart = null; });
+    pendingStart = task;
+    return task;
+  }
+
+  async function stopCall(callId: string) {
+    if (source.value !== 'call' || ownerCallId.value !== callId) return false;
+    const starting = pendingStart;
+    if (starting) await starting;
+    if (source.value !== 'call' || ownerCallId.value !== callId) return false;
+    // 保留结束快照；不在 await 后 dispose 全局 store，避免清理另一场刚启动的录音。
+    return stop();
+  }
+
+  async function restore(session: string, kind: 'offline' | 'call' = 'offline') {
+    if (isActive.value || pendingStart || disposing || !auth.currentUser) return false;
+    const userId = auth.currentUser.id;
+    source.value = kind;
+    ownerCallId.value = '';
+    const task = Promise.resolve().then(async () => {
+      if (manager) { await manager.dispose(); manager = null; }
+      callStreams = undefined;
+      try {
+        const { meeting } = await getMeeting(session);
+        if (pendingStart !== task || disposing || auth.loggingOut || auth.currentUser?.id !== userId) return null;
+        transcriptList.value = [];
+        handleTranscript(meeting.transcriptJson.map(segment => ({ ...segment, isFinal: true })));
+        return await ensureManager().restore(session);
+      } catch { return null; }
+    }).finally(() => { if (pendingStart === task) pendingStart = null; });
+    pendingStart = task;
+    return !!await task;
   }
 
   async function pause() {
@@ -151,29 +224,34 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
     const result = await manager?.stop('user');
     if (result && result.phase === PHASE.ENDED) {
       volume.value = 0;
-      waveList.value = [];
     }
     return result;
   }
 
-  /** 本地放弃（断线后放弃恢复）：释放资源，服务端断线期限后收尾保存。 */
   async function cancel() {
-    const result = await manager?.cancelReconnect();
-    if (result) {
+    const result = await manager?.discard();
+    if (result && result.reason === 'discard') {
       volume.value = 0;
-      waveList.value = [];
       transcriptList.value = [];
       sessionId.value = '';
+      return true;
     }
-    return result;
+    return false;
+  }
+
+  async function discardDraft(draftSessionId: string) {
+    const drafts = new RecordingDraftStore(auth.currentUser!.id);
+    await discardMeeting(draftSessionId);
+    await drafts.remove(draftSessionId).catch(error => console.warn('meeting_draft_cleanup_failed', error));
   }
 
   /** 统一销毁出口：等待 Manager 清理后再清空引用；可重复调用。 */
   function dispose(): Promise<void> {
     if (disposing) return disposing;
-    const m = manager;
-    if (!m) return Promise.resolve();
-    disposing = m.dispose().finally(() => {
+    const current = manager;
+    pendingStart = null;
+    // 不等待用户尚未响应的麦克风授权；Manager 立即使进行中的输入准备失效。
+    disposing = Promise.resolve(current?.dispose()).finally(() => {
       manager = null;
       reset();
       disposing = null;
@@ -187,13 +265,16 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
     transcriptList.value = [];
     seconds.value = 0;
     volume.value = 0;
-    waveList.value = [];
     issue.value = null;
     reason.value = '';
     lastAcceptedAudioIndex.value = -1;
     pendingChunks.value = 0;
     inFlightChunks.value = 0;
     phase.value = PHASE.IDLE;
+    speakerNames.clear();
+    source.value = 'offline';
+    ownerCallId.value = '';
+    callStreams = undefined;
   }
 
   return {
@@ -207,8 +288,8 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
     pendingChunks,
     inFlightChunks,
     volume,
-    waveList,
     transcriptList,
+    applyFinalTranscript,
     isRecording,
     isActive,
     start,
@@ -216,6 +297,13 @@ export const useMeetingMinutesStore = defineStore('meetingMinutes', () => {
     resume,
     stop,
     cancel,
+    discardDraft,
     dispose,
+    source,
+    ownerCallId,
+    startCall,
+    restore,
+    stopCall,
+    resolveSpeakerName,
   };
 });

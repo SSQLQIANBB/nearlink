@@ -15,7 +15,7 @@ import { PHASE } from '@/services/meetingMinutes/constants';
 /** 可控的 mock 音频层。 */
 function createMockAudio(handlers: {
   onChunk: (c: RawAudioChunk) => void;
-  onVolume: (d: { volume: number; waveList: number[] }) => void;
+  onVolume: (d: { volume: number }) => void;
   onFault: (e: RecordingError) => void;
 }): MinutesAudioInput & {
   emitChunk: (partial?: Partial<RawAudioChunk>) => void;
@@ -188,6 +188,7 @@ function createMockSocket(handlers: {
 
 function createManager(opts: {
   socketOverrides?: Partial<SocketBehavior>;
+  discardMeeting?: (sessionId: string) => Promise<unknown>;
   limits?: {
     inFlight?: number;
     pendingMs?: number;
@@ -202,6 +203,7 @@ function createManager(opts: {
   let audio!: ReturnType<typeof createMockAudio>;
   const sockets: Array<ReturnType<typeof createMockSocket>> = [];
   const manager = new RecordingManager({
+    discardMeeting: opts.discardMeeting ?? (async () => undefined),
     createAudio: (handlers) => {
       audio = createMockAudio(handlers);
       return audio;
@@ -342,7 +344,7 @@ describe('RecordingManager（新协议）', () => {
     const result = await manager.stop('user');
     expect(result && result.phase).toBe(PHASE.ENDED);
     const end = getSocket().requests.find((r) => r.event === 'minutes_end');
-    expect(end?.payload).toEqual({ sessionId: 'server-session-1', lastAudioIndex: 2 });
+    expect(end?.payload).toEqual({ sessionId: 'server-session-1', lastAudioIndex: 2, tailComplete: true });
     expect(getAudio().dispose).toHaveBeenCalled();
   });
 
@@ -398,11 +400,17 @@ describe('RecordingManager（新协议）', () => {
     expect(manager.getState().phase).toBe(PHASE.RECORDING);
   });
 
-  it('cancelReconnect 本地放弃：丢弃未确认分片，不发 end', async () => {
-    const { manager, getSocket } = createManager();
+  it('放弃等待服务端确认，失败保留暂停状态，重试后清空录音', async () => {
+    const discardMeeting = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    const { manager, getSocket } = createManager({ discardMeeting });
     await manager.start();
-    await manager.cancelReconnect();
-    expect(manager.getState().phase).toBe(PHASE.ENDED);
+    await manager.pause();
+    await expect(manager.discard()).rejects.toThrow('offline');
+    expect(manager.getState()).toMatchObject({ phase: PHASE.PAUSED, sessionId: 'server-session-1' });
+    expect(getSocket().isOpen).toBe(true);
+    await manager.discard();
+    expect(discardMeeting).toHaveBeenNthCalledWith(2, 'server-session-1');
+    expect(manager.getState()).toMatchObject({ phase: PHASE.IDLE, sessionId: '', seconds: 0 });
     expect(manager.getState().reason).toBe('discard');
     expect(getSocket().requests.some((r) => r.event === 'minutes_end')).toBe(false);
   });

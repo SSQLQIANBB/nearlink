@@ -95,6 +95,30 @@
           </template>
         </n-button>
 
+        <!-- 会议纪要开关 -->
+        <n-tooltip>
+          <template #trigger>
+            <n-button
+              circle
+              :type="minutesEnabled ? 'primary' : 'default'"
+              :loading="minutesPanelVisible && !minutesEnabled"
+              aria-label="会议纪要"
+              @click="toggleMinutes"
+            >
+              <template #icon>
+                <n-icon>
+                  <i
+                    class="iconfont"
+                    :class="minutesEnabled ? 'icon-video' : 'icon-microphone'"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+          {{ minutesEnabled ? '关闭会议纪要' : '开启会议纪要' }}
+        </n-tooltip>
+
         <!-- 退出通话 -->
         <n-button
           type="error"
@@ -114,7 +138,16 @@
     </header>
 
     <!-- 视频区域 -->
-    <div class="flex-1 overflow-y-auto p-2 sm:p-4">
+    <div class="flex-1 overflow-hidden p-2 sm:p-4 flex gap-2 sm:gap-4 min-h-0">
+      <!-- 会议纪要面板：开启时显示在右侧 -->
+      <aside
+        v-if="minutesPanelVisible"
+        class="minutes-aside flex-shrink-0 overflow-hidden"
+      >
+        <LiveTranscriptPanel />
+      </aside>
+
+      <div class="flex-1 overflow-y-auto min-w-0">
       <div
         class="min-h-full grid gap-2 sm:gap-4 auto-rows-fr"
         :class="videoGridClass"
@@ -205,6 +238,7 @@
             </n-icon>
           </div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -304,6 +338,8 @@ import VirtualBackground from '@/components/VirtualBackground.vue';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
 import SpeakingIndicator from '@/components/SpeakingIndicator.vue';
+import LiveTranscriptPanel from '@/components/LiveTranscriptPanel.vue';
+import { useMeetingMinutesStore } from '@/stores/meetingMinutes';
 import {
   createMediaParticipantState,
   type ParticipantSnapshot,
@@ -340,6 +376,28 @@ const remotePeers = computed(() =>
 const isMicMuted = ref(false);
 const isCameraOff = ref(isAudioCall.value);
 const showMemberControl = ref(false);
+
+// 通话纪要复用现有音轨；混音以匿名说话人展示。
+const minutesStore = useMeetingMinutesStore();
+const minutesCallId = ref(crypto.randomUUID());
+const minutesEnabled = computed(() => minutesStore.source === 'call' && minutesStore.ownerCallId === minutesCallId.value && minutesStore.isActive);
+const minutesPanelVisible = ref(false);
+
+async function toggleMinutes() {
+  if (minutesEnabled.value) {
+    const result = await minutesStore.stopCall(minutesCallId.value);
+    if (result && result.phase === 'ended') minutesPanelVisible.value = false;
+    return;
+  }
+  const callId = minutesCallId.value;
+  minutesPanelVisible.value = true;
+  const snapshot = await minutesStore.startCall(callId, () => [localStream.value, ...peerRegistry.values().map(peer => peer.stream)].filter((stream): stream is MediaStream => !!stream));
+  if (callId !== minutesCallId.value) return;
+  if (!snapshot) {
+    message.error(minutesStore.issue?.message ?? '会议纪要启动失败');
+    minutesPanelVisible.value = false;
+  }
+}
 const participantUserIds = computed(() => {
   participantState.version.value;
   return participantState.userIds(groupId.value, sessionType.value);
@@ -744,6 +802,10 @@ function handleHangup() {
 function cleanupCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  // 通话结束：若会议纪要仍在录音，结束并保存到会议记录。
+  void minutesStore.stopCall(minutesCallId.value).catch(() => undefined);
+  minutesCallId.value = crypto.randomUUID();
+  minutesPanelVisible.value = false;
   currentSessionStartedAt = null;
   const ownedMedia = !!mediaClaim;
   mediaClaim?.release();
@@ -817,5 +879,14 @@ onUnmounted(() => {
 <style scoped>
 .mirror {
   transform: scaleX(-1);
+}
+.minutes-aside {
+  width: 320px;
+  max-width: 42vw;
+}
+@media (max-width: 767px) {
+  .minutes-aside {
+    display: none;
+  }
 }
 </style>

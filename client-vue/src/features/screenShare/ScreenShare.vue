@@ -127,6 +127,30 @@
           停止共享
         </n-button>
 
+        <!-- 会议纪要开关 -->
+        <n-tooltip>
+          <template #trigger>
+            <n-button
+              circle
+              :type="minutesEnabled ? 'primary' : 'default'"
+              :loading="minutesPanelVisible && !minutesEnabled"
+              aria-label="会议纪要"
+              @click="toggleMinutes"
+            >
+              <template #icon>
+                <n-icon>
+                  <i
+                    class="iconfont"
+                    :class="minutesEnabled ? 'icon-video' : 'icon-microphone'"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
+              </template>
+            </n-button>
+          </template>
+          {{ minutesEnabled ? '关闭会议纪要' : '开启会议纪要' }}
+        </n-tooltip>
+
         <!-- 退出 -->
         <n-button
           type="error"
@@ -237,6 +261,14 @@
           </div>
         </div>
       </div>
+
+      <!-- 会议纪要面板：开启时显示在屏幕区与参与者列表之间 -->
+      <aside
+        v-if="minutesPanelVisible"
+        class="minutes-aside flex-shrink-0 overflow-hidden"
+      >
+        <LiveTranscriptPanel />
+      </aside>
 
       <!-- 侧边栏 - 参与者列表 -->
       <div
@@ -355,6 +387,8 @@ import { useSocketStore } from '@/stores/socket';
 import MediaRecorder from '@/components/MediaRecorder.vue';
 import MediaVideo from '@/components/MediaVideo.vue';
 import SpeakingIndicator from '@/components/SpeakingIndicator.vue';
+import LiveTranscriptPanel from '@/components/LiveTranscriptPanel.vue';
+import { useMeetingMinutesStore } from '@/stores/meetingMinutes';
 import { containedVideoRect } from '@/services/annotationGeometry';
 import ScreenAnnotation from '@/components/ScreenAnnotation.vue';
 import { takeCapturedGroupScreen } from '@/services/screenShareLaunch';
@@ -389,6 +423,28 @@ const sharer = ref<any>(null); // 当前共享者信息
 const isMicMuted = ref(false);
 const showAnnotation = ref(false); // 是否显示标注
 const pendingInitialScreen = ref<MediaStream | null>(null);
+
+// 会议纪要开关：打开后右侧区域显示实时转写，混音以匿名说话人展示。
+const minutesStore = useMeetingMinutesStore();
+const minutesCallId = ref(crypto.randomUUID());
+const minutesEnabled = computed(() => minutesStore.source === 'call' && minutesStore.ownerCallId === minutesCallId.value && minutesStore.isActive);
+const minutesPanelVisible = ref(false);
+
+async function toggleMinutes() {
+  if (minutesEnabled.value) {
+    const result = await minutesStore.stopCall(minutesCallId.value);
+    if (result && result.phase === 'ended') minutesPanelVisible.value = false;
+    return;
+  }
+  const callId = minutesCallId.value;
+  minutesPanelVisible.value = true;
+  const snapshot = await minutesStore.startCall(callId, () => [localStream.value, remoteStream.value, ...peerRegistry.values().map(peer => peer.stream)].filter((stream): stream is MediaStream => !!stream));
+  if (callId !== minutesCallId.value) return;
+  if (!snapshot) {
+    message.error(minutesStore.issue?.message ?? '会议纪要启动失败');
+    minutesPanelVisible.value = false;
+  }
+}
 
 const localStream = ref<MediaStream | null>(null);
 const remoteStream = ref<MediaStream | null>(null);
@@ -1212,6 +1268,10 @@ function handleExit() {
 function cleanupScreenCall(endOwnedSession: boolean) {
   if (cleanedUp) return;
   cleanedUp = true;
+  // 退出屏幕共享：若会议纪要仍在录音，结束并保存到会议记录。
+  void minutesStore.stopCall(minutesCallId.value).catch(() => undefined);
+  minutesCallId.value = crypto.randomUUID();
+  minutesPanelVisible.value = false;
   mediaGeneration++;
   pendingMicrophone = null;
   currentSessionStartedAt = null;
@@ -1300,3 +1360,15 @@ onUnmounted(() => {
   cleanupScreenCall(true);
 });
 </script>
+
+<style scoped>
+.minutes-aside {
+  width: 320px;
+  max-width: 40vw;
+}
+@media (max-width: 767px) {
+  .minutes-aside {
+    display: none;
+  }
+}
+</style>

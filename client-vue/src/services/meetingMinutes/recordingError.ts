@@ -25,8 +25,11 @@ export type RecordingErrorType =
   | 'CLEANUP_FAILED'
   | 'TRANSCRIPT_INCOMPLETE'
   | 'UNSENT_AUDIO'
+  | 'AUDIO_SAVE_FAILED'
+  | 'AUDIO_SAVE_PARTIAL'
   | 'INVALID_OPERATION'
   | 'CANCELLED'
+  | 'DRAFT_FAILED'
   | 'UNKNOWN';
 
 const MESSAGES: Record<RecordingErrorType, [message: string, suggestion: string]> = {
@@ -49,8 +52,11 @@ const MESSAGES: Record<RecordingErrorType, [message: string, suggestion: string]
   END_REJECTED: ['结束失败，请重试', '录音保持暂停，可以继续或再次结束'],
   END_UNCONFIRMED: ['尚未确认录音是否结束', '请再次点击结束重试确认，确认前不能继续录音'],
   CLEANUP_FAILED: ['录音已结束，但部分资源清理失败', '请检查麦克风占用状态'],
-  TRANSCRIPT_INCOMPLETE: ['会议已保存，部分音频未完成转写', '可在会议记录中查看已确认的内容'],
+  TRANSCRIPT_INCOMPLETE: ['部分音频未完成转写', '录音保存不受影响，可在会议记录中查看已确认文字'],
+  DRAFT_FAILED: ['本地录音缓存不可用', '请保持页面打开并结束保存，避免关闭页面丢失尚未上传的音频'],
   UNSENT_AUDIO: ['服务端会话已结束，仍有音频未发送', '本次结果可能不包含未发送部分'],
+  AUDIO_SAVE_PARTIAL: ['录音未正常结束，部分音频可能缺失', '已按保存的内容保留，可在会议记录中查看'],
+  AUDIO_SAVE_FAILED: ['录音文字已保存，但音频保存失败', '可在会议记录中查看文字，音频可稍后重试'],
   INVALID_OPERATION: ['当前不能执行该操作', '请等待当前操作完成'],
   CANCELLED: ['操作已取消', ''],
   UNKNOWN: ['录音异常', '请稍后重试'],

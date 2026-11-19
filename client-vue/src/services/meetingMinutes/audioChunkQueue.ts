@@ -103,6 +103,12 @@ export class AudioChunkQueue {
     this.pendingFrames.unshift(...this.inFlight.splice(0));
   }
 
+  restore(chunks: QueuedAudioChunk[], nextIndex: number): void {
+    this.discard();
+    this.pendingFrames.push(...chunks);
+    this.nextIndex = nextIndex;
+  }
+
   /** 显式丢弃未确认分片（仅用于本地放弃）。 */
   discard(): number {
     const count = this.pendingFrames.length + this.inFlight.length;

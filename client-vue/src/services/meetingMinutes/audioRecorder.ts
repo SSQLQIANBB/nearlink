@@ -7,10 +7,10 @@ interface InputResources {
   stream?: MediaStream;
   context?: AudioContext;
   source?: MediaStreamAudioSourceNode;
-  analyser?: AnalyserNode;
   processor?: AudioWorkletNode;
-  values?: Uint8Array<ArrayBuffer>;
   disposal?: Promise<void>;
+  sources?: Map<string, MediaStreamAudioSourceNode>;
+  sourcesTimer?: ReturnType<typeof setInterval>;
 }
 
 /**
@@ -27,9 +27,10 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
     energy: number;
     isSilent: boolean;
   }) => void;
-  private readonly onVolume: (data: { volume: number; waveList: number[] }) => void;
+  private readonly onVolume: (data: { volume: number }) => void;
   private readonly onFault: (error: RecordingError) => void;
   private readonly workletMs: number;
+  private readonly getStreams?: () => MediaStream[];
 
   private input: InputResources | null = null;
   private generation = 0;
@@ -38,7 +39,6 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
   private paused = true;
   private invalid = false;
   private pauseFailure: RecordingError | null = null;
-  private frame: number | null = null;
   private permission: PermissionStatus | null = null;
   private pauseWaiter: {
     promise: Promise<void>;
@@ -48,7 +48,23 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
   } | null = null;
 
   private readonly handleDeviceChange = () => {
-    if (this.input) this.reportFault(new RecordingError('MIC_DEVICE_LOST'));
+    const input = this.input;
+    if (!input?.stream) return;
+    const tracks = input.stream.getAudioTracks();
+    if (tracks.some(track => track.readyState === 'ended') || this.permission?.state === 'denied') {
+      this.reportFault(new RecordingError('MIC_DEVICE_LOST'));
+      return;
+    }
+    const deviceId = tracks[0]?.getSettings().deviceId;
+    if (!deviceId) return;
+    void navigator.mediaDevices.enumerateDevices().then(devices => {
+      if (this.input !== input) return;
+      if (!devices.some(device => device.kind === 'audioinput' && device.deviceId === deviceId)) {
+        this.reportFault(new RecordingError('MIC_DEVICE_LOST'));
+      }
+    }).catch(() => {
+      if (this.input === input) this.reportFault(new RecordingError('MIC_DEVICE_LOST'));
+    });
   };
 
   constructor(options: {
@@ -58,11 +74,13 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
       energy: number;
       isSilent: boolean;
     }) => void;
-    onVolume: (data: { volume: number; waveList: number[] }) => void;
+    onVolume: (data: { volume: number }) => void;
     onFault: (error: RecordingError) => void;
+    getStreams?: () => MediaStream[];
     workletMs?: number;
     workletUrl?: string;
   }) {
+    this.getStreams = options.getStreams;
     this.onChunk = options.onChunk;
     this.onVolume = options.onVolume;
     this.onFault = options.onFault;
@@ -96,10 +114,10 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
     const input: InputResources = {};
     this.preparingInput = input;
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
+      if (!this.getStreams && !navigator.mediaDevices?.getUserMedia) {
         throw new RecordingError('MIC_NOT_SUPPORTED');
       }
-      input.stream = await navigator.mediaDevices.getUserMedia({
+      if (!this.getStreams) input.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: { ideal: 1 },
           echoCancellation: true,
@@ -117,10 +135,7 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
       if (!input.context.audioWorklet) throw new RecordingError('MIC_NOT_SUPPORTED');
       await input.context.audioWorklet.addModule(workletUrl);
       this.assertGeneration(generation);
-      input.source = input.context.createMediaStreamSource(input.stream);
-      input.analyser = input.context.createAnalyser();
-      input.analyser.fftSize = 256;
-      input.values = new Uint8Array(input.analyser.fftSize);
+      if (input.stream) input.source = input.context.createMediaStreamSource(input.stream);
       input.processor = new AudioWorkletNode(input.context, 'nearlink-meeting-recorder', {
         numberOfInputs: 1,
         numberOfOutputs: 0,
@@ -139,23 +154,45 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
       input.processor.onprocessorerror = () => {
         if (this.input === input) this.reportFault(new RecordingError('AUDIO_FAILED'));
       };
-      input.source.connect(input.analyser);
-      input.source.connect(input.processor);
-      input.stream.getAudioTracks().forEach((track) => {
+      if (this.getStreams) {
+        input.sources = new Map();
+        const sync = () => this.syncCallSources(input);
+        sync();
+        // 远端加入、重连与设备切换会替换音轨；这里只连接现有通话音轨，绝不获取或停止它们。
+        input.sourcesTimer = setInterval(sync, 500);
+      } else {
+        input.source!.connect(input.processor);
+      }
+      input.stream?.getAudioTracks().forEach((track) => {
         track.onended = this.handleDeviceChange;
       });
       this.input = input;
       this.invalid = false;
       this.pauseFailure = null;
       this.paused = true;
-      navigator.mediaDevices.addEventListener?.('devicechange', this.handleDeviceChange);
-      void this.watchPermission(generation);
-      this.readVolume();
+      if (!this.getStreams) {
+        navigator.mediaDevices.addEventListener?.('devicechange', this.handleDeviceChange);
+        void this.watchPermission(generation);
+      }
     } catch (error) {
       await this.releaseInput(input);
       throw normalizeRecordingError(error, 'AUDIO_FAILED');
     } finally {
       if (this.preparingInput === input) this.preparingInput = null;
+    }
+  }
+
+  private syncCallSources(input: InputResources): void {
+    const tracks = new Map(this.getStreams!().flatMap(stream => stream.getAudioTracks())
+      .filter(track => track.readyState === 'live').map(track => [track.id, track]));
+    for (const [id, source] of input.sources!) {
+      if (!tracks.has(id)) { source.disconnect(); input.sources!.delete(id); }
+    }
+    for (const [id, track] of tracks) {
+      if (input.sources!.has(id)) continue;
+      const source = input.context!.createMediaStreamSource(new MediaStream([track]));
+      source.connect(input.processor!);
+      input.sources!.set(id, source);
     }
   }
 
@@ -183,10 +220,16 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
       return;
     }
     if (message?.type !== 'chunk' || !(message.buffer instanceof ArrayBuffer)) return;
+    const energy = message.energy ?? 0;
+    if (!this.paused) {
+      this.onVolume({
+        volume: Math.min(Math.sqrt(energy) * 5, 1),
+      });
+    }
     this.onChunk({
       pcm: message.buffer,
       sampleCount: message.sampleCount ?? 0,
-      energy: message.energy ?? 0,
+      energy,
       // 整片全零（设备无信号）才算静音；轻噪音/正常停顿不计入。
       isSilent:
         message.buffer.byteLength > 0 &&
@@ -261,24 +304,6 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
     this.onFault(error);
   }
 
-  private readVolume(): void {
-    const input = this.input;
-    if (!input) return;
-    input.analyser!.getByteTimeDomainData(input.values!);
-    const energy = input.values!.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0);
-    const volume = this.paused ? 0 : Math.min(Math.sqrt(energy / input.values!.length) * 5, 1);
-    const time = Date.now() / 120;
-    this.onVolume({
-      volume,
-      waveList: Array.from({ length: 58 }, (_, index) =>
-        volume < 0.03
-          ? 4
-          : Math.round(4 + volume * (6 + Math.abs(Math.sin(index * 0.72 + time)) * 14)),
-      ),
-    });
-    this.frame = requestAnimationFrame(() => this.readVolume());
-  }
-
   private releaseInput(input: InputResources): Promise<void> {
     if (input.disposal) return input.disposal;
     if (!input.stream && !input.context) return Promise.resolve();
@@ -292,8 +317,9 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
       input.processor.onprocessorerror = null;
       input.processor.disconnect();
     }
+    if (input.sourcesTimer) clearInterval(input.sourcesTimer);
+    input.sources?.forEach(source => source.disconnect());
     input.source?.disconnect();
-    input.analyser?.disconnect();
     input.stream?.getTracks().forEach((track) => {
       track.onended = null;
       track.stop();
@@ -306,10 +332,6 @@ export class BrowserAudioRecorder implements MinutesAudioInput {
     this.preparing = null;
     this.paused = true;
     this.settlePause(new RecordingError('CANCELLED'));
-    if (this.frame !== null) {
-      cancelAnimationFrame(this.frame);
-      this.frame = null;
-    }
     navigator.mediaDevices?.removeEventListener?.('devicechange', this.handleDeviceChange);
     if (this.permission) this.permission.onchange = null;
     this.permission = null;
