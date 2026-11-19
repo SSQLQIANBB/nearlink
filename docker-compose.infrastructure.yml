@@ -44,9 +44,33 @@ services:
         aliases:
           - shared-redis
 
+  # 会议实时语音识别（sherpa-onnx，唯一引擎）。使用独立 Compose profile，
+  # 普通基础设施启动不会自动拉起：
+  #   docker compose -f docker-compose.infrastructure.yml --profile asr up -d asr
+  # 后端连接地址填容器网络内的 ws://asr:10095（见 backend-koa/.env.local 的 MEETINGS_ASR_URL）。
+  # 内部端口固定 10095；宿主端口独立配置（ASR_HOST_PORT），默认 127.0.0.1 不对外公开，
+  # 本地调试需要时再放开绑定地址。
+  asr:
+    image: ${ASR_IMAGE:-nearlink-asr}:${ASR_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    profiles: ["asr"]
+    environment:
+      ASR_HOST: 0.0.0.0
+      ASR_PORT: 10095
+      ASR_NUM_THREADS: ${ASR_NUM_THREADS:-2}
+    ports:
+      - '127.0.0.1:${ASR_HOST_PORT:-10095}:10095'
+    volumes:
+      - asr-models:/models
+    networks:
+      shared-services:
+        aliases:
+          - asr
+
 volumes:
   shared-mysql-data:
   shared-redis-data:
+  asr-models:
 
 networks:
   shared-services:
