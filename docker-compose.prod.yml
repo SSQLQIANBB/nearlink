@@ -21,6 +21,8 @@ services:
       start_period: 30s
     volumes:
       - todesk-uploads:/app/backend-koa/uploads:ro
+      # 会议录音 PCM 暂存：持久化数据卷，不可公开访问（对应 MEETINGS_AUDIO_STAGING_DIR）。
+      - todesk-audio-staging:/data/meeting-audio
     networks:
       - todesk-internal
       - shared-services
@@ -86,6 +88,7 @@ services:
 
 volumes:
   todesk-uploads:
+  todesk-audio-staging:
   caddy-data:
   caddy-config:
   cert-sync-state:

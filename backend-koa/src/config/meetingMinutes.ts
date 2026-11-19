@@ -38,7 +38,7 @@ const attachSchema = z
   .object({ sessionId: z.string().uuid() })
   .strict();
 const endSchema = z
-  .object({ sessionId: z.string().uuid(), lastAudioIndex: z.number().int().min(-1) })
+  .object({ sessionId: z.string().uuid(), lastAudioIndex: z.number().int().min(-1), tailComplete: z.boolean().default(true) })
   .strict();
 const audioMetaSchema = z
   .object({ sessionId: z.string().uuid(), audioIndex: z.number().int().min(0) })
@@ -46,13 +46,15 @@ const audioMetaSchema = z
 
 type AuthedSocket = Socket & { data: { user?: AuthenticatedSessionPayload } };
 
+export const meetingRecordingService = new MeetingRecordingService({ asr: sherpaAsrClient });
+
 export function initializeMeetingMinutes(httpServer: Server) {
   const io = new ServerType(httpServer, {
     path: '/meeting-minutes',
     // 二进制音频固定走 WebSocket transport，避免 polling 降级产生 Base64。
     transports: ['websocket'],
   });
-  const service = new MeetingRecordingService({ asr: sherpaAsrClient });
+  const service = meetingRecordingService;
 
   // 握手认证：token 放在 Socket.IO auth 中，连接 Promise 在认证完成后才成功。
   io.use(async (socket: AuthedSocket, next) => {
@@ -90,11 +92,11 @@ export function initializeMeetingMinutes(httpServer: Server) {
 
     socket.on('minutes_start', async (raw: unknown, ack: (result: unknown) => void) => {
       try {
-        if (typeof raw === 'object' && raw !== null && Object.keys(raw as object).length > 0) {
-          ack({ ok: false, error: 'BAD_REQUEST' });
-          return;
+        const parsed = z.object({ source: z.enum(['offline', 'call']).default('offline'), callId: z.string().min(1).max(128).optional() }).strict().safeParse(raw ?? {});
+        if (!parsed.success || (parsed.data.source === 'call' && !parsed.data.callId)) {
+          ack({ ok: false, error: 'BAD_REQUEST' }); return;
         }
-        const result = await service.start(socket, user);
+        const result = await service.start(socket, user, parsed.data);
         if (result.ok === false) {
           ack({ ok: false, error: result.error });
           return;
@@ -107,7 +109,8 @@ export function initializeMeetingMinutes(httpServer: Server) {
             sampleRate: AUDIO_FORMAT.sampleRate,
             channels: AUDIO_FORMAT.channels,
           },
-          capabilities: START_CAPABILITIES,
+          capabilities: { ...START_CAPABILITIES, transcription: result.transcriptionAvailable },
+          transcriptionAvailable: result.transcriptionAvailable,
         });
       } catch (error) {
         console.error('meeting_minutes_start_failed', { type: (error as Error)?.message });
@@ -136,7 +139,8 @@ export function initializeMeetingMinutes(httpServer: Server) {
         ack({ ok: false, error: 'BAD_REQUEST' });
         return;
       }
-      ack(await service.pause(socket, user, parsed.data.sessionId));
+      try { ack(await service.pause(socket, user, parsed.data.sessionId)); }
+      catch (error) { console.error('meeting_pause_failed', error); ack({ ok: false, error: 'PERSIST_FAILED' }); }
     });
 
     socket.on('minutes_resume', async (raw: unknown, ack: (result: unknown) => void) => {
@@ -145,7 +149,8 @@ export function initializeMeetingMinutes(httpServer: Server) {
         ack({ ok: false, error: 'BAD_REQUEST' });
         return;
       }
-      ack(await service.resume(socket, user, parsed.data.sessionId));
+      try { ack(await service.resume(socket, user, parsed.data.sessionId)); }
+      catch (error) { console.error('meeting_resume_failed', error); ack({ ok: false, error: 'PERSIST_FAILED' }); }
     });
 
     socket.on('minutes_end', async (raw: unknown, ack: (result: unknown) => void) => {
@@ -155,7 +160,7 @@ export function initializeMeetingMinutes(httpServer: Server) {
         return;
       }
       try {
-        ack(await service.end(socket, user, parsed.data.sessionId, parsed.data.lastAudioIndex));
+        ack(await service.end(socket, user, parsed.data.sessionId, parsed.data.lastAudioIndex, parsed.data.tailComplete));
       } catch (error) {
         console.error('meeting_minutes_end_failed', { type: (error as Error)?.message });
         ack({ ok: false, error: 'INTERNAL' });
@@ -172,7 +177,7 @@ export function initializeMeetingMinutes(httpServer: Server) {
           return;
         }
         try {
-          const result = service.onAudio(socket, user, parsed.data.sessionId, parsed.data.audioIndex, pcm);
+          const result = await service.onAudio(socket, user, parsed.data.sessionId, parsed.data.audioIndex, pcm);
           ack(result);
         } catch (error) {
           console.error('meeting_minutes_audio_failed', { type: (error as Error)?.message });

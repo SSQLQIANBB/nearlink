@@ -130,21 +130,25 @@ export class QiniuStorageService {
     };
   }
 
-  resolveUrl(value: string) {
+  resolveUrl(value: string, downloadName?: string) {
     const reference = parseStorageReference(value);
     if (!reference) return value;
+    // 七牛 SDK 会将 attname 一同签名，浏览器可直接下载私有对象。
+    const key = downloadName
+      ? `${reference.key}?attname=${encodeURIComponent(downloadName)}`
+      : reference.key;
 
     if (reference.scope === 'public') {
       return this.dependencies.bucketManager.publicDownloadUrl(
         this.config.publicDomain,
-        reference.key,
+        key,
       );
     }
 
     const deadline = Math.floor(Date.now() / 1000) + this.config.signedUrlExpires;
     return this.dependencies.bucketManager.privateDownloadUrl(
       this.config.privateDomain,
-      reference.key,
+      key,
       deadline,
     );
   }

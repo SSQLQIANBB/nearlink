@@ -5,6 +5,7 @@ import messageRouter from './message';
 import invitationRouter from './invitation';
 import fileRouter from './file';
 import remoteControlRouter from './remoteControl';
+import meetingRouter from './meeting';
 
 function setupRouter(app) {
   app.use(desktopReleaseRouter.routes()).use(desktopReleaseRouter.allowedMethods());
@@ -15,6 +16,7 @@ function setupRouter(app) {
   app.use(invitationRouter.routes()).use(invitationRouter.allowedMethods());
   app.use(fileRouter.routes()).use(fileRouter.allowedMethods());
   app.use(remoteControlRouter.routes()).use(remoteControlRouter.allowedMethods());
+  app.use(meetingRouter.routes()).use(meetingRouter.allowedMethods());
 }
 
 export default setupRouter;

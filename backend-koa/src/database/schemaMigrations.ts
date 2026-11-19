@@ -10,6 +10,8 @@ const migrationFiles = [
   '20261016-remote-device-code.up.sql',
   '20261116-meeting-minutes.up.sql',
   '20261117-meeting-summary-status.up.sql',
+  '20261118-meeting-audio.up.sql',
+  '20261118-meeting-audio-recovery.up.sql',
 ];
 const requiredColumns: Record<string, string[]> = {
   users: ['authVersion'],
@@ -97,6 +99,12 @@ const requiredColumns: Record<string, string[]> = {
     'summaryError',
     'endedAt',
     'endReason',
+    'audioSize', 'audioRetryCount',
+    'audioRetryAt',
+    'audioStatus',
+    'audioStorageRef',
+    'audioError',
+    'audioPausedAttachDeadline',
     'createdAt',
     'updatedAt',
   ],

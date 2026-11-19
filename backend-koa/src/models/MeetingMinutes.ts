@@ -39,6 +39,22 @@ export class MeetingMinutes extends Model<
   declare summaryError: string;
   declare endedAt: CreationOptional<Date | null>;
   declare endReason: CreationOptional<string | null>;
+  /**
+   * 音频状态（与录音状态、纪要状态独立）：
+   * recording 写入中 / pending 停止采集待保存（含重启续传）/ uploading 上传中 /
+   * ready 已上传七牛私有空间 / partial 尾片不完整按已有保存 / failed 保存失败 /
+   * missing 无音频（旧版本历史数据）。
+   */
+  declare audioStatus: 'recording' | 'pending' | 'uploading' | 'ready' | 'partial' | 'failed' | 'missing' | 'deleting';
+  /** 稳定七牛对象引用（qiniu://private/<key>）；不保存短期签名 URL。 */
+  declare audioStorageRef: CreationOptional<string | null>;
+  /** 音频保存失败原因（错误类别，非完整堆栈）。 */
+  declare audioError: CreationOptional<string | null>;
+  /** 暂停/断线后的恢复截止时间（手动暂停 3 小时，普通断线 5 分钟）。 */
+  declare audioPausedAttachDeadline: CreationOptional<Date | null>;
+  declare audioSize: CreationOptional<number | null>;
+  declare audioRetryCount: CreationOptional<number>;
+  declare audioRetryAt: CreationOptional<Date | null>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
@@ -61,6 +77,13 @@ MeetingMinutes.init(
     summaryError: { type: DataTypes.STRING(64), allowNull: true, defaultValue: null },
     endedAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
     endReason: { type: DataTypes.STRING(32), allowNull: true, defaultValue: null },
+    audioStatus: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'recording' },
+    audioStorageRef: { type: DataTypes.STRING(255), allowNull: true, defaultValue: null },
+    audioError: { type: DataTypes.STRING(64), allowNull: true, defaultValue: null },
+    audioPausedAttachDeadline: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
+    audioSize: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true, defaultValue: null },
+    audioRetryCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    audioRetryAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
   },

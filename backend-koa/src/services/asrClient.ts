@@ -21,6 +21,12 @@ import { createHmac, randomInt, randomUUID } from 'crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { env } from '../config/env';
 
+export interface AsrTimedWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
 /** 统一转写片段（协议见 docs/MEETING_RECORDING_PROTOCOL.md）。 */
 export interface AsrTranscriptSegment {
   segmentId: number;
@@ -29,6 +35,7 @@ export interface AsrTranscriptSegment {
   startMs: number;
   endMs: number | null;
   speakerId: string | null;
+  words?: AsrTimedWord[];
 }
 
 export interface AsrSessionHandle {
@@ -64,6 +71,10 @@ function getWebSocketCtor(): typeof WebSocket | undefined {
 const TENCENT_ASR_HOST = 'asr.cloud.tencent.com';
 const PCM_BYTES_PER_MS = 32; // 16 kHz × 2 字节 / 1000
 const TENCENT_FRAME_BYTES = 6400;
+const TENCENT_WORD_TIMING_ENGINES = new Set([
+  '8k_en', '8k_zh', '8k_zh_finance', '8k_zh_large', '16k_zh_en',
+  '16k_zh', '16k_en', '16k_ca', '16k_zh-TW', '16k_ja',
+]);
 
 function tencentUrl(appId: string, secretId: string, secretKey: string, engine: string, voiceId: string) {
   const now = Math.floor(Date.now() / 1000);
@@ -77,6 +88,7 @@ function tencentUrl(appId: string, secretId: string, secretKey: string, engine: 
     voice_format: '1',
     voice_id: voiceId,
   });
+  if (TENCENT_WORD_TIMING_ENGINES.has(engine)) params.set('word_info', '1');
   params.sort();
   const path = `${TENCENT_ASR_HOST}/asr/v2/${appId}?${params}`;
   const signature = createHmac('sha1', secretKey).update(path).digest('base64');
@@ -93,7 +105,15 @@ interface TencentMessage {
     slice_type: number;
     start_time: number;
     end_time: number;
+    word_list?: { word: string; start_time: number; end_time: number }[];
   };
+}
+
+function validTimedWords(words: AsrTimedWord[]): AsrTimedWord[] | undefined {
+  const timed = words.filter((word) => word && typeof word.text === 'string' && word.text.trim()
+    && Number.isFinite(word.startMs) && Number.isFinite(word.endMs)
+    && word.startMs >= 0 && word.endMs > word.startMs);
+  return timed.length ? timed : undefined;
 }
 
 function createTencentSession(
@@ -216,13 +236,20 @@ function createTencentSession(
       if (state !== 'open' && state !== 'finishing') return;
       const result = message.result;
       if (result && Number.isSafeInteger(result.index) && typeof result.voice_text_str === 'string') {
+        const isFinal = result.slice_type === 2;
+        const words = isFinal && Array.isArray(result.word_list)
+          ? validTimedWords(result.word_list.filter(Boolean).map((word) => ({
+              text: word.word, startMs: word.start_time, endMs: word.end_time,
+            })))
+          : undefined;
         listener.onSegment({
           segmentId: result.index,
           text: result.voice_text_str,
-          isFinal: result.slice_type === 2,
+          isFinal,
           startMs: result.start_time,
-          endMs: result.slice_type === 2 ? result.end_time : null,
+          endMs: isFinal ? result.end_time : null,
           speakerId: null,
+          ...(words && { words }),
         });
       }
       if (state === 'finishing' && message.final === 1) {
@@ -243,6 +270,7 @@ interface SegmentMessage {
   startMs?: number;
   endMs?: number | null;
   speakerId?: string | null;
+  words?: AsrTimedWord[];
 }
 
 function parseSegment(raw: string): AsrTranscriptSegment | null {
@@ -253,6 +281,7 @@ function parseSegment(raw: string): AsrTranscriptSegment | null {
     return null;
   }
   if (typeof message.text !== 'string') return null;
+  const words = message.isFinal && Array.isArray(message.words) ? validTimedWords(message.words) : undefined;
   return {
     segmentId: typeof message.segmentId === 'number' ? message.segmentId : 0,
     text: message.text,
@@ -260,6 +289,7 @@ function parseSegment(raw: string): AsrTranscriptSegment | null {
     startMs: typeof message.startMs === 'number' ? message.startMs : 0,
     endMs: typeof message.endMs === 'number' ? message.endMs : null,
     speakerId: typeof message.speakerId === 'string' ? message.speakerId : null,
+    ...(words && { words }),
   };
 }
 
@@ -354,8 +384,7 @@ function createSherpaSession(url: string, listener: AsrListener): Promise<AsrSes
       if (failed) throw new Error('ASR_CLOSED');
     },
     finish() {
-      if (closed) return Promise.resolve();
-      if (failed) return Promise.reject(new Error('ASR_CLOSED'));
+      if (closed || failed) return Promise.reject(new Error('ASR_CLOSED'));
       if (socket.readyState !== WebSocketCtor.OPEN) return Promise.reject(new Error('ASR_CLOSED'));
       if (finished) return Promise.resolve();
       finished = true;

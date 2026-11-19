@@ -1592,7 +1592,7 @@ const initialMeeting = (server: Server) => {
       }
     });
   });
-  return io;
+  return Object.assign(io, { getAuthenticatedUserSockets: getUserSockets });
 };
 
 export default initialMeeting;

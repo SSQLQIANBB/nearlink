@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 const booleanValue = z
   .enum(['true', 'false'])
@@ -76,10 +78,17 @@ const rawEnvSchema = z
     QINIU_ACCESS_KEY: requiredValue('QINIU_ACCESS_KEY'),
     QINIU_SECRET_KEY: requiredValue('QINIU_SECRET_KEY'),
     MEETINGS_ASR_URL: optionalValue,
+    MEETINGS_LLM_URL: optionalValue,
+    MEETINGS_LLM_BASE_URL: optionalValue.pipe(z.url({ protocol: /^https$/ }).optional()),
+    MEETINGS_LLM_API_KEY: optionalValue,
+    MEETINGS_LLM_MODEL: z.string().trim().default('qwen2.5:7b'),
     TENCENT_ASR_APP_ID: optionalValue,
     TENCENT_ASR_SECRET_ID: optionalValue,
     TENCENT_ASR_SECRET_KEY: optionalValue,
     TENCENT_ASR_ENGINE: z.string().trim().default('16k_zh'),
+    // 会议录音 PCM 暂存目录：录制期间流式落盘，收尾封装 WAV 后上传七牛再清理。
+    // 必须是持久化、不可公开访问的目录（容器部署挂载数据卷）；默认在系统临时目录下独立子目录。
+    MEETINGS_AUDIO_STAGING_DIR: optionalValue,
   })
   .superRefine((values, context) => {
     if (values.JWT_SECRET === values.REFRESH_TOKEN_SECRET) {
@@ -132,6 +141,14 @@ const rawEnvSchema = z
           message: '生产环境禁止自动创建数据库或自动修改表结构',
         });
       }
+    }
+
+    if (Boolean(values.MEETINGS_LLM_BASE_URL) !== Boolean(values.MEETINGS_LLM_API_KEY)) {
+      context.addIssue({
+        code: 'custom',
+        path: [values.MEETINGS_LLM_BASE_URL ? 'MEETINGS_LLM_API_KEY' : 'MEETINGS_LLM_BASE_URL'],
+        message: '云端会议纪要须同时配置接入地址和 API Key',
+      });
     }
 
     // 腾讯云 ASR 三项凭据：要么全填要么全空；只填部分时报配置错误。
@@ -209,12 +226,19 @@ export function createEnv(source: NodeJS.ProcessEnv) {
     }),
     meetings: Object.freeze({
       asrUrl: values.MEETINGS_ASR_URL ?? null,
+      llmUrl: values.MEETINGS_LLM_URL ?? null,
+      llmBaseUrl: values.MEETINGS_LLM_BASE_URL ?? null,
+      llmApiKey: values.MEETINGS_LLM_API_KEY ?? null,
+      llmModel: values.MEETINGS_LLM_MODEL,
       tencent: Object.freeze({
         appId: values.TENCENT_ASR_APP_ID ?? '',
         secretId: values.TENCENT_ASR_SECRET_ID ?? '',
         secretKey: values.TENCENT_ASR_SECRET_KEY ?? '',
         engine: values.TENCENT_ASR_ENGINE,
       }),
+      // 录音 PCM 暂存根目录：默认系统临时目录下独立子目录；生产必须配置为
+      // 持久化数据卷且不可公开访问（见 docker-compose.prod.yml 的 backend 卷）。
+      audioStagingDir: path.resolve(values.MEETINGS_AUDIO_STAGING_DIR || path.join(tmpdir(), 'todesk-meeting-audio')),
     }),
     smtp,
   });

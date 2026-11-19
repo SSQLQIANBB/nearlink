@@ -111,6 +111,9 @@ describe('AsrClient — sherpa 后端（mock WebSocket）', () => {
     expect(segments).toEqual([
       { segmentId: 1, text: '你好', isFinal: false, startMs: 0, endMs: null, speakerId: null },
     ]);
+    const words = [{ text: '你好', startMs: 80, endMs: 240 }];
+    ws.simulateMessage(JSON.stringify({ segmentId: 1, text: '你好', isFinal: true, startMs: 0, endMs: 300, words }));
+    expect(segments.at(-1)).toMatchObject({ isFinal: true, words });
     await handle.sendPcm(Buffer.from([1, 2, 3, 4]));
     expect(ws.sent).toHaveLength(1);
     expect(Buffer.isBuffer(ws.sent[0])).toBe(true);
@@ -146,6 +149,17 @@ describe('AsrClient — sherpa 后端（mock WebSocket）', () => {
     await expect(finishing).resolves.toBeUndefined();
     expect(ws.sent.some((d) => d === JSON.stringify({ is_speaking: false }))).toBe(true);
     handle.close();
+  });
+
+  it('Sherpa 在确认输入完成前断开时，finish 不会返回成功', async () => {
+    setEnv({ asrUrl: 'ws://asr.test:10095' });
+    const { AsrClient } = await loadClient();
+    const opening = new AsrClient().open({ onSegment: vi.fn(), onFault: vi.fn() });
+    const ws = MockWebSocket.instances[0];
+    ws.simulateOpen();
+    const handle = await opening;
+    ws.close();
+    await expect(handle.finish()).rejects.toThrow('ASR_CLOSED');
   });
 
   it('连接失败时 open reject 并终结等待者', async () => {
@@ -208,6 +222,7 @@ describe('AsrClient — 腾讯云后端（mock WebSocket）', () => {
     expect(url.origin + url.pathname).toBe('wss://asr.cloud.tencent.com/asr/v2/1234567890');
     expect(url.searchParams.get('engine_model_type')).toBe('16k_zh');
     expect(url.searchParams.get('voice_format')).toBe('1');
+    expect(url.searchParams.get('word_info')).toBe('1');
     const signature = url.searchParams.get('signature');
     url.searchParams.delete('signature');
     expect(signature).toBe(
@@ -245,9 +260,19 @@ describe('AsrClient — 腾讯云后端（mock WebSocket）', () => {
     expect(segments[1]).toMatchObject({ segmentId: 1, text: '你好世界', isFinal: false });
 
     // 最终句（slice_type=2）
-    ws.simulateMessage(JSON.stringify({ code: 0, result: { index: 1, voice_text_str: '你好世界。', slice_type: 2 } }));
+    ws.simulateMessage(JSON.stringify({ code: 0, result: {
+      index: 1, voice_text_str: '你好世界。', slice_type: 2,
+      word_list: [
+        { word: '你好', start_time: 80, end_time: 250 },
+        { word: '世界', start_time: 250, end_time: 440 },
+        { word: '。', start_time: 440, end_time: 440 },
+      ],
+    } }));
     expect(segments).toHaveLength(3);
-    expect(segments[2]).toMatchObject({ segmentId: 1, text: '你好世界。', isFinal: true });
+    expect(segments[2]).toMatchObject({
+      segmentId: 1, text: '你好世界。', isFinal: true,
+      words: [{ text: '你好', startMs: 80, endMs: 250 }, { text: '世界', startMs: 250, endMs: 440 }],
+    });
 
     handle.close();
   });
