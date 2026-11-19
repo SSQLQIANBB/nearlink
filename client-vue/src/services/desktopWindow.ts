@@ -2,7 +2,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const titleRegions =
-  '.chat-header, .group-im-shell header, .desktop-call-header, .desktop-windows-drag-region';
+  '.chat-header, .group-chat-header, .group-im-shell header, .desktop-call-header, .desktop-windows-drag-region';
 const interactive =
   'button, a, input, textarea, select, label, summary, [role="button"], [role="switch"], [role="tab"], [role="slider"], [role="dialog"], [tabindex], .cursor-pointer, [contenteditable]:not([contenteditable="false"]), [data-no-drag]';
 const topDragHeight = 50;

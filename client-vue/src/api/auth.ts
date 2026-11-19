@@ -106,8 +106,8 @@ export function updateUser(data: Partial<User>) {
 /**
  * 获取用户列表
  */
-export function getUserList() {
-  return http.get<{ users: User[] }>('/api/auth/users');
+export function getUserList(signal?: AbortSignal) {
+  return http.get<{ users: User[] }>('/api/auth/users', signal);
 }
 
 /**

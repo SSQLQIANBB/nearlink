@@ -26,8 +26,10 @@ let dragStart = { x: 0, y: 0 };
 let startTop = 0;
 let startLeft = 0;
 
-const isMeetingMinutesRoute = computed(() => route.name === 'MeetingMinutes');
-const visible = computed(() => store.isActive && !isMeetingMinutesRoute.value);
+const recordingPanelVisible = computed(() =>
+  route.name === 'MeetingMinutes' || (route.name === 'Meetings' && route.query.recording === '1'),
+);
+const visible = computed(() => store.source === 'offline' && store.isActive && !recordingPanelVisible.value);
 const isPaused = computed(() => store.phase === PHASE.PAUSED);
 const canToggle = computed(() => store.isRecording || isPaused.value);
 const isStopping = computed(() => store.phase === PHASE.STOPPING);
@@ -88,23 +90,27 @@ function togglePause() {
 async function confirmEnd() {
   if (!canEnd.value) return;
   const result = await store.stop();
-  if (!result || result.phase !== PHASE.ENDED) {
+  if (!result || result.phase !== PHASE.ENDED || !result.sessionId) {
     if (store.issue) message.error(store.issue.message);
     return;
   }
   confirmVisible.value = false;
-  if (store.issue?.type === 'TRANSCRIPT_INCOMPLETE' || store.issue?.type === 'UNSENT_AUDIO') {
+  if (store.issue) {
     message.warning(store.issue.message);
   } else {
     message.success('录音已结束');
   }
-  expand();
+  await router.push({ name: 'Meetings', query: { sessionId: result.sessionId } });
 }
 
-/** 展开回到会议录音页。 */
+/** 展开会议列表中的录音面板。 */
 function expand() {
-  if (isMeetingMinutesRoute.value) return;
-  void router.push({ name: 'MeetingMinutes' });
+  if (recordingPanelVisible.value) return;
+  if (route.name === 'Meetings') {
+    void router.replace({ name: 'Meetings', query: { ...route.query, recording: '1' } });
+  } else {
+    void router.push({ name: 'Meetings', query: { recording: '1' } });
+  }
 }
 
 </script>
@@ -161,10 +167,7 @@ function expand() {
 
     <!-- 展开回录音页 -->
     <button type="button" class="float-expand" title="展开" aria-label="展开录音页" @click="expand">
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
-        <path d="M13 3a1 1 0 0 0-1-1H8.5a.5.5 0 0 0 0 1H11.3l-3.15 3.15a.5.5 0 1 0 .7.7L12 3.7V8a.5.5 0 0 0 1 0V3zM5 6.85 8.15 3.7H5a.5.5 0 0 0 0 1H6.7L3.55 7.85a.5.5 0 1 0 .7.7L7.4 5.7 5 6.85z" opacity="0" />
-        <path d="M2 2h5v1H3.4L6.2 4.8a.5.5 0 1 1-.7.7L2.7 3.4V7H1.5V2H2zm12 0v5h-1.5V3.4l-2.8 2.1a.5.5 0 1 1-.7-.7l2.8-2.1H9V2h5zM3.4 12.6l2.8-2.1a.5.5 0 0 1 .7.7l-2.8 2.1H7V14H2v-5h1.4v3.6zm10.2 0V9H15v5h-5v-1.4h3.6z" />
-      </svg>
+      <i class="iconfont icon-fullscreen" aria-hidden="true"></i>
     </button>
   </div>
   <NModal
@@ -319,6 +322,10 @@ function expand() {
 }
 .float-expand:hover { color: #137fff; }
 .float-expand:active { color: #0f63cc; }
+.float-expand .iconfont {
+  font-size: 14px;
+  line-height: 1;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .recording-flag.is-animated span { animation: none; }

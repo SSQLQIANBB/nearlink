@@ -12,21 +12,14 @@
     />
     <div class="composer-toolbar">
       <slot name="toolbar" />
-      <n-button
-        aria-label="发送图片"
-        title="发送图片"
+      <ComposerToolButton
+        label="发送图片"
         :loading="uploadingType === 'image'"
         :disabled="disabled || uploading || recording"
         @click="imageInput?.click()"
       >
-        <template #icon>
-          <i
-            class="iconfont composer-image-icon icon-image1"
-            aria-hidden="true"
-          ></i>
-        </template>
-        <span>发送图片</span>
-      </n-button>
+        <i class="iconfont composer-image-icon icon-image1" aria-hidden="true"></i>
+      </ComposerToolButton>
     </div>
     <div class="composer-input-row">
       <button
@@ -85,9 +78,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, shallowRef } from 'vue';
 import AudioWaveform from './AudioWaveform.vue';
-import { NButton, useMessage } from 'naive-ui';
+import ComposerToolButton from './ComposerToolButton.vue';
+import { useMessage } from 'naive-ui';
 import { uploadFile } from '@/api/common';
 import type { ChatMediaPayload } from '@/api/message';
 import { getAudioFileExtension, selectAudioMimeType } from '@/services/chatMedia';
@@ -114,15 +108,21 @@ let recordingTimer: number | null = null;
 let chunks: Blob[] = [];
 let discardRecording = false;
 let isPressing = false;
+let composerActive = true;
+let uploadController: AbortController | null = null;
 
 async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?: number) {
+  if (!composerActive) return;
+  const controller = new AbortController();
+  uploadController = controller;
   uploadingType.value = type;
   try {
     const form = new FormData();
     form.append('file', file);
     form.append('purpose', 'chat');
     if (props.groupId) form.append('groupId', String(props.groupId));
-    const { file: uploaded } = await uploadFile(form);
+    const { file: uploaded } = await uploadFile(form, controller.signal);
+    if (controller.signal.aborted || !composerActive) return;
     emit('send', {
       type,
       media: {
@@ -135,9 +135,9 @@ async function uploadMedia(file: File, type: 'image' | 'voice', durationSeconds?
       },
     });
   } catch (error: any) {
-    message.error(`上传失败: ${error.message}`);
+    if (!controller.signal.aborted) message.error(`上传失败: ${error.message}`);
   } finally {
-    uploadingType.value = null;
+    if (uploadController === controller) uploadingType.value = null;
   }
 }
 
@@ -259,7 +259,22 @@ function releaseRecordingResources() {
   elapsedSeconds.value = 0;
 }
 
-onBeforeUnmount(cancelRecording);
+function deactivateComposer() {
+  composerActive = false;
+  uploadController?.abort();
+  uploadingType.value = null;
+  // KeepAlive 不触发卸载，离开当前会话也必须释放按住说话的设备与计时器。
+  discardRecording = true;
+  if (recorder) {
+    recorder.onstop = null;
+    recorder.ondataavailable = null;
+    if (recorder.state === 'recording') recorder.stop();
+  }
+  releaseRecordingResources();
+}
+onActivated(() => { composerActive = true; });
+onDeactivated(deactivateComposer);
+onBeforeUnmount(deactivateComposer);
 </script>
 
 <style scoped>
@@ -383,15 +398,19 @@ onBeforeUnmount(cancelRecording);
 }
 .composer-toolbar :deep(.n-button) {
   --icon-size-control: 18px;
-  --n-color: #f1f5f9 !important;
+  --n-width: var(--n-height) !important;
+  --n-padding: 0 !important;
+  --n-icon-margin: 0 !important;
+  --n-border-radius: 4px !important;
+  --n-color: transparent !important;
+  --n-color-disabled: transparent !important;
+  --n-color-focus: transparent !important;
   --n-color-hover: #e2e8f0 !important;
   --n-color-pressed: #cbd5e1 !important;
   --n-text-color: #475569 !important;
   --n-text-color-hover: #1e293b !important;
   --n-border: 1px solid transparent !important;
   --n-border-hover: 1px solid transparent !important;
-  border-radius: 999px;
-  font-size: 12px;
 }
 .composer-image-icon {
   width: 18px;
@@ -410,9 +429,6 @@ onBeforeUnmount(cancelRecording);
   .composer-toolbar {
     gap: 6px;
     padding-top: 9px;
-  }
-  .composer-toolbar :deep(.n-button) {
-    padding-inline: 10px;
   }
   .composer-input-row {
     padding: 14px 10px;

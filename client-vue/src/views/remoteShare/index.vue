@@ -2,7 +2,7 @@
   <div
     ref="pageRef"
     class="im-page"
-    :class="{ 'is-resizing': resizing }"
+    :class="{ 'is-resizing': resizing, 'is-compact': isCompact, 'is-phone': isPhone }"
   >
     <n-layout
       has-sider
@@ -10,314 +10,116 @@
       :class="{ 'sidebar-open': mobileSidebarOpen }"
     >
       <button
-        v-if="mobileSidebarOpen"
+        v-if="mobileSidebarOpen && contactUser"
         class="sidebar-backdrop"
         aria-label="关闭联系人列表"
         @click="mobileSidebarOpen = false"
       ></button>
       <n-layout-sider
         class="remote-sidebar"
-        :class="{ 'mobile-open': mobileSidebarOpen }"
+        :class="{ 'mobile-open': mobileSidebarOpen || (isCompact && !contactUser) }"
         bordered
-        :width="sidebarWidth"
+        :width="visibleSidebarWidth"
         :collapsed-width="0"
         collapse-mode="transform"
         :show-trigger="false"
         content-class="remote-sidebar-content flex flex-col"
       >
         <n-button
+          v-if="contactUser"
           class="mobile-sidebar-close"
           secondary
           @click="mobileSidebarOpen = false"
         >
           关闭列表
         </n-button>
-        <!-- 用户信息卡片 -->
-        <div class="sidebar-profile p-4 text-white">
-          <div class="sidebar-profile-main flex items-center gap-3 mb-3">
-            <n-avatar
-              :size="40"
-              :src="authUser?.avatar || undefined"
-              class="profile-avatar cursor-pointer ring-2 ring-white ring-opacity-50 bg-[#E7F2FF] text-[#137FFF] font-bold"
-              @click="goToProfile"
-            >
-              <span v-if="!authUser?.avatar">
-                {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
-              </span>
-              <template #fallback>
-                <span class="flex h-full w-full items-center justify-center">
-                  {{ authUser?.nickname?.charAt(0) || authUser?.username?.charAt(0) || '?' }}
-                </span>
-              </template>
-            </n-avatar>
-            <div class="flex-1">
-              <div class="font-bold text-sm">
-                {{ authUser?.nickname || authUser?.username || '未登录' }}
-              </div>
-              <div class="flex items-center gap-2 mt-1">
-                <span
-                  class="w-2 h-2 rounded-full animate-pulse"
-                  :class="getStatusColor(userStatus)"
-                ></span>
-                <span class="text-xs opacity-90">{{ getStatusText(userStatus) }}</span>
-              </div>
-            </div>
-            <n-button
-              class="sidebar-logout"
-              title="退出登录"
-              aria-label="退出登录"
-              type="error"
-              size="small"
-              strong
-              secondary
-              @click="handleLogout"
-            >
-              <i
-                class="iconfont icon-logout"
-                aria-hidden="true"
-              ></i>
-            </n-button>
-          </div>
-          <!-- 快捷操作 -->
-          <div
-            class="sidebar-profile-actions"
-            :class="{ 'sidebar-profile-actions--desktop': desktop }"
-          >
-            <n-button
-              class="profile-button"
-              size="small"
-              secondary
-              @click="goToProfile"
-            >
-              <template #icon>
-                <i
-                  class="iconfont icon-id-card"
-                  aria-hidden="true"
-                ></i>
-              </template>
-              个人中心
-            </n-button>
-            <n-button
-              v-if="desktop"
-              class="profile-button"
-              size="small"
-              secondary
-              :aria-pressed="showRemoteControl"
-              @click="showRemoteControl = !showRemoteControl"
-            >
-              远程控制
-            </n-button>
-          </div>
+        <div class="contact-list-tools">
+          <n-input v-model:value="contactKeyword" clearable placeholder="搜索联系人" aria-label="搜索联系人" />
+          <n-button quaternary circle :loading="contactsLoading" aria-label="刷新联系人" title="刷新联系人" @click="refreshContacts">
+            <i class="iconfont icon-refresh" aria-hidden="true"></i>
+          </n-button>
         </div>
-
-        <!-- Tab 切换 -->
-        <n-tabs
-          v-model:value="activeTab"
-          type="line"
-          animated
-          justify-content="space-evenly"
-          class="sidebar-tabs flex-1 min-h-0 flex flex-col"
-          pane-class="flex-1"
-          style="overflow: hidden"
-        >
-          <!-- 联系人 -->
-          <n-tab-pane
-            name="users"
-            :tab="unread.privateTotal ? `联系人 (${unread.privateTotal})` : '联系人'"
-            display-directive="show:lazy"
-            class="flex flex-col h-full min-h-0 pt-0"
-          >
-            <div
-              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between gap-2"
+        <div class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between gap-2">
+          <span>联系人 ({{ filteredUsers.length }})</span>
+          <span v-if="unread.privateTotal > 0" class="contact-unread-badge" aria-label="未读消息">{{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}</span>
+        </div>
+        <div v-if="contactsError" class="contacts-error" role="alert">
+          <span>{{ contactsError }}</span><n-button text size="small" @click="refreshContacts">重试</n-button>
+        </div>
+        <n-scrollbar class="flex-1 min-h-0">
+          <ul class="contact-list p-2 space-y-1">
+            <n-badge
+              :offset="[-8, 8]"
+              class="w-full"
+              :value="unReadMessageCount[user.id] || 0"
+              :max="99"
+              :show="!!unReadMessageCount[user.id]"
+              v-for="user in filteredUsers"
+              :key="user.id"
             >
-              <span>联系人 ({{ displayUsers.length }})</span>
-              <span
-                v-if="unread.privateTotal > 0"
-                class="contact-unread-badge"
-                aria-label="未读消息"
+              <li
+                class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
+                role="button"
+                tabindex="0"
+                :aria-current="contactUser?.id === user.id ? 'true' : undefined"
+                @keydown.enter.prevent="openContact(user)"
+                @keydown.space.prevent="openContact(user)"
+                :class="
+                  contactUser?.id === user.id
+                    ? 'bg-blue-100 border-blue-300 shadow-md'
+                    : 'bg-white border-gray-200'
+                "
+                @click="openContact(user)"
               >
-                {{ unread.privateTotal > 99 ? '99+' : unread.privateTotal }}
-              </span>
-            </div>
-            <n-scrollbar class="flex-1 min-h-0">
-              <ul class="contact-list p-2 space-y-1">
-                <n-badge
-                  :offset="[-8, 8]"
-                  class="w-full"
-                  :value="unReadMessageCount[user.id] || 0"
-                  :max="99"
-                  :show="!!unReadMessageCount[user.id]"
-                  v-for="user in displayUsers"
-                  :key="user.id"
+                <n-avatar
+                  :size="40"
+                  :src="user.avatar || undefined"
+                  class="flex-shrink-0"
                 >
-                  <li
-                    class="contact-item w-full flex items-center gap-3 cursor-pointer transition-all"
-                    :class="
-                      contactUser?.id === user.id
-                        ? 'bg-blue-100 border-blue-300 shadow-md'
-                        : 'bg-white border-gray-200'
-                    "
-                    @click="selectContact(user)"
-                  >
-                    <n-avatar
-                      :size="40"
-                      :src="user.avatar || undefined"
-                      class="flex-shrink-0"
-                    >
-                      <span v-if="!user.avatar">
-                        {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
-                      </span>
-                      <template #fallback>
-                        <span class="flex h-full w-full items-center justify-center">
-                          {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
-                        </span>
-                      </template>
-                    </n-avatar>
-                    <div class="flex-1 w-0">
-                      <div class="font-semibold text-sm">
-                        {{ user.nickname || user.username || `用户-${user.id}` }}
-                      </div>
-                      <div class="text-xs text-gray-500 truncate">
-                        {{ user.bio || '人很懒，无简介~' }}
-                      </div>
-                    </div>
-                    <div
-                      class="w-2 h-2 rounded-full"
-                      :class="getStatusColor(user?.status || 'online')"
-                    ></div>
-                  </li>
-                </n-badge>
-
-                <n-empty
-                  v-if="!displayUsers.length"
-                  class="h-full flex items-center justify-center py-12"
-                  description="暂无联系人"
-                  size="small"
-                >
-                  <template #icon>
-                    <n-icon
-                      size="32"
-                      color="#d0d0d0"
-                    >
-                      <i
-                        class="iconfont icon-user"
-                        aria-hidden="true"
-                      ></i>
-                    </n-icon>
+                  <span v-if="!user.avatar">
+                    {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                  </span>
+                  <template #fallback>
+                    <span class="flex h-full w-full items-center justify-center">
+                      {{ user.nickname?.charAt(0) || user.username?.charAt(0) || '?' }}
+                    </span>
                   </template>
-                </n-empty>
-              </ul>
-            </n-scrollbar>
-          </n-tab-pane>
-
-          <!-- 我的群组 -->
-          <n-tab-pane
-            name="groups"
-            :tab="unread.groupTotal ? `我的群组 (${unread.groupTotal})` : '我的群组'"
-            display-directive="show:lazy"
-            class="flex flex-col h-full min-h-0 pt-0"
-          >
-            <div
-              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between"
-            >
-              <span>我的群组 ({{ myGroups.length }})</span>
-              <n-button
-                size="tiny"
-                @click="goToGroups"
-              >
-                管理
-              </n-button>
-            </div>
-            <n-scrollbar class="flex-1 min-h-0">
-              <div class="p-3">
-                <n-button
-                  block
-                  secondary
-                  @click="goToGroups"
-                  class="mb-3"
-                >
-                  + 创建/管理群组
-                </n-button>
-
-                <div
-                  v-if="myGroups.length > 0"
-                  class="space-y-2 mt-3"
-                >
-                  <div
-                    v-for="group in myGroups"
-                    :key="group.id"
-                    class="group-item flex items-center gap-3 cursor-pointer transition-all"
-                    @click="goToGroupChat(group.id)"
-                  >
-                    <n-avatar
-                      :size="40"
-                      :src="group.avatar || undefined"
-                    >
-                      <span v-if="!group.avatar">{{ group.name?.charAt(0) || 'G' }}</span>
-                      <template #fallback>
-                        <span class="flex h-full w-full items-center justify-center">
-                          {{ group.name?.charAt(0) || 'G' }}
-                        </span>
-                      </template>
-                    </n-avatar>
-                    <div class="flex-1 min-w-0">
-                      <div class="font-semibold text-sm truncate">{{ group.name }}</div>
-                      <div class="text-xs text-gray-500">成员: {{ group.memberCount || 0 }}</div>
-                    </div>
-                    <n-badge
-                      :value="unread.groupCounts[group.id] || 0"
-                      :max="99"
-                      :show="!!unread.groupCounts[group.id]"
-                    />
+                </n-avatar>
+                <div class="flex-1 w-0">
+                  <div class="font-semibold text-sm">
+                    {{ user.nickname || user.username || `用户-${user.id}` }}
+                  </div>
+                  <div class="text-xs text-gray-500 truncate">
+                    {{ user.bio || '人很懒，无简介~' }}
                   </div>
                 </div>
+                <div
+                  class="w-2 h-2 rounded-full"
+                  :class="getStatusColor(user?.status || 'online')"
+                ></div>
+              </li>
+            </n-badge>
 
-                <n-empty
-                  v-else
-                  description="暂无群组"
-                  size="small"
-                  class="py-8"
-                >
-                  <template #extra>
-                    <n-button
-                      size="small"
-                      @click="goToGroups"
-                    >
-                      创建群组
-                    </n-button>
-                  </template>
-                </n-empty>
-              </div>
-            </n-scrollbar>
-          </n-tab-pane>
-
-          <!-- 会议 -->
-          <n-tab-pane
-            name="meetings"
-            tab="会议"
-            display-directive="show:lazy"
-            class="flex flex-col h-full min-h-0 pt-0"
-          >
-            <div
-              class="sidebar-section-header px-4 py-3 text-xs font-semibold flex items-center justify-between"
+            <n-empty
+              v-if="!filteredUsers.length && !contactsLoading"
+              class="h-full flex items-center justify-center py-12"
+              :description="contactKeyword.trim() ? '没有匹配的联系人' : '暂无联系人'"
+              size="small"
             >
-              <span>会议</span>
-            </div>
-            <n-scrollbar class="flex-1 min-h-0">
-              <div class="p-3 space-y-3">
-                <n-button block type="primary" @click="goToMeetingMinutes">
-                  <template #icon>
-                    <i class="iconfont icon-video" aria-hidden="true"></i>
-                  </template>
-                  开始会议录音
-                </n-button>
-                <p class="text-xs text-gray-400 leading-5 px-1">
-                  独立线下录音与实时转写，无需发起通话；支持暂停和断线重连。
-                </p>
-              </div>
-            </n-scrollbar>
-          </n-tab-pane>
-        </n-tabs>
+              <template #icon>
+                <n-icon
+                  size="32"
+                  color="#d0d0d0"
+                >
+                  <i
+                    class="iconfont icon-user"
+                    aria-hidden="true"
+                  ></i>
+                </n-icon>
+              </template>
+            </n-empty>
+          </ul>
+        </n-scrollbar>
         <div
           v-if="!desktop"
           class="sidebar-download"
@@ -328,12 +130,12 @@
 
       <div
         class="sidebar-resizer"
-        :style="{ left: `${sidebarWidth - 3}px` }"
+        :style="{ left: `${visibleSidebarWidth - 3}px` }"
         role="separator"
         aria-label="调整联系人栏宽度"
         aria-orientation="vertical"
-        :aria-valuenow="sidebarWidth"
-        :aria-valuemin="280"
+        :aria-valuenow="visibleSidebarWidth"
+        :aria-valuemin="220"
         :aria-valuemax="maxSidebarWidth"
         tabindex="0"
         data-no-drag
@@ -344,14 +146,13 @@
         @lostpointercapture="resizing = false"
         @keydown.left.prevent="setSidebarWidth(sidebarWidth - 10)"
         @keydown.right.prevent="setSidebarWidth(sidebarWidth + 10)"
-        @keydown.home.prevent="setSidebarWidth(280)"
+        @keydown.home.prevent="setSidebarWidth(220)"
         @keydown.end.prevent="setSidebarWidth(maxSidebarWidth)"
       ></div>
 
       <n-layout-content content-class="w-full flex flex-col">
-        <RemoteControlWorkbench v-if="showRemoteControl" />
         <div
-          v-else-if="contactUser"
+          v-if="contactUser"
           class="chat-panel h-full w-full flex flex-col"
         >
           <!-- 聊天头部 -->
@@ -478,6 +279,7 @@
           </n-scrollbar>
 
           <ChatMessageActions
+            :key="contactUser.id"
             ref="actions"
             kind="private"
             :conversation-id="contactUser.id"
@@ -491,6 +293,7 @@
             class="message-composer-shell"
           >
             <ChatMediaComposer
+              :key="contactUser.id"
               compact
               @send="sendMedia"
             >
@@ -520,10 +323,7 @@
           </p>
           <n-button
             type="primary"
-            @click="
-              activeTab = 'users';
-              mobileSidebarOpen = true;
-            "
+            @click="mobileSidebarOpen = true"
           >
             <template #icon>
               <i
@@ -540,11 +340,9 @@
 </template>
 
 <script lang="ts" setup>
-import { useWindowDialog } from '@/services/useWindowDialog';
 import { isTauri } from '@tauri-apps/api/core';
-import RemoteControlWorkbench from '@/components/RemoteControlWorkbench.vue';
 import { isAppInBackground } from '@/services/appVisibility';
-import { onMounted, onUnmounted, ref, nextTick, watch, computed } from 'vue';
+import { onMounted, onUnmounted, onActivated, onDeactivated, ref, nextTick, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { Socket } from 'socket.io-client';
 import { storeToRefs } from 'pinia';
@@ -553,7 +351,6 @@ import { useAuthStore } from '@/stores/auth';
 import { getUserList, type User as BasicUser } from '@/api/auth';
 import { useSocketStore, type OnlineUser } from '@/stores/socket';
 import { useUnreadStore } from '@/stores/unread';
-import { getMyGroups, type Group } from '@/api/group';
 import {
   getOfflineMessages,
   getPrivateMessages,
@@ -574,39 +371,47 @@ import ChatMediaComposer from '@/components/ChatMediaComposer.vue';
 import ChatMessageContent from '@/components/ChatMessageContent.vue';
 import ChatMessageActions from '@/components/ChatMessageActions.vue';
 import ChatMessageListState from '@/components/ChatMessageListState.vue';
+import DesktopReleaseEntry from '@/components/DesktopReleaseEntry.vue';
 import type { MessageQuote } from '@/api/message';
 import ToolBar from './components/ToolBar.vue';
 import notificationService from '@/services/notificationService';
 import { mergeContactPresence } from '@/services/contactPresence';
-import { getRemoteTabQuery, parseRemoteTab, type RemoteTab } from '@/services/remoteTabState';
 
+defineOptions({ name: 'ContactsWorkspace' });
 const router = useRouter();
-const desktop = isTauri();
-const showRemoteControl = ref(false);
 const route = useRoute();
+let workspaceActive = false;
+let activationController: AbortController | null = null;
+let historyController: AbortController | null = null;
+const contactKeyword = ref('');
+const contactsLoading = ref(false);
+const contactsError = ref('');
+const isCompact = ref(false);
+const isPhone = ref(false);
+const desktop = isTauri();
 const authStore = useAuthStore();
 const { currentUser: authUser, token } = storeToRefs(authStore);
 const socketStore = useSocketStore();
 const unread = useUnreadStore();
-const { socket, authenticated: online, userList } = storeToRefs(socketStore);
-const activeTab = ref<RemoteTab>(parseRemoteTab(route.query.tab));
+const { socket, userList } = storeToRefs(socketStore);
 const mobileSidebarOpen = ref(false);
 const pageRef = ref<HTMLElement | null>(null);
-const sidebarWidth = ref(320);
+const sidebarWidth = ref(300);
 const maxSidebarWidth = ref(420);
+const visibleSidebarWidth = computed(() => Math.min(sidebarWidth.value, maxSidebarWidth.value));
 const resizing = ref(false);
 let resizeStartX = 0;
-let resizeStartWidth = 320;
+let resizeStartWidth = 300;
 let layoutObserver: ResizeObserver;
 
 function setSidebarWidth(width: number) {
-  sidebarWidth.value = Math.max(280, Math.min(maxSidebarWidth.value, width));
+  sidebarWidth.value = Math.max(220, Math.min(maxSidebarWidth.value, width));
 }
 function startSidebarResize(event: PointerEvent) {
   if (event.button !== 0) return;
   event.preventDefault();
   resizeStartX = event.clientX;
-  resizeStartWidth = sidebarWidth.value;
+  resizeStartWidth = visibleSidebarWidth.value;
   resizing.value = true;
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 }
@@ -619,15 +424,15 @@ function stopSidebarResize(event: PointerEvent) {
   if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 }
 onMounted(() => {
-  // 观察实际容器，兼顾网页外边距与桌面窗口缩放。
   layoutObserver = new ResizeObserver(([entry]) => {
-    if (entry!.contentRect.width < 768) resizing.value = false;
-    maxSidebarWidth.value = Math.max(280, Math.min(420, entry!.contentRect.width - 480));
-    setSidebarWidth(sidebarWidth.value);
+    if (!workspaceActive || !entry) return;
+    isCompact.value = entry.contentRect.width < 720;
+    isPhone.value = entry.contentRect.width < 480;
+    if (isCompact.value) resizing.value = false;
+    maxSidebarWidth.value = Math.max(220, Math.min(420, entry.contentRect.width - 420));
   });
-  layoutObserver.observe(pageRef.value!.firstElementChild!);
 });
-onUnmounted(() => layoutObserver.disconnect());
+
 
 type User = OnlineUser;
 
@@ -648,19 +453,11 @@ type MessageInfo = {
 
 const message = useMessage();
 const dialog = useDialog();
-const windowDialog = useWindowDialog();
 
 const contactUser = ref<User | null>(null);
 const knownContacts = ref<BasicUser[]>([]);
 
-const myGroups = ref<Group[]>([]);
 const pendingInvitations = ref<GroupInvitation[]>([]);
-
-// 计算用户状态（基于Socket连接状态）
-const userStatus = computed(() => {
-  if (!online.value) return 'offline';
-  return authUser.value?.status || 'online';
-});
 
 // 获取状态颜色
 function getStatusColor(status: string) {
@@ -670,16 +467,6 @@ function getStatusColor(status: string) {
     offline: 'bg-gray-300',
   };
   return colors[status] || 'bg-gray-300';
-}
-
-// 获取状态文本
-function getStatusText(status: string) {
-  const texts: Record<string, string> = {
-    online: '在线',
-    busy: '忙碌',
-    offline: '离线',
-  };
-  return texts[status] || '离线';
 }
 
 // 私信本地存储
@@ -695,16 +482,28 @@ const displayUsers = computed<User[]>(() => {
   );
 });
 
-async function loadContacts() {
+const filteredUsers = computed(() => {
+  const keyword = contactKeyword.value.trim().toLocaleLowerCase();
+  return keyword ? displayUsers.value.filter(user => `${user.nickname ?? ''} ${user.username}`.toLocaleLowerCase().includes(keyword)) : displayUsers.value;
+});
+
+async function loadContacts(signal: AbortSignal) {
+  contactsLoading.value = true;
+  contactsError.value = '';
   try {
-    knownContacts.value = (await getUserList()).users;
+    const { users } = await getUserList(signal);
+    if (!signal.aborted) knownContacts.value = users;
   } catch (error) {
-    console.error('加载联系人失败:', error);
-  }
+    if (!signal.aborted) contactsError.value = error instanceof Error ? error.message : '联系人加载失败';
+  } finally { if (!signal.aborted) contactsLoading.value = false; }
 }
+
+function refreshContacts() {
+  if (activationController && !contactsLoading.value) void loadContacts(activationController.signal);
+}
+
 const currentMessageList = ref<MessageInfo[]>([]);
 const historyStatus = ref<'loading' | 'ready' | 'error'>('ready');
-let historyRequest = 0;
 
 const deletedMessageIds = new Set<number>();
 const actions = ref<InstanceType<typeof ChatMessageActions> | null>(null);
@@ -737,28 +536,15 @@ function focusComposer() {
 watch(
   () => socketStore.authenticated,
   (ready, previous) => {
-    if (ready && previous === false && contactUser.value) void selectContact(contactUser.value);
+    if (workspaceActive && ready && previous === false && contactUser.value) void selectContact(contactUser.value);
   },
 );
 
 // refs
 const scrollbarRef = ref();
 
-// 退出登录
-function handleLogout() {
-  windowDialog.info({
-    positiveButtonProps: { type: 'primary' },
-    title: '退出登录？',
-    content: '确认退出当前账号吗？',
-    positiveText: '退出登录',
-    negativeText: '取消',
-    onPositiveClick: () => authStore.logout({ navigate: true }),
-  });
-}
-
 // 私信
 function handlePrivateMessage(data: any) {
-  console.log('receive-message:', data);
 
   const senderId = Number(data.fromUserId);
   setMessage(senderId, {
@@ -819,6 +605,7 @@ function setMessage(id: number, data: MessageInfo) {
 }
 
 function bindPageSocketEvents(target: Socket) {
+  unbindPageSocketEvents(target);
   target.on('private_message', handlePrivateMessage);
   target.on('private_call_history', handlePrivateCallHistory);
 }
@@ -828,56 +615,50 @@ function unbindPageSocketEvents(target: Socket | null | undefined) {
   target?.off('private_call_history', handlePrivateCallHistory);
 }
 
+function openContact(user: User) {
+  mobileSidebarOpen.value = false;
+  if (Number(route.query.contact) === user.id) return;
+  void router.push({ name: 'Remote', query: { contact: String(user.id) } });
+}
+
 async function selectContact(user: User) {
-  const request = ++historyRequest;
+  if (!workspaceActive) return;
+  historyController?.abort();
+  const controller = new AbortController();
+  historyController = controller;
   historyStatus.value = 'loading';
   currentMessageList.value = privateMessageMap.get(user.id) || [];
-  showRemoteControl.value = false;
   mobileSidebarOpen.value = false;
   contactUser.value = user;
   unread.activePrivateUserId = user.id;
-
   try {
-    const res = await getPrivateMessages(user.id);
-    if (request !== historyRequest) return;
-    const history = res.messages
-      .filter((msg) => !deletedMessageIds.has(msg.id))
-      .map((msg) => ({
-        fromUserId: msg.fromUserId,
-        toUserId: msg.toUserId,
-        quote: msg.quote,
-        message: msg.message,
-        messageType: msg.messageType,
-        call: msg.call,
-        media: msg.media,
-        id: msg.id,
-        time: new Date(msg.createdAt).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }),
-      }));
+    const res = await getPrivateMessages(user.id, 50, 0, controller.signal);
+    if (controller.signal.aborted) return;
+    const history: MessageInfo[] = res.messages.filter(msg => !deletedMessageIds.has(msg.id)).map(msg => ({
+      fromUserId: msg.fromUserId, toUserId: msg.toUserId, quote: msg.quote, message: msg.message,
+      messageType: msg.messageType, call: msg.call, media: msg.media, id: msg.id,
+      time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    }));
+    const latestId = Math.max(0, ...history.map(msg => msg.id ?? 0));
+    // 历史加载期间可能已收到新消息或发出了待确认消息，不能用快照覆盖它们。
+    history.push(...(privateMessageMap.get(user.id) || []).filter(msg => !msg.id || msg.id > latestId));
     privateMessageMap.set(user.id, history);
     currentMessageList.value = history;
     historyStatus.value = 'ready';
     scrollToBottom('auto');
     if (!isAppInBackground()) {
-      const ids = res.messages
-        .filter((msg) => msg.fromUserId === user.id && !msg.isRead)
-        .map((msg) => msg.id);
+      const ids = res.messages.filter(msg => msg.fromUserId === user.id && !msg.isRead).map(msg => msg.id);
       if (ids.length) await markMessagesAsRead(ids);
-      unread.readPrivate(user.id);
+      if (!controller.signal.aborted) unread.readPrivate(user.id);
     }
-  } catch (error: any) {
-    if (request !== historyRequest) return;
-    if (historyStatus.value === 'loading') historyStatus.value = 'error';
-    message.error('加载聊天记录失败: ' + error.message);
-    currentMessageList.value = privateMessageMap.get(user.id) || [];
-    scrollToBottom('auto');
+  } catch (error: unknown) {
+    if (controller.signal.aborted) return;
+    historyStatus.value = 'error';
+    message.error(error instanceof Error ? error.message : '加载聊天记录失败');
   }
 }
+
 function sendMsg(v: string) {
-  console.log(v);
   if (!contactUser.value || !authUser.value) return;
 
   // 私信
@@ -944,34 +725,25 @@ function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
   });
 }
 
-// 加载群组列表
-async function loadMyGroups() {
-  try {
-    const res = await getMyGroups();
-    myGroups.value = res.groups || [];
-    socketStore.setSubscribedGroups(myGroups.value.map((group) => group.id));
-  } catch (error: any) {
-    console.error('加载群组列表失败:', error);
-  }
-}
-
 // 将离线私信纳入未读列表，不再打断当前页面
-async function loadOfflineMessages() {
+async function loadOfflineMessages(signal: AbortSignal) {
   try {
-    const res = await getOfflineMessages();
+    const res = await getOfflineMessages(signal);
+    if (signal.aborted) return;
     res.messages?.forEach((item) => {
       unread.rememberSender(item.sender);
       unread.receivePrivate(item.id, item.fromUserId, false);
     });
   } catch (error) {
-    console.error('加载离线消息失败:', error);
+    if (!signal.aborted) console.error('加载离线消息失败:', error);
   }
 }
 
 // 加载群组邀请
-async function loadPendingInvitations() {
+async function loadPendingInvitations(signal: AbortSignal) {
   try {
-    const res = await getPendingInvitations();
+    const res = await getPendingInvitations(signal);
+    if (signal.aborted) return;
     pendingInvitations.value = res.invitations || [];
 
     if (pendingInvitations.value.length > 0) {
@@ -995,7 +767,7 @@ async function loadPendingInvitations() {
       showInvitationsDialog();
     }
   } catch (error: any) {
-    console.error('加载群组邀请失败:', error);
+    if (!signal.aborted) console.error('加载群组邀请失败:', error);
   }
 }
 
@@ -1020,12 +792,6 @@ function showInvitationsDialog() {
         pendingInvitations.value = pendingInvitations.value.filter(
           (inv) => inv.id !== invitation.id,
         );
-        loadMyGroups(); // 重新加载群组列表
-
-        // 如果还有其他邀请，继续显示
-        if (pendingInvitations.value.length > 0) {
-          setTimeout(() => showInvitationsDialog(), 500);
-        }
       } catch (error: any) {
         message.error('接受邀请失败: ' + error.message);
       }
@@ -1038,37 +804,12 @@ function showInvitationsDialog() {
         pendingInvitations.value = pendingInvitations.value.filter(
           (inv) => inv.id !== invitation.id,
         );
-
-        // 如果还有其他邀请，继续显示
-        if (pendingInvitations.value.length > 0) {
-          setTimeout(() => showInvitationsDialog(), 500);
-        }
       } catch (error: any) {
         message.error('拒绝邀请失败: ' + error.message);
       }
     },
   });
 }
-
-// 跳转到个人中心
-const goToProfile = () => {
-  router.push('/profile');
-};
-
-// 跳转到群组管理
-const goToGroups = () => {
-  router.push('/groups');
-};
-
-// 开始会议录音
-const goToMeetingMinutes = () => {
-  router.push('/meeting-minutes');
-};
-
-// 跳转到群组聊天
-const goToGroupChat = (groupId: number) => {
-  router.push(`/group-chat/${groupId}`);
-};
 
 // 监听消息列表变化，自动滚动到底部
 watch(
@@ -1078,40 +819,26 @@ watch(
   },
 );
 
-watch(activeTab, (tab) => {
-  if (route.query.tab === tab) return;
-  void router.replace({
-    path: '/remote',
-    query: getRemoteTabQuery(tab),
-  });
+watch(
+  [displayUsers, () => route.query.contact, () => route.name],
+  ([users, contact, name]) => {
+    if (!workspaceActive || name !== 'Remote') return;
+    const selected = users.find(user => user.id === Number(contact));
+    if (selected) {
+      if (contactUser.value?.id !== selected.id) void selectContact(selected);
+      else contactUser.value = selected;
+    } else if (Number(contact) !== contactUser.value?.id) {
+      historyController?.abort();
+      contactUser.value = null;
+      currentMessageList.value = [];
+      unread.activePrivateUserId = null;
+    }
+  },
+);
+watch(socket, (next, previous) => {
+  unbindPageSocketEvents(previous);
+  if (workspaceActive && next) bindPageSocketEvents(next);
 });
-
-watch(
-  [displayUsers, () => route.query.contact],
-  ([users, contact]) => {
-    const selected = users.find((item) => item.id === contactUser.value?.id);
-    if (selected && contactUser.value !== selected) contactUser.value = selected;
-    const user = users.find((item) => item.id === Number(contact));
-    if (user && contactUser.value?.id !== user.id) void selectContact(user);
-  },
-  { immediate: true },
-);
-
-watch(
-  () => route.query.tab,
-  (tab) => {
-    activeTab.value = parseRemoteTab(tab);
-  },
-);
-
-watch(
-  socket,
-  (nextSocket, previousSocket) => {
-    unbindPageSocketEvents(previousSocket);
-    if (nextSocket) bindPageSocketEvents(nextSocket);
-  },
-  { immediate: true },
-);
 
 const handleVisible = () => {
   if (!isAppInBackground()) {
@@ -1120,27 +847,44 @@ const handleVisible = () => {
     }
   }
 };
-onMounted(async () => {
+function handleEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') mobileSidebarOpen.value = false;
+}
+
+onActivated(() => {
+  workspaceActive = true;
+  activationController = new AbortController();
+  layoutObserver.observe(pageRef.value!);
   document.addEventListener('visibilitychange', handleVisible);
   window.addEventListener('focus', handleVisible);
-
+  window.addEventListener('keydown', handleEscape);
+  if (socket.value) bindPageSocketEvents(socket.value);
+  const user = displayUsers.value.find(item => item.id === Number(route.query.contact));
+  if (user) void selectContact(user);
+  else { contactUser.value = null; currentMessageList.value = []; unread.activePrivateUserId = null; }
   if (authUser.value && token.value) {
-    await Promise.all([
-      loadContacts(),
-      loadMyGroups(),
-      loadOfflineMessages(),
-      loadPendingInvitations(),
-    ]);
+    const signal = activationController.signal;
+    void Promise.all([loadContacts(signal), loadOfflineMessages(signal), loadPendingInvitations(signal)]);
   }
 });
 
-onUnmounted(() => {
-  historyRequest++;
+function deactivateWorkspace() {
+  workspaceActive = false;
+  activationController?.abort();
+  historyController?.abort();
+  activationController = null;
+  contactsLoading.value = false;
+  resizing.value = false;
+  mobileSidebarOpen.value = false;
+  layoutObserver?.disconnect();
   unbindPageSocketEvents(socket.value);
   unread.activePrivateUserId = null;
   document.removeEventListener('visibilitychange', handleVisible);
   window.removeEventListener('focus', handleVisible);
-});
+  window.removeEventListener('keydown', handleEscape);
+}
+onDeactivated(deactivateWorkspace);
+onUnmounted(deactivateWorkspace);
 </script>
 
 <style scoped>
@@ -1197,11 +941,10 @@ li[data-selecting='true'] {
 :deep(.remote-sidebar) {
   transition: none;
 }
-@media (max-width: 767px) {
-  .sidebar-resizer {
+.is-compact .sidebar-resizer {
     display: none;
   }
-}
+
 
 :deep(.remote-sidebar) {
   border-right: 1px solid rgba(203, 213, 225, 0.76);
@@ -1213,100 +956,12 @@ li[data-selecting='true'] {
   box-shadow: none;
 }
 
-.sidebar-profile {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-profile-main {
-  min-height: 48px;
-}
-
-.sidebar-profile-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-
-.sidebar-profile-actions--desktop {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .sidebar-download {
   order: 3;
   flex-shrink: 0;
   padding: 12px 16px 16px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
-}
-
-.sidebar-profile-actions .profile-button {
-  width: 100%;
-  min-width: 0;
-}
-
-.profile-avatar {
-  box-shadow: 0 8px 22px rgba(30, 64, 175, 0.24);
-}
-
-:deep(.sidebar-logout),
-:deep(.profile-button) {
-  --n-color: rgba(255, 255, 255, 0.13) !important;
-  --n-color-hover: rgba(255, 255, 255, 0.22) !important;
-  --n-color-pressed: rgba(255, 255, 255, 0.28) !important;
-  --n-text-color: rgba(255, 255, 255, 0.9) !important;
-  --n-text-color-hover: #fff !important;
-  --n-border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  --n-border-hover: 1px solid rgba(255, 255, 255, 0.24) !important;
-  border-radius: 9px;
-  backdrop-filter: blur(10px);
-}
-
-:deep(.sidebar-tabs .n-tabs-nav) {
-  flex: none;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
-}
-
-:deep(.sidebar-tabs) {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-:deep(.sidebar-tabs .n-tabs-pane-wrapper),
-:deep(.sidebar-tabs .n-tab-pane) {
-  min-height: 0;
-  flex: 1;
-}
-
-:deep(.sidebar-tabs .n-tab-pane) {
-  display: flex;
-  flex-direction: column;
-}
-
-:deep(.sidebar-tabs .n-tabs-tab-wrapper) {
-  flex: 1;
-  min-width: 0;
-}
-
-:deep(.sidebar-tabs .n-tabs-tab) {
-  width: 100%;
-  justify-content: center;
-  padding-block: 13px;
-  color: #64748b;
-  font-weight: 600;
-}
-
-:deep(.sidebar-tabs .n-tabs-tab--active) {
-  color: #2563eb;
-}
-
-:deep(.sidebar-tabs .n-tabs-bar) {
-  height: 2px;
-  border-radius: 999px;
-  background: #2563eb;
 }
 
 .sidebar-section-header {
@@ -1320,8 +975,7 @@ li[data-selecting='true'] {
   padding-bottom: 16px;
 }
 
-.contact-item,
-.group-item {
+.contact-item {
   min-height: 60px;
   padding: 10px 12px;
   border: 1px solid transparent;
@@ -1331,7 +985,7 @@ li[data-selecting='true'] {
 }
 
 .contact-item:hover,
-.group-item:hover {
+.contact-item:focus-visible {
   border-color: transparent;
   background: rgba(226, 232, 240, 0.62);
   box-shadow: none;
@@ -1400,74 +1054,62 @@ li[data-selecting='true'] {
   display: none;
 }
 
-.n-tabs.n-tabs--top .n-tab-pane {
-  padding-top: 0;
-}
 
-@media (max-width: 767px) {
-  :deep(.remote-sidebar) {
+.is-compact :deep(.remote-sidebar) {
     position: absolute;
     inset: 0 auto 0 0;
     z-index: 20;
-    width: min(80vw, 320px) !important;
-    min-width: min(80vw, 320px) !important;
-    max-width: min(80vw, 320px);
+    width: min(300px, 100%) !important;
+    min-width: min(300px, 100%) !important;
+    max-width: 100%;
     border-right: 0;
     border-radius: 0 18px 18px 0;
     box-shadow: none;
     transform: translateX(-104%);
     transition: transform 0.24s ease;
-  }
+}
 
-  :deep(.remote-sidebar.mobile-open) {
+.is-compact :deep(.remote-sidebar.mobile-open) {
     transform: translateX(0);
-  }
+}
 
-  :deep(.remote-sidebar-content) {
+.is-compact :deep(.remote-sidebar-content) {
     overflow: hidden;
     border-radius: 0 18px 18px 0;
-  }
+}
 
-  .sidebar-profile {
-    order: 1;
-  }
-  .sidebar-tabs {
-    order: 2;
-  }
-
-  .mobile-sidebar-close {
+.is-compact .mobile-sidebar-close {
     display: inline-flex;
-    order: 3;
     flex: none;
     margin: 10px 12px 12px;
     border-radius: 10px;
-  }
+}
 
-  .mobile-sidebar-toggle {
+.is-compact .mobile-sidebar-toggle {
     display: inline-flex;
-  }
+}
 
-  .chat-header {
+.is-compact .chat-header {
     min-height: 60px;
     padding-inline: 12px;
-  }
+}
 
-  :deep(.message-scrollbar .n-scrollbar-content) {
+.is-compact :deep(.message-scrollbar .n-scrollbar-content) {
     padding: 16px 12px;
-  }
+}
 
-  .message-entry {
+.is-compact .message-entry {
     max-width: 88%;
-  }
+}
 
-  .message-composer-shell {
+.is-compact .message-composer-shell {
     padding-bottom: env(safe-area-inset-bottom);
-  }
+}
 
-  .chat-empty-state {
+.is-compact .chat-empty-state {
     padding: 20px;
   }
-}
+
 
 @media (prefers-reduced-motion: reduce) {
   :deep(.remote-sidebar) {
@@ -1476,18 +1118,20 @@ li[data-selecting='true'] {
 }
 
 .im-page {
-  height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
+  padding: 0;
   background: #f1f5f9;
 }
 .remote-shell {
-  max-width: 1152px;
-  height: 90dvh;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px #0004;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .sidebar-backdrop {
   position: absolute;
@@ -1501,10 +1145,6 @@ li[data-selecting='true'] {
   border: 0;
   color: #94a3b8;
 }
-:deep(.sidebar-logout) {
-  --n-color: transparent !important;
-  --n-border: 0 !important;
-}
 .message-item.items-start:not([data-selecting='true']) {
   padding-left: 44px;
 }
@@ -1512,15 +1152,6 @@ li[data-selecting='true'] {
   position: absolute;
   left: 0;
   top: 0;
-}
-.sidebar-logout .iconfont {
-  font-size: var(--icon-size-control);
-}
-.profile-button {
-  --icon-size-control: 16px;
-}
-.profile-button .iconfont {
-  font-size: var(--icon-size-control);
 }
 .chat-empty-state {
   background: #fff;
@@ -1562,20 +1193,22 @@ li[data-selecting='true'] {
   font-size: 12px;
   box-shadow: 0 10px 15px -3px #3b82f633;
 }
-@media (max-width: 767px) {
-  .im-page {
-    padding: 0;
-  }
-  .remote-shell {
-    height: 100dvh;
+.is-compact .remote-shell {
+    height: 100%;
     border-radius: 0;
-  }
-  .sidebar-backdrop {
-    display: block;
-  }
-  :deep(.remote-sidebar),
-  :deep(.remote-sidebar-content) {
-    border-radius: 0;
-  }
 }
+
+.is-compact .sidebar-backdrop {
+    display: block;
+}
+
+.is-compact :deep(.remote-sidebar),
+.is-compact :deep(.remote-sidebar-content) {
+    border-radius: 0;
+  }
+
+.contact-list-tools { display: flex; align-items: center; gap: 6px; padding: 14px 12px; border-bottom: 1px solid #e2e8f0; }
+.contacts-error { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 14px; color: #b91c1c; font-size: 12px; }
+.is-phone :deep(.remote-sidebar) { width: 100% !important; min-width: 100% !important; max-width: 100%; }
+
 </style>

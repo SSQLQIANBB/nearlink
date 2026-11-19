@@ -1,67 +1,40 @@
 <template>
   <div class="call-toolbar">
-    <n-button
+    <ComposerToolButton
+      label="屏幕共享"
       :disabled="!contactUser || calls.busy || mediaBusy"
       @click="start(1)"
     >
-      <template #icon>
-        <i
-          class="iconfont call-action-icon icon-gongxiangpingmu"
-          aria-hidden="true"
-        ></i>
-      </template>
-      屏幕共享
-    </n-button>
-    <n-tooltip
+      <i class="iconfont call-action-icon icon-gongxiangpingmu" aria-hidden="true"></i>
+    </ComposerToolButton>
+    <ComposerToolButton
       v-if="remote.showControllerEntry"
-      :disabled="!remoteCapabilityHint"
+      label="远程控制"
+      :hint="remoteCapabilityHint"
+      :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl"
+      @click="openRemoteControl"
     >
-      <template #trigger>
-        <span class="inline-flex">
-          <n-button
-            :disabled="!contactUser || calls.busy || mediaBusy || !remote.canControl"
-            @click="openRemoteControl"
-          >
-            <template #icon>
-              <i
-                class="iconfont call-action-icon icon-desktop"
-                aria-hidden="true"
-              ></i>
-            </template>
-            远程控制
-          </n-button>
-        </span>
-      </template>
-      {{ remoteCapabilityHint }}
-    </n-tooltip>
-    <n-button
+      <i class="iconfont call-action-icon icon-desktop" aria-hidden="true"></i>
+    </ComposerToolButton>
+    <ComposerToolButton
+      label="视频通话"
       :disabled="!contactUser || calls.busy || mediaBusy"
       @click="start(0)"
     >
-      <template #icon>
-        <i
-          class="iconfont call-action-icon icon-video"
-          aria-hidden="true"
-        ></i>
-      </template>
-      视频通话
-    </n-button>
-    <n-button
+      <i class="iconfont call-action-icon icon-video" aria-hidden="true"></i>
+    </ComposerToolButton>
+    <ComposerToolButton
+      label="语音通话"
       :disabled="!contactUser || calls.busy || mediaBusy"
       @click="start(2)"
     >
-      <template #icon>
-        <i
-          class="iconfont call-action-icon icon-dianhua"
-          aria-hidden="true"
-        ></i>
-      </template>
-      语音通话
-    </n-button>
+      <i class="iconfont call-action-icon icon-dianhua" aria-hidden="true"></i>
+    </ComposerToolButton>
   </div>
 </template>
 <script setup lang="ts">
-import { NButton, NTooltip, useMessage } from 'naive-ui';
+import { useMessage } from 'naive-ui';
+import ComposerToolButton from '@/components/ComposerToolButton.vue';
 import { openScreenShare } from '@/features/screenShare';
 const message = useMessage();
 import { computed } from 'vue';

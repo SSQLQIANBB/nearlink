@@ -4,18 +4,13 @@ import { pinia } from '@/stores';
 import { getAuthRedirect } from '@/services/authNavigation';
 import { closeAuxiliaryWindow, isAuxiliaryWindow } from '@/services/desktopAuxiliaryContext';
 import { openDesktopGroupWindow } from '@/services/desktopAuxiliaryWindows';
+import { parseRemoteTab } from '@/services/remoteTabState';
 
-const HOME_ROUTE = { name: 'Remote' };
+const HOME_ROUTE = { path: '/remote' };
 
 const routes = [
   { path: '/desktop-image', component: { render: () => null } },
   { path: '/desktop-private', component: { render: () => null }, meta: { requiresAuth: true } },
-  {
-    name: 'RemoteControl',
-    path: '/remote-control',
-    component: () => import('@/views/remoteControl/index.vue'),
-    meta: { requiresAuth: true },
-  },
   {
     name: 'Login',
     path: '/login',
@@ -23,34 +18,53 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
-    name: 'Remote',
     path: '/remote',
-    component: () => import('@/views/remoteShare/index.vue'),
+    component: () => import('@/layouts/MainLayout.vue'),
     meta: { requiresAuth: true },
-  },
-  {
-    name: 'Profile',
-    path: '/profile',
-    component: () => import('@/views/profile.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    name: 'Groups',
-    path: '/groups',
-    component: () => import('@/views/groups.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    name: 'MeetingMinutes',
-    path: '/meeting-minutes',
-    component: () => import('@/views/meetingMinutes.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    name: 'GroupChat',
-    path: '/group-chat/:id',
-    component: () => import('@/views/groupChat.vue'),
-    meta: { requiresAuth: true },
+    children: [
+      {
+        name: 'Profile',
+        path: '/profile',
+        component: () => import('@/views/profile.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'Remote',
+        path: '',
+        component: () => import('@/views/remoteShare/index.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'GroupChat',
+        path: '/group-chat/:id(\\d+)?',
+        component: () => import('@/views/groupChat.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'Groups',
+        path: '/groups',
+        component: () => import('@/views/groups.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'Meetings',
+        path: '/meetings',
+        component: () => import('@/views/meetingLibrary.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'MeetingMinutes',
+        path: '/meeting-minutes',
+        component: () => import('@/views/meetingMinutes.vue'),
+        meta: { requiresAuth: true },
+      },
+      {
+        name: 'RemoteControl',
+        path: '/remote-control',
+        component: () => import('@/views/remoteControl/index.vue'),
+        meta: { requiresAuth: true },
+      },
+    ],
   },
   {
     name: 'GroupVideo',
@@ -153,6 +167,12 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
+  // 旧群组 Tab 深链继续进入群聊工作区，并保留其他查询参数。
+  if (to.name === 'Remote' && parseRemoteTab(to.query.tab) === 'groups') {
+    const { tab: _tab, ...query } = to.query;
+    next({ name: 'GroupChat', query, hash: to.hash, replace: true });
+    return;
+  }
   if (to.meta.requiresAuth && (await openDesktopGroupWindow(to.path))) {
     next(false);
     return;

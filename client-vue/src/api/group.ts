@@ -34,15 +34,15 @@ export function createGroup(data: { name: string; description?: string; avatar?:
 /**
  * 获取我的群组列表
  */
-export function getMyGroups() {
-  return http.get<{ groups: Group[] }>('/api/groups/my');
+export function getMyGroups(signal?: AbortSignal) {
+  return http.get<{ groups: Group[] }>('/api/groups/my', signal);
 }
 
 /**
  * 获取群组详情
  */
-export function getGroupDetail(groupId: number) {
-  return http.get<GroupDetail>(`/api/groups/${groupId}`);
+export function getGroupDetail(groupId: number, signal?: AbortSignal) {
+  return http.get<GroupDetail>(`/api/groups/${groupId}`, signal);
 }
 
 /**

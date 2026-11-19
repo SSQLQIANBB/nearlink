@@ -54,8 +54,8 @@ export interface GroupHistoryMessage {
   sender: User;
 }
 
-export function getOfflineMessages() {
-  return http.get<{ messages: OfflineMessage[] }>('/api/messages/offline');
+export function getOfflineMessages(signal?: AbortSignal) {
+  return http.get<{ messages: OfflineMessage[] }>('/api/messages/offline', signal);
 }
 
 export function markMessagesAsRead(messageIds: number[]) {
@@ -66,7 +66,7 @@ export function getUnreadCount() {
   return http.get<{ count: number }>('/api/messages/unread-count');
 }
 
-export function getPrivateMessages(contactUserId: number, limit = 50, offset = 0) {
+export function getPrivateMessages(contactUserId: number, limit = 50, offset = 0, signal?: AbortSignal) {
   const query = new URLSearchParams({
     contactUserId: String(contactUserId),
     limit: String(limit),
@@ -75,10 +75,11 @@ export function getPrivateMessages(contactUserId: number, limit = 50, offset = 0
 
   return http.get<{ messages: PrivateMessage[]; hasMore: boolean }>(
     `/api/messages/private?${query}`,
+    signal,
   );
 }
 
-export function getGroupMessages(groupId: number, limit = 50, offset = 0) {
+export function getGroupMessages(groupId: number, limit = 50, offset = 0, signal?: AbortSignal) {
   const query = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
@@ -86,6 +87,7 @@ export function getGroupMessages(groupId: number, limit = 50, offset = 0) {
 
   return http.get<{ messages: GroupHistoryMessage[]; hasMore: boolean }>(
     `/api/messages/group/${groupId}?${query}`,
+    signal,
   );
 }
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
 
 for (const width of [1440, 375]) {
   test(`通知声音独立设置与试听 ${width}px`, async ({ page }, testInfo) => {
@@ -145,17 +145,6 @@ for (const width of [1440, 375]) {
     test(`图片加载占位 ${chat} ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
       await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
-      await page.route('**/api/remote-control/capabilities', (route) =>
-        route.fulfill({
-          json: {
-            protocolVersion: 1,
-            releasedPlatforms: [],
-            webControllerReleaseEnabled: false,
-            desktopControllerEnabled: false,
-            desktopHostEnabled: false,
-          },
-        }),
-      );
       await prepare(page);
       await page.route(/\/api\/messages\/(private\?|group\/7\?)/, (route) =>
         route.fulfill({
@@ -252,6 +241,17 @@ test.use({
 });
 
 async function prepare(page: Page) {
+  await page.route('**/api/remote-control/capabilities', (route) =>
+    route.fulfill({
+      json: {
+        protocolVersion: 1,
+        releasedPlatforms: [],
+        webControllerReleaseEnabled: false,
+        desktopControllerEnabled: false,
+        desktopHostEnabled: false,
+      },
+    }),
+  );
   const settings = {
     desktopEnabled: true,
     messagePreview: true,
@@ -272,7 +272,7 @@ async function prepare(page: Page) {
       JSON.stringify({ token: 'ui-test', refreshToken: 'ui-refresh' }),
     ),
   );
-  await page.route('**/meeting/**', (route) => route.abort());
+  await page.route(/^https?:\/\/[^/]+\/meeting(?:\/|\?|$)/, (route) => route.abort());
   await page.route(/\/api\/(auth|groups|messages|invitations)(?:\/|\?|$)/, (route) => {
     const url = route.request().url();
     let body: unknown = { invitations: [], messages: [], count: 0, hasMore: false, cursors: {} };
@@ -429,13 +429,16 @@ for (const width of [1440, 375]) {
 }
 
 test('退出登录需确认，取消保留会话', async ({ page }) => {
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
   await prepare(page);
-  await page.goto('/remote');
+  await page.goto('/remote', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: '打开用户菜单' }).click();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await expect(page.getByText('确认退出当前账号吗？')).toBeVisible();
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page).toHaveURL(/remote/);
   await expect(page.locator('.n-dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '打开用户菜单' }).click();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await page.locator('.n-dialog').getByRole('button', { name: '退出登录', exact: true }).click();
   await expect(page).toHaveURL(/login/);
@@ -476,11 +479,12 @@ for (const width of [1440, 375]) {
   for (const chat of ['private', 'group']) {
     test(`会话工具栏布局 ${chat} ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });
+      await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
       await prepare(page);
-      await page.goto(chat === 'private' ? '/remote' : '/group-chat/7');
+      await page.goto(chat === 'private' ? '/remote' : '/group-chat/7', {
+        waitUntil: 'domcontentloaded',
+      });
       if (chat === 'private') {
-        if (width < 768)
-          await page.getByRole('button', { name: '打开联系人列表', exact: true }).click();
         await page.locator('.contact-item').first().click();
       }
       const toolbar = page.locator('.composer-toolbar');
@@ -491,18 +495,33 @@ for (const width of [1440, 375]) {
       const toolbarBox = (await toolbar.boundingBox())!;
       expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(inputBox.y + 1);
       const buttons = await toolbar.getByRole('button').all();
-      const imageHeight = (await image.boundingBox())!.height;
+      await page.mouse.move(0, 0);
       for (const button of buttons) {
-        expect((await button.boundingBox())!.height).toBe(imageHeight);
+        const { width: buttonWidth, height: buttonHeight } = (await button.boundingBox())!;
+        expect(buttonWidth).toBe(buttonHeight);
+        await expect(button).toHaveText('');
+        await expect(button).toHaveCSS('border-radius', '4px');
+        await expect(button).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      }
+      await image.hover();
+      await expect(image).toHaveCSS('background-color', 'rgb(226, 232, 240)');
+      await expect(page.locator('.n-tooltip').filter({ hasText: /^\s*发送图片\s*$/ })).toHaveCount(0);
+      await page.mouse.move(0, 0);
+      await expect(image).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      for (const name of ['发送图片', '视频通话', '语音通话', '屏幕共享']) {
+        await expect(toolbar.getByRole('button', { name, exact: true })).toHaveAttribute('title', name);
       }
       const toggle = input.getByRole('button', { name: '切换语音输入' });
       await expect(toggle).toHaveCSS('width', '40px');
       await expect(toggle).toHaveCSS('height', '40px');
       await expect(input).toHaveCSS('padding', width === 375 ? '14px 10px' : '12px 16px');
       if (chat === 'group') {
-        await expect(
-          page.locator('.group-chat-sider').getByRole('button', { name: /视频通话|语音通话|屏幕共享/ }),
-        ).toHaveCount(0);
+        for (const name of ['视频通话', '语音通话', '屏幕共享']) {
+          const button = toolbar.getByRole('button', { name, exact: true });
+          await expect(button).toBeVisible();
+          await expect(button).toBeEnabled();
+        }
+        await expect(page.locator('.group-chat-header').getByRole('button', { name: '通话与屏幕共享' })).toHaveCount(0);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
@@ -514,6 +533,326 @@ for (const width of [1440, 375]) {
     });
   }
 }
+
+test('删除会议记录使用应用确认弹窗，取消保留记录', async ({ page }) => {
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
+  await prepare(page);
+  let deleteRequests = 0;
+  let nativeDialogs = 0;
+  page.on('dialog', async (dialog) => {
+    nativeDialogs++;
+    await dialog.dismiss();
+  });
+  const meeting = {
+    sessionId: 'test-meeting', title: '待删除的会议', durationSeconds: 5,
+    source: 'offline', status: 'ended', summaryStatus: 'idle', audioStatus: 'missing',
+    createdAt: '2026-11-18T00:00:00Z', transcript: '', transcriptJson: [], keyPoints: [],
+  };
+  await page.route(/\/api\/meetings(?:\/|\?|$)/, (route) => {
+    if (route.request().method() === 'DELETE') {
+      expect(new URL(route.request().url()).pathname).toBe('/api/meetings/test-meeting');
+      deleteRequests++;
+      return route.fulfill({ json: { ok: true } });
+    }
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/test-meeting')) return route.fulfill({ json: { meeting } });
+    return route.fulfill({ json: { items: deleteRequests ? [] : [meeting], total: deleteRequests ? 0 : 1, page: 1 } });
+  });
+  await page.goto('/meetings', { waitUntil: 'domcontentloaded' });
+
+  const remove = page.getByRole('button', { name: '删除', exact: true });
+  const confirmation = page.getByRole('dialog').filter({ hasText: '删除会议记录？' });
+  await remove.click();
+  await expect(confirmation).toContainText('删除后不可恢复。');
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /待删除的会议/ })).toBeVisible();
+  expect(deleteRequests).toBe(0);
+
+  await remove.click();
+  await confirmation.getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(page.getByText('暂无会议记录', { exact: true })).toBeVisible();
+  expect(deleteRequests).toBe(1);
+  expect(nativeDialogs).toBe(0);
+});
+
+test('会议推送按条更新、重连补查、结束定位和批量删除', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 630 });
+  await prepare(page);
+  const sockets: WebSocketRoute[] = [];
+  let authenticated = 0;
+  const send = (socket: WebSocketRoute, event: string, data: unknown) => socket.send(`42${JSON.stringify([event, data])}`);
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, socket => {
+    sockets.push(socket);
+    socket.onMessage(data => {
+      if (data === '40') socket.send('40{"sid":"meeting"}');
+      if (typeof data === 'string' && data.startsWith('42["authenticate"')) {
+        authenticated++;
+        send(socket, 'authenticated', { id: 1 });
+      }
+    });
+    socket.send('0{"sid":"engine","upgrades":[],"pingInterval":25000,"pingTimeout":20000,"maxPayload":1000000}');
+  });
+  const first = '10000000-0000-4000-8000-000000000031';
+  const second = '10000000-0000-4000-8000-000000000032';
+  let hasPausedDraft = false;
+  await page.routeWebSocket(/\/meeting-minutes\//, socket => {
+    socket.onMessage(data => {
+      if (typeof data !== 'string') return;
+      if (data.startsWith('40')) socket.send('40{"sid":"recording"}');
+      const request = /^42(\d+)\["(minutes_attach|minutes_pause|minutes_end)"/.exec(data);
+      if (!request) return;
+      if (request[2] === 'minutes_end') hasPausedDraft = false;
+      socket.send(`43${request[1]}${JSON.stringify([{ ok: true, sessionId: second }])}`);
+    });
+    socket.send('0{"sid":"recording","upgrades":[],"pingInterval":25000,"pingTimeout":20000,"maxPayload":1000000}');
+  });
+  const base = {
+    source: 'offline', status: 'ended', audioStatus: 'missing', durationSeconds: 5, hasSummary: false,
+    createdAt: '2026-11-18T00:00:00Z', transcript: '', transcriptJson: [], summary: '', keyPoints: [],
+    summaryStatus: 'idle', summaryError: null as string | null, generationStage: null, regeneratingTranscript: false,
+  };
+  let target = { ...base, sessionId: second, title: '录音目标', summaryStatus: 'generating', generationStage: 'transcript' };
+  let items = [{ ...base, sessionId: first, title: '同页另一条会议' }, target];
+  const listRequests: URL[] = [];
+  const detailRequests: string[] = [];
+  const deletes: string[][] = [];
+  function updateTarget(patch: Partial<typeof target>) {
+    target = { ...target, ...patch };
+    items[1] = target;
+    send(sockets.at(-1)!, 'meeting_updated', { sessionId: second, item: target, detailChanged: true });
+  }
+  await page.route(/\/api\/meetings(?:\/|\?|$)/, route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === `/api/meetings/${second}/transcript`) {
+      updateTarget({ summaryStatus: 'generating', generationStage: 'transcript', regeneratingTranscript: true, summaryError: null });
+      return route.fulfill({ status: 202, json: { ok: true } });
+    }
+    if (url.pathname.endsWith('/active')) {
+      return route.fulfill({ json: hasPausedDraft
+        ? { active: true, sessionId: second, source: 'offline', status: 'paused', resumable: true }
+        : { active: false } });
+    }
+    if (url.pathname.endsWith('/batch-delete')) {
+      deletes.push(route.request().postDataJSON().sessionIds);
+      items = [];
+      return route.fulfill({ status: 202, json: { deletedCount: 2 } });
+    }
+    const match = items.find(item => url.pathname.endsWith(`/${item.sessionId}`));
+    if (match) {
+      detailRequests.push(match.sessionId);
+      return route.fulfill({ json: { meeting: match.sessionId === second ? target : match } });
+    }
+    listRequests.push(url);
+    return route.fulfill({ json: { items, total: items.length ? 22 : 0, page: items.length ? 2 : 1, pageSize: 20 } });
+  });
+  await page.goto(`/meetings?sessionId=${second}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: '录音目标' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('正在根据完整录音生成转写')).toBeVisible();
+  await expect.poll(() => authenticated).toBe(1);
+  const detailPanel = page.getByRole('region', { name: '会议详情' });
+  const hasVerticalOverflow = () => detailPanel.evaluate(el => el.scrollHeight > el.clientHeight);
+  await expect.poll(hasVerticalOverflow).toBe(false);
+  await expect(page.getByRole('button', { name: /录音目标.*转写生成中/ })).toBeVisible();
+  await page.getByRole('button', { name: 'AI 纪要', exact: true }).click();
+  await expect(page.getByText('转写完成后将自动生成 AI 纪要')).toBeVisible();
+  await expect(page.getByText('正在生成 AI 纪要', { exact: true })).toHaveCount(0);
+  await expect.poll(hasVerticalOverflow).toBe(false);
+  await page.setViewportSize({ width: 1280, height: 350 });
+  await expect.poll(hasVerticalOverflow).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 630 });
+  await page.getByRole('button', { name: '转写文本', exact: true }).click();
+  expect(listRequests.some(url => url.searchParams.get('sessionId') === second)).toBe(true);
+  const beforePush = listRequests.length;
+  const socket = sockets[0];
+  send(socket, 'meeting_updated', { sessionId: first, item: { ...items[0], title: '推送更新了这一条' }, detailChanged: true });
+  await expect(page.getByRole('button', { name: /推送更新了这一条/ })).toBeVisible();
+  expect(detailRequests).not.toContain(first);
+  target = { ...target, transcript: '已完成的转写', generationStage: 'summary' };
+  items[1] = target;
+  send(socket, 'meeting_updated', { sessionId: second, item: target, detailChanged: true });
+  await expect(page.getByText('已完成的转写')).toBeVisible();
+  await page.getByRole('button', { name: 'AI 纪要', exact: true }).click();
+  await expect(page.getByText('正在生成 AI 纪要')).toBeVisible();
+  await expect.poll(hasVerticalOverflow).toBe(false);
+  expect(listRequests.length).toBe(beforePush);
+
+  target = { ...target, summaryStatus: 'ready', generationStage: null, hasSummary: true, summary: '断线期间完成的纪要' };
+  items[1] = target;
+  await socket.close({ code: 1011 });
+  await expect.poll(() => authenticated).toBe(2);
+  await expect(page.getByText('断线期间完成的纪要')).toBeVisible();
+  expect(listRequests.length).toBe(beforePush + 1);
+
+  updateTarget({ audioStatus: 'ready', summaryStatus: 'failed', summaryError: 'timeout' });
+  await expect(page.getByRole('button', { name: /录音目标.*已保留上次纪要/ })).toBeVisible();
+  await page.getByRole('button', { name: '转写文本', exact: true }).click();
+  await page.getByRole('button', { name: '重新生成转写' }).click();
+  await expect(page.getByText('正在根据完整录音生成转写')).toBeVisible();
+  await expect(page.getByRole('button', { name: /录音目标.*转写生成中/ })).toBeVisible();
+  await page.getByRole('button', { name: 'AI 纪要', exact: true }).click();
+  await expect(page.getByText('转写完成后将更新纪要')).toBeVisible();
+  await expect(page.getByText('断线期间完成的纪要')).toBeVisible();
+  await page.getByRole('button', { name: '转写文本', exact: true }).click();
+  updateTarget({ summaryStatus: 'failed', summaryError: 'final_transcript_failed', generationStage: null, regeneratingTranscript: false });
+  await expect(page.getByRole('button', { name: /录音目标.*完整录音转写失败/ })).toBeVisible();
+  await expect(page.getByText('已完成的转写')).toBeVisible();
+  await page.getByRole('button', { name: '重新生成转写' }).click();
+  await expect(page.getByText('正在根据完整录音生成转写')).toBeVisible();
+  await expect(page.getByRole('button', { name: /录音目标.*转写生成中/ })).toBeVisible();
+  updateTarget({ summaryStatus: 'generating', generationStage: 'summary', regeneratingTranscript: false, transcript: '重新生成的转写' });
+  await expect(page.getByText('重新生成的转写')).toBeVisible();
+  await page.getByRole('button', { name: 'AI 纪要', exact: true }).click();
+  await expect(page.getByText('正在生成 AI 纪要')).toBeVisible();
+  updateTarget({ summaryStatus: 'ready', generationStage: null, summary: '重新生成的纪要' });
+  await expect(page.getByRole('button', { name: /录音目标.*已生成纪要/ })).toBeVisible();
+  await expect(page.getByText('重新生成的纪要')).toBeVisible();
+
+  await expect(page.getByRole('button', { name: '返回', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '新建录音' }).click();
+  await expect(page).toHaveURL(/\/meetings\?/);
+  await expect(page.getByRole('heading', { name: '会议列表' })).toBeVisible();
+  const recording = page.getByRole('region', { name: '会议录音' });
+  await expect(recording.getByRole('button', { name: '开始录音' })).toBeEnabled();
+  await expect(recording.getByText('实时转写', { exact: true })).toBeVisible();
+  await expect(recording.getByText('独立线下录音', { exact: false })).toHaveCount(0);
+  await expect(recording.getByRole('heading', { name: '会议录音' })).toHaveCount(0);
+  await page.getByRole('button', { name: /录音目标/ }).click();
+  await expect(recording).toHaveCount(0);
+
+  hasPausedDraft = true;
+  await page.getByRole('button', { name: '新建录音' }).click();
+  await recording.getByRole('button', { name: '恢复上次录音' }).click();
+  await expect(recording.getByRole('button', { name: '继续', exact: true })).toBeVisible();
+  const liveMeeting = page.getByRole('button', { name: /录音目标/ });
+  await expect(liveMeeting).toHaveAttribute('aria-current', 'true');
+  const expandRecording = page.getByRole('button', { name: '展开录音页' });
+  await expect(expandRecording).toBeHidden();
+  await page.getByRole('button', { name: /同页另一条会议/ }).click();
+  await expect(expandRecording).toBeVisible();
+  await expandRecording.click();
+  await recording.getByRole('button', { name: '结束', exact: true }).click();
+  await expect(recording).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '录音目标' })).toBeVisible();
+  await expect(liveMeeting).toHaveAttribute('aria-current', 'true');
+
+  const meetingList = page.getByRole('complementary', { name: '会议列表' });
+  await meetingList.getByRole('button', { name: '批量删除' }).click();
+  await meetingList.getByRole('checkbox', { name: '全选', exact: true }).click();
+  await expect(meetingList.getByText('已选 2', { exact: true })).toBeVisible();
+  await meetingList.getByRole('button', { name: '删除', exact: true }).click();
+  const confirm = page.getByRole('dialog').filter({ hasText: '批量删除会议记录？' });
+  await expect(confirm).toContainText('选中的 2 条');
+  expect(deletes).toHaveLength(0);
+  await confirm.getByRole('button', { name: '确认删除' }).click();
+  await expect(page.getByText('暂无会议记录', { exact: true })).toBeVisible();
+  expect(deletes).toEqual([[first, second]]);
+});
+
+test('会议音频吸顶，转写和纪要共用详情滚动', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 720 });
+  await page.routeWebSocket(/\/meeting(?:\/|\?|$)/, (socket) => socket.close());
+  await prepare(page);
+  const sampleRate = 8000;
+  const wav = Buffer.alloc(44 + 36 * sampleRate * 2);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(wav.length - 44, 40);
+  const audioUrl = `data:audio/wav;base64,${wav.toString('base64')}`;
+  const meeting = {
+    sessionId: 'timed', title: '词级时间戳会议', durationSeconds: 36,
+    source: 'offline', status: 'ended', summaryStatus: 'idle', audioStatus: 'ready',
+    createdAt: '2026-11-18T00:00:00Z', audioUrl, transcript: '', keyPoints: [],
+    summary: '会议纪要内容\n\n'.repeat(40),
+  };
+  const legacy = { ...meeting, sessionId: 'legacy', title: '历史会议' };
+  const segments = [
+    {
+      segmentId: 0, text: '你好，今天吃饭了吗', startMs: 0, endMs: 5000, speakerId: null,
+      words: [
+        { text: '你好', startMs: 0, endMs: 800 },
+        { text: '今天', startMs: 1300, endMs: 2900 },
+        { text: '吃饭', startMs: 3000, endMs: 3900 },
+        { text: '了吗', startMs: 4100, endMs: 4800 },
+      ],
+    },
+    ...Array.from({ length: 24 }, (_, index) => ({
+      segmentId: index + 1, text: `后续转写 ${index + 1}`, startMs: (index + 6) * 1000,
+      endMs: (index + 7) * 1000, speakerId: null,
+    })),
+  ];
+  await page.route(/\/api\/meetings(?:\/|\?|$)/, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/timed')) return route.fulfill({ json: { meeting: { ...meeting, transcriptJson: segments } } });
+    if (path.endsWith('/legacy')) return route.fulfill({ json: {
+      meeting: { ...legacy, transcriptJson: [{ segmentId: 0, text: '历史片段', startMs: 9000, endMs: 11000, speakerId: null }] },
+    } });
+    return route.fulfill({ json: { items: [meeting, legacy], total: 2, page: 1 } });
+  });
+  await page.goto('/meetings', { waitUntil: 'domcontentloaded' });
+  const audio = page.locator('.audio-sticky audio');
+  const player = page.locator('.audio-sticky');
+  const panel = page.getByRole('region', { name: '会议详情' });
+  const transcript = page.locator('.detail-transcript');
+  const detailScroll = () => panel.evaluate((el) => el.scrollTop);
+  const stickyOffset = () => panel.evaluate((el) => Math.round(
+    el.querySelector('.audio-sticky')!.getBoundingClientRect().top - el.getBoundingClientRect().top - el.clientTop,
+  ));
+  const getPosition = () => audio.evaluate((el: HTMLAudioElement) => el.currentTime);
+  const seek = (time: number) => audio.evaluate((el: HTMLAudioElement, seconds) => { el.currentTime = seconds; }, time);
+  await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.duration)).toBe(36);
+  await expect(transcript.locator('.detail-transcript-text').first()).toHaveText('你好，今天吃饭了吗');
+  await expect(transcript).toHaveCSS('overflow-y', 'visible');
+  await expect(player).toHaveCSS('position', 'sticky');
+
+  const word = transcript.getByRole('button', { name: '吃饭', exact: true });
+  await seek(3.2);
+  await expect(word).toHaveAttribute('aria-current', 'true');
+  await seek(5.5);
+  await expect(transcript.locator('[aria-current="true"]')).toHaveCount(0);
+  await word.click();
+  await expect.poll(getPosition).toBe(3);
+  await expect(word).toHaveAttribute('aria-current', 'true');
+  await seek(2.95);
+  await expect(transcript.locator('[aria-current="true"]')).toHaveCount(0);
+  await audio.evaluate((el: HTMLAudioElement) => el.play());
+  await expect(word).toHaveAttribute('aria-current', 'true');
+  await audio.evaluate((el: HTMLAudioElement) => el.pause());
+
+  await seek(29.5);
+  await expect(transcript.getByRole('button', { name: '后续转写 24', exact: true })).toHaveAttribute('aria-current', 'true');
+  await expect.poll(detailScroll).toBeGreaterThan(0);
+  await expect.poll(stickyOffset).toBe(0);
+  const scrollAtEnd = await detailScroll();
+  await seek(3);
+  await expect(word).toHaveAttribute('aria-current', 'true');
+  await expect.poll(detailScroll).toBeLessThan(scrollAtEnd);
+  expect((await word.boundingBox())!.y).toBeGreaterThanOrEqual(
+    (await player.boundingBox())!.y + (await player.boundingBox())!.height,
+  );
+
+  await page.getByRole('button', { name: 'AI 纪要', exact: true }).click();
+  await panel.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await expect.poll(stickyOffset).toBe(0);
+
+  await page.getByRole('button', { name: /历史会议/ }).click();
+  const legacyLine = transcript.getByRole('button', { name: '历史片段', exact: true });
+  await expect(legacyLine).not.toHaveAttribute('aria-current', 'true');
+  await expect.poll(detailScroll).toBe(0);
+  await legacyLine.click();
+  await expect.poll(getPosition).toBe(9);
+  await expect(legacyLine).toHaveAttribute('aria-current', 'true');
+});
 
 for (const chat of ['private', 'group']) {
   test(`消息加载与空状态 ${chat}`, async ({ page }, testInfo) => {
