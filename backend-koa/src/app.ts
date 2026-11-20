@@ -7,6 +7,8 @@ import { koaBody } from 'koa-body';
 import setupRouter from './router';
 import initialMeeting from './config/meeting';
 import { initializeRemoteControl } from './config/remoteControl';
+import { initializeMeetingMinutes } from './config/meetingMinutes';
+import { observeMeetingChanges } from './services/meetingChanges';
 import sequelize, { initDatabase } from './config/database';
 import redis from './config/redis';
 import { initializeRemoteControlRuntime } from './services/initializeRemoteControlRuntime';
@@ -56,8 +58,15 @@ async function startServer() {
     // 2. 初始化Socket.IO
     console.log(chalk.yellow('🔌 正在初始化 Socket.IO...'));
     const sockets = initialMeeting(httpServer);
+    const stopMeetingChanges = observeMeetingChanges(sockets.getAuthenticatedUserSockets, (socketIds, change) => {
+      sockets.to(socketIds).emit('meeting_updated', change);
+    });
+    httpServer.once('close', stopMeetingChanges);
     initializeRemoteControl(sockets);
     const remoteRuntime = initializeRemoteControlRuntime(httpServer);
+    const meetingMinutes = initializeMeetingMinutes(httpServer);
+    // 启动时等上次遗留会话标记完成，再接收新录音。
+    await meetingMinutes.markOrphanedSessions();
     let shuttingDown = false;
     const shutdown = async () => {
       if (shuttingDown) return;
@@ -65,7 +74,9 @@ async function startServer() {
       const deadline = setTimeout(() => process.exit(1), 10_000);
       deadline.unref();
       try {
+        stopMeetingChanges();
         sockets.close();
+        await meetingMinutes.close();
         await remoteRuntime.stop();
         await sequelize.close();
         await redis.quit();

@@ -16,9 +16,10 @@ export interface FileInfo {
 /**
  * 上传文件
  */
-export function uploadFile(files: FormData) {
+export function uploadFile(files: FormData, signal?: AbortSignal) {
   return request<{ message: string; file: FileInfo }>('/api/files/upload', {
     method: 'POST',
     body: files,
+    signal,
   });
 }

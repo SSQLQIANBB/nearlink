@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { defineComponent, h, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import { NButton } from 'naive-ui';
 
 const mocks = vi.hoisted(() => ({
@@ -29,16 +29,6 @@ import { useRemoteControlStore } from '@/stores/remoteControl';
 import { usePrivateCallStore } from '@/stores/privateCall';
 import { mediaOccupancy } from '@/services/mediaOccupancy';
 
-const Tooltip = defineComponent({
-  props: { disabled: Boolean },
-  setup:
-    (props, { slots }) =>
-    () =>
-      h('div', [
-        slots.trigger?.(),
-        !props.disabled && h('div', { role: 'tooltip' }, slots.default?.()),
-      ]),
-});
 let wrapper: VueWrapper | undefined;
 
 beforeEach(() => {
@@ -67,9 +57,8 @@ async function openToolbar() {
   await useRemoteControlStore().refreshCapabilities();
   wrapper = mount(ToolBar, {
     props: { contactUser: { id: 42, socketId: 'peer' } },
-    global: { stubs: { Tooltip } },
   });
-  return wrapper.findAllComponents(NButton).find((button) => button.text() === '远程控制')!;
+  return wrapper.findAllComponents(NButton).find((button) => button.attributes('aria-label') === '远程控制')!;
 }
 
 describe('个人聊天远程控制入口', () => {
@@ -81,10 +70,9 @@ describe('个人聊天远程控制入口', () => {
     });
     const button = await openToolbar();
     expect(button.get('button').element.disabled).toBe(true);
-    expect(wrapper!.get('[role="tooltip"]').text()).toBe(
+    expect(button.attributes('title')).toContain(
       '远程控制需要安全连接，请使用 HTTPS 地址访问；局域网 HTTP 地址不支持远程控制。',
     );
-    expect(button.element.parentElement?.tagName).toBe('SPAN');
     button.vm.$emit('click');
     expect(mocks.push).not.toHaveBeenCalled();
   });
@@ -92,7 +80,7 @@ describe('个人聊天远程控制入口', () => {
   it('HTTPS 能力就绪后入口可用，导航携带当前聊天用户', async () => {
     const button = await openToolbar();
     expect(button.get('button').element.disabled).toBe(false);
-    expect(wrapper!.find('[role="tooltip"]').exists()).toBe(false);
+    expect(button.attributes('title')).toBe('远程控制');
     await button.trigger('click');
     expect(mocks.push).toHaveBeenCalledExactlyOnceWith({
       name: 'RemoteControl',
@@ -106,7 +94,7 @@ describe('个人聊天远程控制入口', () => {
     else mediaOccupancy.acquire('group-call', 'another-call');
     await nextTick();
     expect(button.get('button').element.disabled).toBe(true);
-    expect(wrapper!.find('[role="tooltip"]').exists()).toBe(false);
+    expect(button.attributes('title')).toBe('远程控制');
     button.vm.$emit('click');
     expect(mocks.push).not.toHaveBeenCalled();
   });

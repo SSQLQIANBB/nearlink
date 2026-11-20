@@ -16,8 +16,8 @@ export interface GroupInvitation {
 /**
  * 获取待处理的群组邀请
  */
-export function getPendingInvitations() {
-  return http.get<{ invitations: GroupInvitation[] }>('/api/invitations');
+export function getPendingInvitations(signal?: AbortSignal) {
+  return http.get<{ invitations: GroupInvitation[] }>('/api/invitations', signal);
 }
 
 /**

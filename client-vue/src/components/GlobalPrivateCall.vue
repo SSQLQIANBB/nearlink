@@ -53,6 +53,21 @@
               aria-hidden="true"
             ></i>
           </button>
+          <button
+            class="audio-action"
+            :class="{ 'audio-action--active': minutesEnabled }"
+            type="button"
+            :aria-label="minutesEnabled ? '关闭会议纪要' : '开启会议纪要'"
+            :title="minutesEnabled ? '关闭会议纪要' : '开启会议纪要'"
+            :aria-pressed="minutesEnabled"
+            @click="toggleMinutes"
+          >
+            <i
+              class="iconfont"
+              :class="minutesEnabled ? 'icon-video' : 'icon-microphone'"
+              aria-hidden="true"
+            ></i>
+          </button>
         </div>
       </div>
       <div
@@ -158,6 +173,21 @@
           </button>
           <button
             class="video-action"
+            :class="{ 'video-action--active': minutesEnabled }"
+            type="button"
+            :aria-label="minutesEnabled ? '关闭会议纪要' : '开启会议纪要'"
+            :title="minutesEnabled ? '关闭会议纪要' : '开启会议纪要'"
+            :aria-pressed="minutesEnabled"
+            @click="toggleMinutes"
+          >
+            <i
+              class="iconfont"
+              :class="minutesEnabled ? 'icon-video' : 'icon-microphone'"
+              aria-hidden="true"
+            ></i>
+          </button>
+          <button
+            class="video-action"
             type="button"
             :aria-label="isCameraOff ? '开启摄像头' : '关闭摄像头'"
             :title="isCameraOff ? '开启摄像头' : '关闭摄像头'"
@@ -172,6 +202,14 @@
           </button>
         </div>
       </template>
+
+      <!-- 会议纪要面板：通话中开启后显示实时转写 -->
+      <aside
+        v-if="minutesPanelVisible"
+        class="private-call__minutes"
+      >
+        <LiveTranscriptPanel />
+      </aside>
     </div>
   </div>
 
@@ -245,10 +283,12 @@ import { isAppInBackground } from '@/services/appVisibility';
 import { nextTick, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useSocketStore } from '@/stores/socket';
 import { usePrivateCallStore } from '@/stores/privateCall';
+import { useMeetingMinutesStore } from '@/stores/meetingMinutes';
 import notificationService from '@/services/notificationService';
 import { cameraConstraints } from '@/views/remoteShare/components/config';
 import { limitVideoBitrate } from '@/services/mediaBitrate';
 import { useMessage, NIcon, NAvatar, NButton } from 'naive-ui';
+import LiveTranscriptPanel from './LiveTranscriptPanel.vue';
 
 const props = defineProps<{ invitationOnly?: boolean }>();
 let handoffFrom = '';
@@ -330,6 +370,30 @@ const audioRef = ref<HTMLAudioElement | null>(null);
 const contactUserName = computed(() => {
   return activePeer.value?.nickname || activePeer.value?.username || '对方';
 });
+
+// 会议纪要开关：通话中开启后在通话浮窗内显示实时转写，说话人映射到双方真实昵称。
+const minutesStore = useMeetingMinutesStore();
+const minutesCallId = ref(crypto.randomUUID());
+const minutesEnabled = computed(() => minutesStore.source === 'call' && minutesStore.ownerCallId === minutesCallId.value && minutesStore.isActive);
+const minutesPanelVisible = ref(false);
+
+
+
+async function toggleMinutes() {
+  if (minutesEnabled.value) {
+    const result = await minutesStore.stopCall(minutesCallId.value);
+    if (result && result.phase === 'ended') minutesPanelVisible.value = false;
+    return;
+  }
+  const callId = minutesCallId.value;
+  minutesPanelVisible.value = true;
+  const snapshot = await minutesStore.startCall(callId, () => [currentStream, remoteStream].filter((stream): stream is MediaStream => !!stream));
+  if (callId !== minutesCallId.value) return;
+  if (!snapshot) {
+    message.error(minutesStore.issue?.message ?? '会议纪要启动失败');
+    minutesPanelVisible.value = false;
+  }
+}
 const incomingCallTitle = computed(() => {
   return incomingCallType.value === DEVICE_TYPE.AUDIO ? '发起语音通话' : '发起视频通话';
 });
@@ -872,6 +936,10 @@ function hangup() {
 
 function cleanup() {
   if (props.invitationOnly && incomingCallShow.value) callStore.busy = false;
+  // 通话结束：若会议纪要仍在录音，结束并保存到会议记录。
+  void minutesStore.stopCall(minutesCallId.value).catch(() => undefined);
+  minutesCallId.value = crypto.randomUUID();
+  minutesPanelVisible.value = false;
   mediaClaim?.release();
   mediaClaim = null;
   generation++;
@@ -1204,6 +1272,25 @@ window.addEventListener('resize', clampFloatingPosition);
 }
 .video-action--hangup:hover {
   background: #dc2626;
+}
+.video-action--active,
+.audio-action--active {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.private-call__minutes {
+  flex-shrink: 0;
+  width: 300px;
+  max-width: 45vw;
+  margin: 0 12px 12px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px #00000040;
+}
+@media (max-width: 640px) {
+  .private-call__minutes {
+    display: none;
+  }
 }
 .video-action:focus-visible {
   outline: 3px solid #93c5fd;

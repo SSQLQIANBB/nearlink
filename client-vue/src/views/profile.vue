@@ -1,5 +1,5 @@
 <template>
-  <div class="profile-page min-h-screen bg-slate-50 p-3 sm:p-6 overflow-x-hidden">
+  <div class="profile-page h-full min-h-0 bg-slate-50 p-3 sm:p-6 overflow-x-hidden overflow-y-auto">
     <div class="max-w-4xl mx-auto">
       <!-- 页面头部 -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
@@ -30,6 +30,7 @@
       <!-- 用户信息卡片 -->
       <n-card class="profile-card">
         <n-tabs
+          v-model:value="activeTab"
           type="line"
           animated
         >
@@ -525,7 +526,7 @@ import { uploadFile } from '@/api/common';
 import DesktopReleaseEntry from '@/components/DesktopReleaseEntry.vue';
 import { APP_VERSION_LABEL } from '@/config/appVersion';
 import { ref, reactive, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useMessage, type FormInst, type FormRules } from 'naive-ui';
 import {
   bindEmail,
@@ -548,6 +549,15 @@ import { isTauri } from '@tauri-apps/api/core';
 const desktop = isTauri();
 const openNativeDialog = useDesktopDialogs();
 const router = useRouter();
+const route = useRoute();
+type ProfileTab = 'basic' | 'security' | 'notification';
+const activeTab = computed<ProfileTab>({
+  get: () => {
+    const tab = route.query.tab;
+    return tab === 'security' || tab === 'notification' ? tab : 'basic';
+  },
+  set: tab => { void router.replace({ query: { ...route.query, tab } }); },
+});
 const message = useMessage();
 const authStore = useAuthStore();
 const socketStore = useSocketStore();

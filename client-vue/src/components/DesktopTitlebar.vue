@@ -75,7 +75,7 @@ import { installDesktopWindowControls } from '@/services/desktopWindow';
 const isMac = /Mac/.test(navigator.platform);
 const isWindows = /Win/.test(navigator.platform);
 const route = useRoute();
-const isChat = computed(() => route.path === '/remote' || route.path.startsWith('/group-chat/'));
+const isChat = computed(() => route.name === 'Remote' || route.name === 'GroupChat');
 const isCall = computed(() => /^\/group-(video|audio|screen)\//.test(route.path));
 const maximized = ref(false);
 function runWindowAction(action: 'minimize' | 'toggleMaximize' | 'close') {
